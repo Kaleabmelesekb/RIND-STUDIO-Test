@@ -577,6 +577,12 @@ mod tests {
         l.hits.iter().find(|h| h.kind == Kind::Item(i)).unwrap().r
     }
 
+    /// Taps name number `i` of the open list.
+    fn pick(l: &mut Logic, i: usize) {
+        let r = item(l, i);
+        tap(l, r);
+    }
+
     fn live(params: &RindParams, p: usize) -> f32 {
         let mut snap = RindParams::defaults();
         params.snapshot(&mut snap);
@@ -669,7 +675,7 @@ mod tests {
         for i in 0..names {
             item(&l, i);
         }
-        tap(&mut l, item(&l, 5));
+        pick(&mut l, 5);
         assert_eq!(l.ui.popup, None);
         assert_eq!(live(&params, wave), 5.0);
         assert_eq!(l.last, Some(wave));
@@ -721,7 +727,7 @@ mod tests {
         l.up();
         paint(&mut l);
         assert_eq!(l.ui.popup, Some(src));
-        tap(&mut l, item(&l, ids::msrc::ENV_3));
+        pick(&mut l, ids::msrc::ENV_3);
         assert_eq!(live(&params, src), ids::msrc::ENV_3 as f32);
         // The target list holds every target, whichever is chosen.
         let (x, y) = at(&l, dst);
@@ -729,7 +735,7 @@ mod tests {
         l.up();
         paint(&mut l);
         let last = ids::TARGET_NAMES.len() - 1;
-        tap(&mut l, item(&l, last));
+        pick(&mut l, last);
         assert_eq!(live(&params, dst), last as f32);
         // The amount slider takes a press, then a drag.
         let h = *l.hits.iter().find(|h| h.param == amt).unwrap();
