@@ -1,17 +1,18 @@
-//! Rind (`crates/rind`), Honeydew's own built-in synthesizer. Milestone 1 (editor spike): it is registered as a CLAP
-//! instrument, and its embedded editor (`os_plugkit::embed`) paints, takes pointer input as the rack card drives it,
-//! resets on a middle click and wakes from parking. No audio device.
+//! Rind (`crates/rind`), Honeydew's own built-in synthesizer: registered as a CLAP instrument with its permanent id, and
+//! its embedded editor (`os_plugkit::embed`) paints, takes pointer input as the rack card drives it, switches the
+//! display's tabs, opens a drop-down list and picks from it, resets on a middle click and wakes from parking. No audio device.
 
 use honeydew::plugins::{self, builtin};
 use honeydew::song::plugin::PLUGIN_INSTRUMENT;
 use honeydew::song::{ChannelKind, Song};
 use os_plugkit::embed::{self, Button, Input};
+use rind::ids::{self, SPECS};
+use rind::view::{self, Hit, Kind, Ui};
 
 const NONE: (bool, bool, bool) = (false, false, false);
 
-/// A song with Rind on an instrument channel: its channel id, module id and the module's param index of each spike
-/// param (knob, fader, choice).
-fn rind_song() -> (Song, i32, i32, [i32; 3]) {
+/// A song with Rind on an instrument channel: its channel id and module id.
+fn rind_song() -> (Song, i32, i32) {
     let mut song = Song::default();
     song.add_channel(ChannelKind::Instrument);
     let uid = builtin::all()
@@ -24,11 +25,13 @@ fn rind_song() -> (Song, i32, i32, [i32; 3]) {
     let module = plugins::add(&mut ch.rack, id, uid, 0).unwrap();
     let m = ch.rack.get(module).unwrap();
     assert_eq!(m.type_id, PLUGIN_INSTRUMENT);
-    let params = &m.file.plugin.as_ref().unwrap().params;
-    let at = |name: &str| 1 + params.iter().position(|p| p.name == name).unwrap() as i32;
-    let ids = [at("Spike Knob"), at("Spike Fader"), at("Spike Choice")];
     plugins::sync(&song);
-    (song, id, module, ids)
+    (song, id, module)
+}
+
+/// The module param index of table parameter `p` (`params[0]` is the module's Enable).
+fn module_param(p: usize) -> i32 {
+    1 + p as i32
 }
 
 #[test]
@@ -41,7 +44,7 @@ fn rind_is_a_built_in_clap_instrument_with_its_permanent_id() {
 
 #[test]
 fn the_editor_paints_a_first_frame_and_does_not_repaint_on_its_own() {
-    let (_song, id, module, _) = rind_song();
+    let (_song, id, module) = rind_song();
     let editor = plugins::lemon_editor(id, module, 1.0).expect("the editor opens");
     embed::pump(editor);
     let mut size = (0, 0);
@@ -67,8 +70,8 @@ fn the_editor_paints_a_first_frame_and_does_not_repaint_on_its_own() {
 }
 
 #[test]
-fn the_editor_takes_drags_resets_and_clicks() {
-    let (_song, id, module, [knob, fader, choice]) = rind_song();
+fn the_editor_takes_drags_resets_taps_and_switches_pages() {
+    let (_song, id, module) = rind_song();
     let editor = plugins::lemon_editor(id, module, 1.0).expect("the editor opens");
     let run = |e: &[Input]| {
         for i in e {
@@ -76,73 +79,94 @@ fn the_editor_takes_drags_resets_and_clicks() {
         }
         embed::pump(editor);
     };
-    let moved = |param: i32| {
+    let moved = |param: usize| {
         let moves = plugins::idle();
         (moves.iter().rev())
-            .find(|m| m.param == param && m.gesture == 1)
+            .find(|m| m.param == module_param(param) && m.gesture == 1)
             .map(|m| m.value)
     };
-    let (kx, ky) = rind::view::knob_center();
-    let down = |x: f32, y: f32, btn| Input::Down {
-        x,
-        y,
+    let down = |h: &Hit, btn| Input::Down {
+        x: h.r.cx(),
+        y: h.r.cy(),
         btn,
         dbl: false,
     };
+    let find = |ui: &Ui, p: usize| -> Hit {
+        view::layout(ui)
+            .into_iter()
+            .find(|h| h.param == p && !matches!(h.kind, Kind::Tab(_) | Kind::Sub(_)))
+            .expect("a control")
+    };
 
-    // A knob drag holds the cursor; up 30 px of 150 is 0.5 + 0.2.
-    run(&[down(kx, ky, Button::Left)]);
+    let tab = |i: usize| -> Hit {
+        view::layout(&Ui::default())
+            .into_iter()
+            .find(|h| h.kind == Kind::Tab(i))
+            .unwrap()
+    };
+    // The master volume is always on screen.
+    let ui = Ui::default();
+
+    // A knob drag holds the cursor; up 30 px of 150 is the default 0.7 plus 0.2.
+    let vol = find(&ui, ids::MASTER_VOL);
+    run(&[down(&vol, Button::Left)]);
     assert!(embed::locked(editor), "a knob drag holds the cursor");
     run(&[
         Input::Delta { dx: 0.0, dy: -30.0 },
         Input::Up { btn: Button::Left },
     ]);
     assert!(!embed::locked(editor));
-    let dragged = moved(knob).expect("the drag moved the knob");
-    assert!((dragged - 0.7).abs() < 1e-3, "{dragged}");
+    let dragged = moved(ids::MASTER_VOL).expect("the drag moved the knob");
+    assert!((dragged - 0.9).abs() < 1e-3, "{dragged}");
 
-    // A middle click resets it to its default, 0.5.
+    // A middle click resets it to its default.
     run(&[
-        down(kx, ky, Button::Middle),
+        down(&vol, Button::Middle),
         Input::Up {
             btn: Button::Middle,
         },
     ]);
-    let reset = moved(knob).expect("the reset moved the knob");
-    assert!((reset - 0.5).abs() < 1e-3, "{reset}");
+    let reset = moved(ids::MASTER_VOL).expect("the reset moved the knob");
+    assert!((reset - 0.7).abs() < 1e-3, "{reset}");
 
-    // The fader's handle, dragged down, then reset to 1.0.
-    let f = rind::view::fader_rect();
-    let (fx, fy) = (f.x + f.w / 2.0, f.y + f.h / 2.0);
-    run(&[down(fx, fy, Button::Left)]);
+    // A tap on an oscillator's wave opens a list of the waves; a name in it picks that wave.
+    let wave = ids::OSC_BASE + ids::osc::WAVE;
+    let control = find(&ui, wave);
     run(&[
-        Input::Delta { dx: 0.0, dy: 40.0 },
+        down(&control, Button::Left),
         Input::Up { btn: Button::Left },
     ]);
-    let lowered = moved(fader).expect("the drag moved the fader");
-    assert!(lowered < 1.0, "{lowered}");
-    run(&[
-        down(fx, fy, Button::Middle),
-        Input::Up {
-            btn: Button::Middle,
-        },
-    ]);
-    let reset = moved(fader).expect("the reset moved the fader");
-    assert!((reset - 1.0).abs() < 1e-3, "{reset}");
+    assert_eq!(moved(wave), None, "opening the list changes nothing");
+    let open = Ui {
+        popup: Some(wave),
+        ..ui
+    };
+    let name = view::layout(&open)
+        .into_iter()
+        .find(|h| h.kind == Kind::Item(4))
+        .expect("the list holds the fifth name");
+    run(&[down(&name, Button::Left), Input::Up { btn: Button::Left }]);
+    let picked = moved(wave).expect("the pick moved the wave");
+    assert!((picked - 4.0 / 7.0).abs() < 1e-3, "{picked}");
 
-    // A click on the choice's third cell (value 2 of 0..=3).
-    let c = rind::view::choice_rect(2);
+    // A tap on the arpeggiator's switch, on its own tab.
     run(&[
-        down(c.x + c.w / 2.0, c.y + c.h / 2.0, Button::Left),
+        down(&tab(view::TAB_ARP), Button::Left),
         Input::Up { btn: Button::Left },
     ]);
-    let picked = moved(choice).expect("the click picked a value");
-    assert!((picked - 2.0 / 3.0).abs() < 1e-3, "{picked}");
+    let ui = Ui {
+        tab: view::TAB_ARP,
+        ..Ui::default()
+    };
+    let on = find(&ui, ids::ARP_ON);
+    run(&[down(&on, Button::Left), Input::Up { btn: Button::Left }]);
+    assert_eq!(moved(ids::ARP_ON), Some(1.0));
+    assert_eq!(SPECS[ids::ARP_ON].id, "arp_on");
 }
 
 #[test]
 fn a_parked_editor_wakes_and_repaints_on_expose() {
-    let (_song, id, module, _) = rind_song();
+    let (_song, id, module) = rind_song();
     let editor = plugins::lemon_editor(id, module, 1.0).expect("the editor opens");
     embed::pump(editor);
     let version = embed::frame(editor, 0, |_| {}).expect("a first frame");

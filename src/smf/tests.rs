@@ -983,3 +983,32 @@ fn lanes_past_max_tracks_are_not_written() {
     assert_eq!(bytes[10..12], (MAX_TRACKS as u16).to_be_bytes());
     assert_eq!(parse(&bytes).tracks.len(), MAX_TRACKS);
 }
+
+#[test]
+fn a_time_signature_is_written_unless_it_is_four_four() {
+    let mut song = Song::default();
+    song.time_sig.beats_per_bar = 3;
+    add(
+        &mut song,
+        ChannelKind::Instrument,
+        "Pad",
+        vec![note(0, 1.0, 60, 100)],
+    );
+    let smf = parse(&smf_of(&song, None).unwrap());
+    assert!(smf.tracks[0].contains(&(
+        0,
+        SmfEvent::Other {
+            kind: 0x58,
+            data: vec![3, 2, 24, 8]
+        }
+    )));
+    let mut plain = Song::default();
+    add(
+        &mut plain,
+        ChannelKind::Instrument,
+        "Pad",
+        vec![note(0, 1.0, 60, 100)],
+    );
+    let smf = parse(&smf_of(&plain, None).unwrap());
+    assert!(!(smf.tracks[0].iter()).any(|(_, e)| matches!(e, SmfEvent::Other { kind: 0x58, .. })));
+}
