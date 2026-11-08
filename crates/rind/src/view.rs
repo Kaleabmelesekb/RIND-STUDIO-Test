@@ -32,31 +32,31 @@ fn rr(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect::new(s(x), s(y), s(w), s(h))
 }
 
-const BG: Color = Color::rgb(0x121317);
-const RAIL: Color = Color::rgb(0x1b1c22);
-const PANEL: Color = Color::rgb(0x23252c);
-const HEAD_BG: Color = Color::rgb(0x2d3039);
-const EDGE: Color = Color::rgb(0x3b3f4a);
-const HILITE: Color = Color::rgb(0x4a4f5c);
-const SLOT: Color = Color::rgb(0x0d0e11);
-const KNOB_RIM: Color = Color::rgb(0x646a78);
-const KNOB_BODY: Color = Color::rgb(0x353842);
-const CAP: Color = Color::rgb(0xc9ccd4);
-const EMBER: Color = Color::rgb(0xff8a2b);
-const EMBER_DIM: Color = Color::rgb(0x8a4a1c);
-const GOLD: Color = Color::rgb(0xf2b36a);
-const MUTED: Color = Color::rgb(0x9a9ca6);
-const TICK: Color = Color::rgb(0x6a6e7a);
-const LCD_BG: Color = Color::rgb(0x0c2327);
-const LCD_FIELD: Color = Color::rgb(0x143840);
-const LCD_EDGE: Color = Color::rgb(0x2d6a73);
-const LCD_TEXT: Color = Color::rgb(0x8ef3dc);
-const LCD_DIM: Color = Color::rgb(0x4e9a90);
-const DARK_TEXT: Color = Color::rgb(0x161412);
+const BG: Color = Color::rgb(0x0b0e17);
+const RAIL: Color = Color::rgb(0x11151f);
+const PANEL: Color = Color::rgb(0x171c2a);
+const HEAD_BG: Color = Color::rgb(0x212840);
+const EDGE: Color = Color::rgb(0x313a57);
+const HILITE: Color = Color::rgb(0x46517a);
+const SLOT: Color = Color::rgb(0x080a11);
+const KNOB_RIM: Color = Color::rgb(0x7782a8);
+const KNOB_BODY: Color = Color::rgb(0x2a3150);
+const CAP: Color = Color::rgb(0xdfe6ff);
+const EMBER: Color = Color::rgb(0x35d6b8);
+const EMBER_DIM: Color = Color::rgb(0x1c7f6d);
+const GOLD: Color = Color::rgb(0xffc86b);
+const MUTED: Color = Color::rgb(0x8e98b8);
+const TICK: Color = Color::rgb(0x5a6488);
+const LCD_BG: Color = Color::rgb(0x0a1428);
+const LCD_FIELD: Color = Color::rgb(0x14264a);
+const LCD_EDGE: Color = Color::rgb(0x3a5fa8);
+const LCD_TEXT: Color = Color::rgb(0x9fd4ff);
+const LCD_DIM: Color = Color::rgb(0x5c86c0);
+const DARK_TEXT: Color = Color::rgb(0x06241e);
 const SHADE: Color = Color::rgb(0x000000).with_alpha(0xaa);
 const SHADOW: Color = Color::rgb(0x000000).with_alpha(0x70);
 const SHEEN: Color = Color::rgb(0xffffff).with_alpha(0x1c);
-const VEIL: Color = Color::rgb(0x121317).with_alpha(0xb8);
+const VEIL: Color = Color::rgb(0x0b0e17).with_alpha(0xb8);
 
 const LABEL: Font = Font::new(7).bold();
 const VALUE: Font = Font::new(8).bold();
@@ -257,6 +257,8 @@ pub fn fader_norm(r: Rect, y: f32) -> f32 {
 pub const FADER_PAD: f32 = 5.0;
 /// A drag over this many px runs a number cell through its range.
 pub const NUM_PX: f32 = 120.0;
+/// Share of a stepper's width at each end that steps (the middle drags).
+pub const STEP_END: f32 = 0.26;
 
 // ---- the matrix rows --------------------------------------------------------------------------------------------
 
@@ -1204,26 +1206,39 @@ fn paint_check(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect) {
 }
 
 fn paint_stepper(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, held: bool) {
-    c.fill_rrect(r, 3.0, if held { LCD_EDGE } else { LCD_FIELD });
-    c.stroke_rrect(r, 3.0, 1.0, LCD_EDGE);
+    c.fill_rrect(r, 4.0, if held { LCD_EDGE } else { LCD_FIELD });
+    c.stroke_rrect(r, 4.0, 1.0, LCD_EDGE);
+    // The arrows are the ends of the box: a press on either third steps, the middle drags.
+    let end = (r.w * 0.26).min(r.h);
+    c.fill_rect(Rect::new(r.x + end, r.y + 2.0, 1.0, r.h - 4.0), LCD_EDGE);
+    c.fill_rect(
+        Rect::new(r.right() - end - 1.0, r.y + 2.0, 1.0, r.h - 4.0),
+        LCD_EDGE,
+    );
     let text = v.text(p);
-    let body = Rect::new(r.x + 10.0, r.y, r.w - 20.0, r.h);
+    let body = Rect::new(r.x + end + 1.0, r.y, r.w - 2.0 * end - 2.0, r.h);
     let f = c.fit_font(VALUE, &text, body.w);
     c.text_center(f, body, LCD_TEXT, &text);
-    let y = r.cy();
+    let (y, a) = (r.cy(), (r.h * 0.26).clamp(3.0, 6.0));
+    let lx = r.x + end / 2.0;
+    let rx = r.right() - end / 2.0;
     c.polyline(
-        &[(r.x + 7.0, y - 3.0), (r.x + 4.0, y), (r.x + 7.0, y + 3.0)],
-        1.3,
-        LCD_DIM,
+        &[
+            (lx + a * 0.6, y - a),
+            (lx - a * 0.6, y),
+            (lx + a * 0.6, y + a),
+        ],
+        2.2,
+        EMBER,
     );
     c.polyline(
         &[
-            (r.right() - 7.0, y - 3.0),
-            (r.right() - 4.0, y),
-            (r.right() - 7.0, y + 3.0),
+            (rx - a * 0.6, y - a),
+            (rx + a * 0.6, y),
+            (rx - a * 0.6, y + a),
         ],
-        1.3,
-        LCD_DIM,
+        2.2,
+        EMBER,
     );
 }
 

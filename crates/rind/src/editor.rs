@@ -120,8 +120,24 @@ impl Logic {
         self.hits = view::layout(&self.ui);
     }
 
+    /// The control at (`x`, `y`); a touch that just misses a small control still reaches the nearest one.
     fn hit(&self, x: f32, y: f32) -> Option<Hit> {
-        self.hits.iter().rev().find(|h| h.r.contains(x, y)).copied()
+        if let Some(h) = self.hits.iter().rev().find(|h| h.r.contains(x, y)) {
+            return Some(*h);
+        }
+        const SLOP: f32 = 5.0;
+        let near = |h: &&Hit| {
+            matches!(
+                h.kind,
+                Kind::Stepper | Kind::Cycle | Kind::Toggle | Kind::Nav(_)
+            ) && h.r.inset(-SLOP).contains(x, y)
+        };
+        let dist = |h: &Hit| (h.r.cx() - x).powi(2) + (h.r.cy() - y).powi(2);
+        self.hits
+            .iter()
+            .filter(near)
+            .min_by(|a, b| dist(a).total_cmp(&dist(b)))
+            .copied()
     }
 
     fn reset(&mut self, p: usize) {
@@ -225,8 +241,16 @@ impl Logic {
                     }
                     Kind::Cycle | Kind::Toggle => self.step(p, 1, true),
                     Kind::Stepper => {
-                        let dir = if x < h.r.cx() { -1 } else { 1 };
-                        self.step(p, dir, false);
+                        let at = (x - h.r.x) / h.r.w;
+                        if at < view::STEP_END {
+                            self.step(p, -1, false);
+                        } else if at > 1.0 - view::STEP_END {
+                            self.step(p, 1, false);
+                        } else if let Range::Int(lo, hi) = SPECS[p].kind {
+                            // The middle drags: a whole value per 14 px.
+                            let px = (14.0 * (hi - lo) as f32).max(40.0);
+                            return self.begin_drag(p, px, Axis::Up, None);
+                        }
                     }
                     Kind::Knob => return self.begin_drag(p, view::KNOB_PX, Axis::Up, None),
                     Kind::Num => return self.begin_drag(p, view::NUM_PX, Axis::Up, None),
