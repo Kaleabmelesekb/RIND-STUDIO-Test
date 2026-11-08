@@ -252,7 +252,7 @@ impl Logic {
     }
 
     /// Movement of a locked drag in logical px since the last event.
-    pub fn delta(&mut self, dx: f32, dy: f32, m: Mods) -> Vec<Act> {
+    pub fn delta(&mut self, _dx: f32, dy: f32, m: Mods) -> Vec<Act> {
         let Some(Drag { param, v, px, axis }) = self.drag else {
             return Vec::new();
         };
@@ -613,11 +613,12 @@ mod tests {
     fn every_screen_paints_something_and_the_buttons_switch_it() {
         let (mut l, _params) = logic();
         let wave = ids::OSC_BASE + ids::osc::WAVE;
+        // The steps page belongs to the arpeggiator, the effect list to the FX tab.
         for n in [
             view::Nav::Part(1),
-            view::Nav::Tab(1),
-            view::Nav::Fx(6),
             view::Nav::Page(1),
+            view::Nav::Fx(6),
+            view::Nav::Tab(1),
             view::Nav::Part(0),
             view::Nav::Tab(0),
         ] {
@@ -741,11 +742,11 @@ mod tests {
         let (mut l, params) = logic();
         let wave = ids::OSC_BASE + ids::osc::WAVE;
         let (x, y) = at(&l, wave);
+        let (fx, fy) = at(&l, ids::MASTER_VOL);
         l.down(x, y, Btn::Left, NONE);
         paint(&mut l);
         // A press on the master fader's place (under the shade) closes the list; the fader is not touched.
         let before = live(&params, ids::MASTER_VOL);
-        let (fx, fy) = at(&l, ids::MASTER_VOL);
         assert!(l.down(fx, fy, Btn::Left, NONE).contains(&Act::Repaint));
         assert_eq!(l.ui.popup, None);
         assert!(l.drag.is_none());
