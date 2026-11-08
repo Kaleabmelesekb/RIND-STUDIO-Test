@@ -862,14 +862,16 @@ mod tests {
         );
     }
 
-    /// The centre of Rind's master volume knob, always on screen (the editor's pixels are points here).
+    /// The centre of Rind's first filter's cutoff knob, always on screen (the editor's pixels are points here).
     fn rind_knob(rig: &mut Rig) -> Pos2 {
         use rind::view::{self, Kind, Ui};
         for _ in 0..3 {
             rig.frame(vec![]);
         }
         let knob = (view::layout(&Ui::default()).into_iter())
-            .find(|h| h.param == rind::ids::MASTER_VOL && h.kind == Kind::Knob)
+            .find(|h| {
+                h.param == rind::ids::FILT_BASE + rind::ids::filt::CUTOFF && h.kind == Kind::Knob
+            })
             .unwrap();
         pos2(knob.r.cx(), knob.r.cy())
     }

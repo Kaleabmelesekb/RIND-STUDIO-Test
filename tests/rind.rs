@@ -94,30 +94,38 @@ fn the_editor_takes_drags_resets_taps_and_switches_pages() {
     let find = |ui: &Ui, p: usize| -> Hit {
         view::layout(ui)
             .into_iter()
-            .find(|h| h.param == p && !matches!(h.kind, Kind::Tab(_) | Kind::Sub(_)))
+            .find(|h| h.param == p && h.is_param())
             .expect("a control")
     };
 
-    let tab = |i: usize| -> Hit {
-        view::layout(&Ui::default())
-            .into_iter()
-            .find(|h| h.kind == Kind::Tab(i))
-            .unwrap()
-    };
     // The master volume is always on screen.
     let ui = Ui::default();
 
-    // A knob drag holds the cursor; up 30 px of 150 is the default 0.7 plus 0.2.
+    // A fader press sets it where it lands (the top is full) and holds the cursor; a drag down a fifth of its travel
+    // takes it to 0.8.
     let vol = find(&ui, ids::MASTER_VOL);
-    run(&[down(&vol, Button::Left)]);
-    assert!(embed::locked(editor), "a knob drag holds the cursor");
+    assert_eq!(vol.kind, Kind::Fader);
+    let top = Hit {
+        r: os_ui::Rect::new(
+            vol.r.x,
+            vol.r.y + view::FADER_PAD - vol.r.h / 2.0,
+            vol.r.w,
+            vol.r.h,
+        ),
+        ..vol
+    };
+    run(&[down(&top, Button::Left)]);
+    assert!(embed::locked(editor), "a fader drag holds the cursor");
     run(&[
-        Input::Delta { dx: 0.0, dy: -30.0 },
+        Input::Delta {
+            dx: 0.0,
+            dy: 0.2 * (vol.r.h - 2.0 * view::FADER_PAD),
+        },
         Input::Up { btn: Button::Left },
     ]);
     assert!(!embed::locked(editor));
-    let dragged = moved(ids::MASTER_VOL).expect("the drag moved the knob");
-    assert!((dragged - 0.9).abs() < 1e-3, "{dragged}");
+    let dragged = moved(ids::MASTER_VOL).expect("the drag moved the fader");
+    assert!((dragged - 0.8).abs() < 1e-3, "{dragged}");
 
     // A middle click resets it to its default.
     run(&[
@@ -149,15 +157,7 @@ fn the_editor_takes_drags_resets_taps_and_switches_pages() {
     let picked = moved(wave).expect("the pick moved the wave");
     assert!((picked - 4.0 / 7.0).abs() < 1e-3, "{picked}");
 
-    // A tap on the arpeggiator's switch, on its own tab.
-    run(&[
-        down(&tab(view::TAB_ARP), Button::Left),
-        Input::Up { btn: Button::Left },
-    ]);
-    let ui = Ui {
-        tab: view::TAB_ARP,
-        ..Ui::default()
-    };
+    // A tap on the arpeggiator's switch (the arpeggiator is the display's first effect).
     let on = find(&ui, ids::ARP_ON);
     run(&[down(&on, Button::Left), Input::Up { btn: Button::Left }]);
     assert_eq!(moved(ids::ARP_ON), Some(1.0));
