@@ -189,6 +189,8 @@ pub fn import(
     let division = f64::from(smf.division);
     // The `FF 51`s as (beat, BPM), in file order.
     let (mut tempos, mut program) = (Vec::new(), [0u8; 16]);
+    // The beats per bar of the file's first `FF 58`.
+    let mut bar_beats = None;
     for track in &smf.tracks {
         let mut name = String::new();
         let mut new_lane = true;
@@ -208,6 +210,10 @@ pub fn import(
                 // A malformed `FF 51` is a tempo parse error.
                 SmfEvent::Other { kind: 0x51, .. } => {
                     tempos.push((beat, 120.0));
+                    continue;
+                }
+                SmfEvent::Other { kind: 0x58, data } => {
+                    bar_beats = bar_beats.or(bar_beats_of(data));
                     continue;
                 }
                 SmfEvent::Other { .. } => continue,
@@ -282,6 +288,9 @@ pub fn import(
     }
     if as_song {
         set_tempo(song, tempos);
+        if let Some(beats) = bar_beats {
+            song.time_sig.beats_per_bar = beats;
+        }
     }
     let (made, kits) = (state.made, state.kits.clone());
     state.finish(song);
@@ -526,6 +535,18 @@ impl State<'_> {
             fit(clip, bar);
         }
     }
+}
+
+/// The beats (quarter notes) per bar of an `FF 58` (`nn dd cc bb`: numerator, denominator 2^dd, ...), when a whole
+/// number from 1 to 255: 6/8 is 3, 3/4 is 3, 7/8 (3.5) has none and leaves the song's bar alone.
+pub(crate) fn bar_beats_of(data: &[u8]) -> Option<u8> {
+    let (&nn, &dd) = (data.first()?, data.get(1)?);
+    let quarters = u32::from(nn) * 4;
+    let den = 1u32.checked_shl(u32::from(dd))?;
+    if nn == 0 || !quarters.is_multiple_of(den) {
+        return None;
+    }
+    u8::try_from(quarters / den).ok().filter(|&b| b > 0)
 }
 
 /// Sets the song's tempo from the file's `tempos`, (beat, BPM) in file order, clamped to [`TEMPO_RANGE`], and replaces

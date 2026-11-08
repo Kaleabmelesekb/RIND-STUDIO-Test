@@ -203,7 +203,7 @@ fn open_as_song_tempo() {
     assert_eq!(tempo(vec![]), 120.0);
     assert_eq!(tempo(vec![vec![t(0, 1_000_000), bad.clone()]]), 120.0);
     assert_eq!(tempo(vec![vec![bad.clone(), t(0, 1_000_000)]]), 60.0);
-    // The time signature is never read.
+    // The time signature sets the bar's beats (the song's subdivision stays).
     let sig = (
         0,
         SmfEvent::Other {
@@ -211,10 +211,9 @@ fn open_as_song_tempo() {
             data: vec![3, 2, 24, 8],
         },
     );
-    assert_eq!(
-        open(&smf(96, vec![vec![sig, t(0, 500_000)]])).time_sig,
-        Song::default().time_sig
-    );
+    let signed = open(&smf(96, vec![vec![sig, t(0, 500_000)]])).time_sig;
+    assert_eq!(signed.beats_per_bar, 3);
+    assert_eq!(signed.subdivision, Song::default().time_sig.subdivision);
     // Track-menu and dialog imports never change the tempo: the file's 60 BPM stays out of the 120 BPM song.
     let bytes = smf(96, vec![vec![t(0, 1_000_000), on(0, 0, 60, 64)]]);
     assert_eq!(into_keys(&bytes, ImportOpts::ONE_CHANNEL).tempo_bpm, 120.0);
@@ -1216,4 +1215,56 @@ fn hostile_files_never_panic() {
         ]],
     );
     assert!(import_all_ways(&far));
+}
+
+#[test]
+fn bar_length_beats_of_a_time_signature() {
+    assert_eq!(bar_beats_of(&[4, 2, 24, 8]), Some(4));
+    assert_eq!(bar_beats_of(&[3, 2, 24, 8]), Some(3));
+    assert_eq!(
+        bar_beats_of(&[6, 3, 24, 8]),
+        Some(3),
+        "6/8 is three quarters"
+    );
+    assert_eq!(bar_beats_of(&[12, 3, 24, 8]), Some(6));
+    assert_eq!(
+        bar_beats_of(&[7, 3, 24, 8]),
+        None,
+        "7/8 is not whole quarters"
+    );
+    assert_eq!(bar_beats_of(&[0, 2, 24, 8]), None);
+    assert_eq!(bar_beats_of(&[4]), None);
+    assert_eq!(
+        bar_beats_of(&[4, 40, 24, 8]),
+        None,
+        "a denominator too large"
+    );
+}
+
+#[test]
+fn a_time_signature_opens_as_the_songs_bar_and_round_trips() {
+    let sig = |data: &[u8]| {
+        (
+            0,
+            SmfEvent::Other {
+                kind: 0x58,
+                data: data.to_vec(),
+            },
+        )
+    };
+    let file = smf(
+        96,
+        vec![vec![sig(&[3, 2, 24, 8]), on(0, 0, 60, 100), off(96, 0, 60)]],
+    );
+    assert_eq!(open(&file).time_sig.beats_per_bar, 3);
+    // Unusable signatures leave the default bar.
+    let odd = smf(
+        96,
+        vec![vec![sig(&[7, 3, 24, 8]), on(0, 0, 60, 100), off(96, 0, 60)]],
+    );
+    assert_eq!(open(&odd).time_sig.beats_per_bar, 4);
+    // Exported, a 3-beat bar reads back as 3.
+    let song = open(&file);
+    let again = open(&smf_of(&song, None).unwrap());
+    assert_eq!(again.time_sig.beats_per_bar, 3);
 }

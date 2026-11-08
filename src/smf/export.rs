@@ -138,6 +138,20 @@ pub fn smf_with(
     }
     let first = tracks.first_mut().ok_or(NoData)?;
     first.splice(0..0, tempos);
+    // The bar's length as an `FF 58` (beats per bar over quarter notes); a 4/4 song writes none, the MIDI default.
+    let beats = song.time_sig.beats_per_bar;
+    if beats != 4 && beats != 0 {
+        first.insert(
+            0,
+            (
+                0,
+                SmfEvent::Other {
+                    kind: 0x58,
+                    data: vec![beats, 2, 24, 8],
+                },
+            ),
+        );
+    }
     // Stable: a tempo goes first at its tick.
     first.sort_by_key(|e| e.0);
     Ok(codec::write(&Smf {
