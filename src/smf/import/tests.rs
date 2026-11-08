@@ -203,7 +203,7 @@ fn open_as_song_tempo() {
     assert_eq!(tempo(vec![]), 120.0);
     assert_eq!(tempo(vec![vec![t(0, 1_000_000), bad.clone()]]), 120.0);
     assert_eq!(tempo(vec![vec![bad.clone(), t(0, 1_000_000)]]), 60.0);
-    // The time signature is never read.
+    // The time signature sets the bar's beats (the song's subdivision stays).
     let sig = (
         0,
         SmfEvent::Other {
@@ -211,10 +211,9 @@ fn open_as_song_tempo() {
             data: vec![3, 2, 24, 8],
         },
     );
-    assert_eq!(
-        open(&smf(96, vec![vec![sig, t(0, 500_000)]])).time_sig,
-        Song::default().time_sig
-    );
+    let signed = open(&smf(96, vec![vec![sig, t(0, 500_000)]])).time_sig;
+    assert_eq!(signed.beats_per_bar, 3);
+    assert_eq!(signed.subdivision, Song::default().time_sig.subdivision);
     // Track-menu and dialog imports never change the tempo: the file's 60 BPM stays out of the 120 BPM song.
     let bytes = smf(96, vec![vec![t(0, 1_000_000), on(0, 0, 60, 64)]]);
     assert_eq!(into_keys(&bytes, ImportOpts::ONE_CHANNEL).tempo_bpm, 120.0);
