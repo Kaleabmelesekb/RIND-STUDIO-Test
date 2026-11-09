@@ -1270,7 +1270,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "l1_rate",
         name: "LFO 1 Rate",
-        kind: Kind::Skew(0.02, 40.0, -2.5),
+        kind: Kind::Skew(0.02, 40.0, -1.8),
         default: 2.0,
         fmt: Fmt::Hz,
     },
@@ -1326,7 +1326,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "l2_rate",
         name: "LFO 2 Rate",
-        kind: Kind::Skew(0.02, 40.0, -2.5),
+        kind: Kind::Skew(0.02, 40.0, -1.8),
         default: 2.0,
         fmt: Fmt::Hz,
     },
@@ -2145,7 +2145,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "phs_rate",
         name: "Phaser Rate",
-        kind: Kind::Skew(0.02, 10.0, -2.5),
+        kind: Kind::Skew(0.02, 10.0, -1.8),
         default: 0.4,
         fmt: Fmt::Hz,
     },
@@ -2194,7 +2194,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "cho_rate",
         name: "Chorus Rate",
-        kind: Kind::Skew(0.05, 8.0, -2.5),
+        kind: Kind::Skew(0.05, 8.0, -1.8),
         default: 0.6,
         fmt: Fmt::Hz,
     },
@@ -2278,14 +2278,14 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "dly_l",
         name: "Delay Time L",
-        kind: Kind::Skew(0.005, 2.0, -2.5),
+        kind: Kind::Skew(0.005, 2.0, -1.6),
         default: 0.3,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "dly_r",
         name: "Delay Time R",
-        kind: Kind::Skew(0.005, 2.0, -2.5),
+        kind: Kind::Skew(0.005, 2.0, -1.6),
         default: 0.45,
         fmt: Fmt::Sec,
     },
