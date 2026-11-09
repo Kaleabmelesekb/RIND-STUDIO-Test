@@ -38,7 +38,7 @@ use crate::ui::tempo::transport_bpm_text;
 use crate::ui::timeline::{self, KnobGesture, PlayheadKnob, RULER_H, RangeRuler, RangeSelect};
 use crate::ui::track_menu::{TrackOp, track_menu};
 use crate::ui::transport_extras::{self, Load, RamReadout, SystemMemory};
-use crate::ui::layout::{Node, Size};
+use crate::ui::layout::{Node, Size, rect_of};
 use crate::ui::views::{AppCtx, MenuTab, Nav, Overlay, View};
 use crate::ui::widgets;
 use crate::ui::{UiCtx, chord_editor, chord_keyboard, gesture, keyboard, popup, wheels};
@@ -379,9 +379,9 @@ impl Regions {
         
         let grid3_result = Node::layout(&grid3, screen, m.u(1.0));
         
-        let browser = Node::rect_of(&grid3_result, 0).unwrap_or(Rect::NOTHING);
-        let editor = Node::rect_of(&grid3_result, 1).unwrap_or(Rect::NOTHING);
-        let device_rack = Node::rect_of(&grid3_result, 2).unwrap_or(Rect::NOTHING);
+        let browser = rect_of(&grid3_result, 0).unwrap_or(Rect::NOTHING);
+        let editor = rect_of(&grid3_result, 1).unwrap_or(Rect::NOTHING);
+        let device_rack = rect_of(&grid3_result, 2).unwrap_or(Rect::NOTHING);
         
         // Transport bar at top of editor area
         let transport = editor.with_max_y(editor.top() + m.u(TRANSPORT_H * f32::from(rows)));
