@@ -117,6 +117,8 @@ pub enum Kind {
     VStack(Vec<Node>),
     /// Every child over the full parent rect, each sized by its own record and centred.
     Layer(Vec<Node>),
+    /// Three-region grid: left panel, center panel, bottom panel.
+    Grid3(Vec<Node>),
     /// A control. The layout reports its rect under this id.
     Leaf(NodeId),
 }
@@ -152,6 +154,22 @@ impl Node {
 
     pub fn layer(children: impl IntoIterator<Item = Node>) -> Self {
         Self::new(Kind::Layer(children.into_iter().collect()))
+    }
+
+    /// Three-region grid: left panel (browser), center panel (arranger), bottom panel (device rack).
+    /// Children must be exactly 3: [0] = left, [1] = center, [2] = bottom.
+    pub fn grid3(children: impl IntoIterator<Item = Node>) -> Self {
+        Self::new(Kind::Grid3(children.into_iter().collect()))
+    }
+
+    /// Left browser panel: fixed width, full height.
+    pub fn browser(width: f32) -> Self {
+        Self::new(Kind::Leaf(0)).w(Size::U(width))
+    }
+
+    /// Bottom device rack panel: full width, fixed height.
+    pub fn device_rack(height: f32) -> Self {
+        Self::new(Kind::Leaf(1)).h(Size::U(height))
     }
 
     pub fn w(mut self, w: Size) -> Self {
@@ -264,6 +282,17 @@ pub fn rect_of(rects: &[(NodeId, Rect)], id: NodeId) -> Option<Rect> {
     rects.iter().find(|(i, _)| *i == id).map(|(_, r)| *r)
 }
 
+/// The cross-axis rule: a child's (offset, length) on an axis of `parent` pixels, from its size and margins along it.
+fn cross_axis((size, lead, trail): (Size, f32, f32), parent: f32, u: f32) -> (f32, f32) {
+    let (lead, trail) = (lead * u, trail * u);
+    let len = match size {
+        Size::U(v) => v * u,
+        Size::Percent(p) => p / 100.0 * parent,
+        Size::Flex(weight) => ((parent - lead - trail) * weight).max(0.0),
+    };
+    ((parent - len + lead - trail) / 2.0, len)
+}
+
 fn place(node: &Node, frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>) {
     match &node.kind {
         Kind::Leaf(id) => out.push((*id, frame.snap())),
@@ -282,6 +311,89 @@ fn place(node: &Node, frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>) {
                 place(child, frame, u, out);
             }
         }
+        Kind::Grid3(children) => grid3(children, frame, u, out),
+    }
+}
+
+/// Three-region grid: left panel (browser), center panel (arranger), bottom panel (device rack).
+/// Children must be exactly 3: [0] = left, [1] = center, [2] = bottom.
+fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>) {
+    if children.len() != 3 {
+        return;
+    }
+    let left = &children[0];
+    let center = &children[1];
+    let bottom = &children[2];
+    
+    let left_visible = left.visible;
+    let center_visible = center.visible;
+    let bottom_visible = bottom.visible;
+    
+    if !left_visible && !center_visible && !bottom_visible {
+        return;
+    }
+    
+    // Calculate left width: fixed or flex, with margins
+    let left_size = match left.record.w {
+        Size::U(v) => v * u,
+        Size::Percent(p) => p / 100.0 * frame.w,
+        Size::Flex(weight) => {
+            let (lead, trail) = (left.record.margins.l, left.record.margins.r);
+            ((frame.w - lead * u - trail * u) * weight).max(0.0)
+        }
+    };
+    let left_lead = left.record.margins.l * u;
+    let left_trail = left.record.margins.r * u;
+    let left_w = if left_visible { left_size + left_lead + left_trail } else { 0.0 };
+    
+    // Calculate bottom height: fixed or flex, with margins
+    let bottom_size = match bottom.record.h {
+        Size::U(v) => v * u,
+        Size::Percent(p) => p / 100.0 * frame.h,
+        Size::Flex(weight) => {
+            let (lead, trail) = (bottom.record.margins.t, bottom.record.margins.b);
+            ((frame.h - lead * u - trail * u) * weight).max(0.0)
+        }
+    };
+    let bottom_lead = bottom.record.margins.t * u;
+    let bottom_trail = bottom.record.margins.b * u;
+    let bottom_h = if bottom_visible { bottom_size + bottom_lead + bottom_trail } else { 0.0 };
+    
+    // Center panel gets the remaining space
+    let center_w = frame.w - left_w;
+    let center_h = frame.h - bottom_h;
+    
+    // Left panel: full height, left side
+    if left_visible {
+        let left_frame = Frame {
+            x: frame.x + left_lead,
+            y: frame.y,
+            w: left_size,
+            h: frame.h,
+        };
+        place(left, left_frame, u, out);
+    }
+    
+    // Center panel: remaining width, remaining height
+    if center_visible {
+        let center_frame = Frame {
+            x: frame.x + left_w,
+            y: frame.y,
+            w: center_w,
+            h: center_h,
+        };
+        place(center, center_frame, u, out);
+    }
+    
+    // Bottom panel: full width minus left, bottom of center
+    if bottom_visible {
+        let bottom_frame = Frame {
+            x: frame.x + left_w,
+            y: frame.y + center_h + bottom_lead,
+            w: center_w,
+            h: bottom_size,
+        };
+        place(bottom, bottom_frame, u, out);
     }
 }
 
@@ -319,17 +431,6 @@ fn stack(children: &[Node], frame: Frame, horizontal: bool, u: f32, out: &mut Ve
         let child_frame = Frame::from_spans(horizontal, (start, main), (cross_start + offset, len));
         place(child, child_frame, u, out);
     }
-}
-
-/// The cross-axis rule: a child's (offset, length) on an axis of `parent` pixels, from its size and margins along it.
-fn cross_axis((size, lead, trail): (Size, f32, f32), parent: f32, u: f32) -> (f32, f32) {
-    let (lead, trail) = (lead * u, trail * u);
-    let len = match size {
-        Size::U(v) => v * u,
-        Size::Percent(p) => p / 100.0 * parent,
-        Size::Flex(weight) => ((parent - lead - trail) * weight).max(0.0),
-    };
-    ((parent - len + lead - trail) / 2.0, len)
 }
 
 #[cfg(test)]

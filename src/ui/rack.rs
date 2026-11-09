@@ -76,8 +76,8 @@ mod tests;
 /// The header at the top, its 2 px border included: in a full-screen rack, and in a side one.
 const HEADER_FULL: f32 = 1.75;
 const HEADER_SIDE: f32 = 1.3;
-/// The header bar's bottom corners.
-const HEADER_CORNER: f32 = 0.4;
+/// The header bar's bottom corners: zero for sharp industrial edges.
+const HEADER_CORNER: f32 = 0.0;
 /// The margin on each side of the header and the card column: 1.5 U beside a 20 U rack, less as the rack narrows,
 /// down to 0.5 U.
 const MARGIN_MAX: f32 = 1.5;
@@ -86,8 +86,8 @@ const MARGIN_MIN: f32 = 0.5;
 const CARD_GAP: f32 = 0.35;
 /// A card's header row; a minimized card is only that.
 const CARD_HEADER: f32 = 1.5;
-/// A card's corners.
-const CARD_CORNER: f32 = 0.4;
+/// A card's corners: zero for sharp industrial edges.
+const CARD_CORNER: f32 = 0.0;
 /// The side rack's collapse tab: its size, its inset from the rack's left edge and its outline ring in device px, just
 /// outside the pill.
 const COLLAPSE: Vec2 = vec2(1.0, 1.6);

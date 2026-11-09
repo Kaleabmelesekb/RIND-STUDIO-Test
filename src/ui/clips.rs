@@ -168,8 +168,8 @@ const GRIP: [f32; 2] = [0.18, 0.44];
 const ARROW_MIX: f32 = 0.7;
 /// Under the mouse a handle is this much larger.
 const HOVER: f32 = 1.05;
-/// Clip boxes have rounded corners of this radius.
-pub(crate) const CORNER: f32 = 0.15;
+/// Clip boxes have sharp corners, no radius.
+pub(crate) const CORNER: f32 = 0.0;
 /// The selection fill: `text` at α 0.15 + 0.05·cos(2π·p), p advancing this much a drawn frame (an 80-frame cycle).
 const PULSE: [f32; 3] = [0.15, 0.05, 0.0125];
 /// The handles' pop-in: a ← 0.6·a per frame.

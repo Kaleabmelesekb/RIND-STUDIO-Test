@@ -62,7 +62,7 @@ const GAP_PX: f32 = 4.0;
 /// ([`gesture::is_long`]).
 const TAB_W: f32 = 1.7;
 const TAB_H: f32 = 1.25;
-const TAB_R: f32 = 0.4;
+const TAB_R: f32 = 0.0;
 const TAB_ICON: f32 = 0.9;
 const TAB_DROP_PX: f32 = 2.0;
 const SHADOW_PX: f32 = 2.0;

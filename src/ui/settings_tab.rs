@@ -1462,7 +1462,7 @@ mod tests {
         assert_eq!(
             labels(Choice::Theme),
             [
-                "Classic Gray",
+                "Flat Industrial",
                 "Deep Purple",
                 "Slate",
                 "Paper",
@@ -1486,7 +1486,7 @@ mod tests {
                 .unwrap()
                 .1
         );
-        assert_eq!(Choice::Theme.label(&s), "Classic Gray");
+        assert_eq!(Choice::Theme.label(&s), "Flat Industrial");
         assert_eq!(Choice::Animation.label(&s), "Full");
         let mut s = Settings::default();
         for c in [Choice::Theme, Choice::Animation] {

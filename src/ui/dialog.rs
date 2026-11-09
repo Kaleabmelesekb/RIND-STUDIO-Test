@@ -18,8 +18,8 @@ use crate::ui::widgets::Button;
 
 /// The widest a floating dialog gets, in U.
 const MAX_W: f32 = 20.0;
-/// The panel's corner radius in U, at most half its short side.
-const CORNER: f32 = 0.4;
+/// The panel's corner radius in U, at most half its short side: zero for sharp industrial edges.
+const CORNER: f32 = 0.0;
 /// The border, in device px.
 const BORDER_PX: f32 = 2.0;
 /// A dialog button's corner radius, in U.

@@ -38,6 +38,7 @@ use crate::ui::tempo::transport_bpm_text;
 use crate::ui::timeline::{self, KnobGesture, PlayheadKnob, RULER_H, RangeRuler, RangeSelect};
 use crate::ui::track_menu::{TrackOp, track_menu};
 use crate::ui::transport_extras::{self, Load, RamReadout, SystemMemory};
+use crate::ui::layout::{Node, Size};
 use crate::ui::views::{AppCtx, MenuTab, Nav, Overlay, View};
 use crate::ui::widgets;
 use crate::ui::{UiCtx, chord_editor, chord_keyboard, gesture, keyboard, popup, wheels};
@@ -337,11 +338,15 @@ pub struct Regions {
     pub screen: Rect,
     /// The content area, above the transport bar: the view and the rack share it.
     pub area: Rect,
+    /// The left browser panel (collapsible drawer).
+    pub browser: Rect,
     /// The view shown (the playlist's ruler and tracks, an editor or the mixer): the area left of the rack, at least
     /// 1 U wide, so it is resized, not covered, as the rack slides in ([`Self::with_rack`]).
     pub editor: Rect,
     /// The rack at its slide ([`crate::ui::rack::rack_rect`]): just past the area's right edge while closed.
     pub rack: Rect,
+    /// The device rack panel at the bottom (pinned across full width).
+    pub device_rack: Rect,
     pub transport: Rect,
     /// The keys' area (the pads', the sample row's): the keyboard band, less the settings strip while that is open
     /// ([`Self::with_strip`]).
@@ -362,26 +367,38 @@ impl Regions {
     /// The regions of `screen` with the keyboard panel `panel_h` points tall under a transport bar of `rows` rows
     /// ([`panel_target`], [`band_layout`]).
     pub fn sized(screen: Rect, panel_h: f32, rows: u8, m: &Metrics) -> Self {
-        let bands = band_layout(screen.height(), m.u(1.0), panel_h, rows);
-        let band = |y: Rangef| {
-            Rect::from_x_y_ranges(
-                screen.x_range(),
-                screen.top() + y.min..=screen.top() + y.max,
-            )
-        };
-        let transport = band(bands.transport);
-        let keyboard = band(bands.keyboard);
-        let area = band(Rangef::new(bands.ruler.min, bands.tracks.max));
-        let row1 = transport.with_max_y(transport.top() + m.u(TRANSPORT_H));
+        let browser_w = m.u(4.0); // 4 U browser width
+        let device_rack_h = m.u(6.0); // 6 U device rack height
+        
+        // Build Grid3 layout: [0]=browser (left), [1]=center (arranger), [2]=bottom (device rack)
+        let grid3 = Node::grid3([
+            Node::leaf(0).w(Size::U(browser_w)).h(Size::Flex(1.0)), // browser left
+            Node::leaf(1).w(Size::Flex(1.0)).h(Size::Flex(1.0)), // center arranger
+            Node::leaf(2).w(Size::Flex(1.0)).h(Size::U(device_rack_h)), // bottom device rack
+        ]);
+        
+        let grid3_result = Node::layout(&grid3, screen, m.u(1.0));
+        
+        let browser = Node::rect_of(&grid3_result, 0).unwrap_or(Rect::NOTHING);
+        let editor = Node::rect_of(&grid3_result, 1).unwrap_or(Rect::NOTHING);
+        let device_rack = Node::rect_of(&grid3_result, 2).unwrap_or(Rect::NOTHING);
+        
+        // Transport bar at top of editor area
+        let transport = editor.with_max_y(editor.top() + m.u(TRANSPORT_H * f32::from(rows)));
+        let keyboard = editor.with_min_y(editor.bottom() - m.u(PANEL_H));
+        let strip = strip_rect(transport, 0.0, m);
+        let ctrl = transport_slot(transport.with_max_y(transport.top() + m.u(TRANSPORT_H)), CTRL_SLOT, m);
+        
         Self {
             screen,
-            area,
-            editor: area,
-            rack: crate::ui::rack::rack_rect(area, 0.0, crate::metrics::is_portrait(screen), m),
+            area: editor,
+            browser,
+            editor,
+            device_rack,
             transport,
             keyboard,
             strip: strip_rect(transport, 0.0, m),
-            ctrl: transport_slot(row1, CTRL_SLOT, m),
+            ctrl: transport_slot(transport.with_max_y(transport.top() + m.u(TRANSPORT_H)), CTRL_SLOT, m),
         }
     }
 

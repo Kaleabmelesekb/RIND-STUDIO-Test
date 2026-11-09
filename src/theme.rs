@@ -286,15 +286,15 @@ pub fn builtin_themes() -> Vec<Theme> {
             }),
         }
     };
-    const ACCENT: u32 = 0xFB8B3F;
+    const ACCENT: u32 = 0x1F1412; // flat industrial dark accent
     let clay_keys = Some([0xC5CAD7, 0x211D20, 0x9A98A4, 0x807981]);
     let clay_options = Some([0.90, 0.63, 1.00, 0.153]);
 
     [
         row(
             0,
-            "Classic Gray",
-            [0x21272B, 0x31373B, 0x394046, 0x434C51, 0xC7CEDA, ACCENT],
+            "Flat Industrial",
+            [0x141414, 0x1E1E1E, 0x252525, 0x2D2D2D, 0xD0D0D0, ACCENT],
             None,
             None,
         ),
@@ -382,7 +382,7 @@ pub fn import(stem: &str, bytes: &[u8]) -> Result<Theme, String> {
     Ok(theme)
 }
 
-/// Theme by ID; an unknown ID gives theme 0 (Classic Gray).
+/// Theme by ID; an unknown ID gives theme 0 (Flat Industrial).
 pub fn theme_by_id(id: u32) -> Theme {
     let mut themes = builtin_themes();
     let index = themes.iter().position(|t| t.id == id).unwrap_or(0);
@@ -450,11 +450,11 @@ mod tests {
     }
 
     #[test]
-    fn classic_gray_resolves_with_defaults() {
+	        fn flat_industrial_resolves_with_defaults() {
         let c = theme_by_id(0).colors;
-        assert_eq!(c.background.to_hex(), "21272B");
+        assert_eq!(c.background.to_hex(), "141414");
         assert_eq!(c.text.to_hex(), "C7CEDA");
-        assert_eq!(c.accent.to_hex(), "FB8B3F");
+        assert_eq!(c.accent.to_hex(), "1F1412");
         assert_eq!(c.white_key.to_hex(), "C7CEDA");
         assert_eq!(c.black_key_disabled.to_hex(), "717981");
     }
@@ -467,13 +467,13 @@ mod tests {
     }
 
     #[test]
-    fn builtins_are_numbered_in_order_and_unknown_id_is_classic_gray() {
+    fn builtins_are_numbered_in_order_and_unknown_id_is_flat_industrial() {
         let themes = builtin_themes();
         assert_eq!(themes.len(), 9);
         assert!(themes.iter().enumerate().all(|(i, t)| t.id == i as u32));
         assert_eq!(themes[7].name, "High Contrast A");
         assert_eq!(theme_by_id(9).id, 0);
-        assert_eq!(theme_by_id(u32::MAX).name, "Classic Gray");
+        assert_eq!(theme_by_id(u32::MAX).name, "Flat Industrial");
         // A theme that sets its own keys and options: Deep Purple.
         let deep = &themes[1];
         assert_eq!(deep.colors.black_key.to_hex(), "000000");
