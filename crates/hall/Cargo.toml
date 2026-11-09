@@ -1,0 +1,10 @@
+[package]
+name = "hall"
+description = "Hall: Honeydew's own algorithmic reverb engine (feedback delay network)"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+doctest = false

@@ -265,3 +265,7 @@ cmp_ratio
 cmp_att
 cmp_rel
 cmp_gain
+fc_cutoff
+fc_res
+fc_warm
+fc_key

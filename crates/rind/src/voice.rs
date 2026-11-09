@@ -288,12 +288,17 @@ impl Voice {
             fvol[f] = (v * bal.0, v * bal.1);
             if p[b + filt::ON] >= 0.5 {
                 let semis = (md[mtgt::CUTOFF_1 + f] + md[mtgt::CUTOFF_ALL]) * 60.0
-                    + p[b + filt::KEY] * (self.pos - 60.0);
+                    + (p[b + filt::KEY] + p[FILTC_KEY]).min(1.0) * (self.pos - 60.0)
+                    + p[FILTC_CUTOFF] * 48.0;
                 let hz = (p[b + filt::CUTOFF] * (semis * (1.0 / 12.0)).exp2())
                     .clamp(20.0, (0.45 * sr).min(20_000.0));
-                let res = (p[b + filt::RES] + md[mtgt::RESONANCE_1 + f] + md[mtgt::RESONANCE_ALL])
+                let res = (p[b + filt::RES]
+                    + p[FILTC_RES] * 0.5
+                    + md[mtgt::RESONANCE_1 + f]
+                    + md[mtgt::RESONANCE_ALL])
                     .clamp(0.0, 1.0);
-                let drive = (p[b + filt::DRIVE] + md[mtgt::DRIVE_1 + f]).clamp(0.0, 1.0);
+                let drive = (p[b + filt::DRIVE] + p[FILTC_WARM] * 0.3 + md[mtgt::DRIVE_1 + f])
+                    .clamp(0.0, 1.0);
                 fset[f] = Some(Setup::new(
                     p[b + filt::TYPE] as u8,
                     p[b + filt::SLOPE] >= 0.5,

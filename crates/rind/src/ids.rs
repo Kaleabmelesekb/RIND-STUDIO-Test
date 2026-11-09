@@ -159,7 +159,7 @@ pub const DIV_BEATS: [f32; 15] = [
     0.0625,
 ];
 
-pub const COUNT: usize = 267;
+pub const COUNT: usize = 271;
 pub const MASTER_VOL: usize = 0;
 pub const MASTER_TUNE: usize = 1;
 pub const POLY: usize = 2;
@@ -427,6 +427,10 @@ pub const CMP_RATIO: usize = 263;
 pub const CMP_ATT: usize = 264;
 pub const CMP_REL: usize = 265;
 pub const CMP_GAIN: usize = 266;
+pub const FILTC_CUTOFF: usize = 267;
+pub const FILTC_RES: usize = 268;
+pub const FILTC_WARM: usize = 269;
+pub const FILTC_KEY: usize = 270;
 pub const PART_BASE: usize = 8;
 pub const PART_STRIDE: usize = 7;
 pub mod part {
@@ -636,14 +640,14 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "pa_att",
         name: "Part A Attack",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.003,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "pa_dec",
         name: "Part A Decay",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.6,
         fmt: Fmt::Sec,
     },
@@ -657,7 +661,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "pa_rel",
         name: "Part A Release",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.25,
         fmt: Fmt::Sec,
     },
@@ -685,14 +689,14 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "pb_att",
         name: "Part B Attack",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.003,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "pb_dec",
         name: "Part B Decay",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.6,
         fmt: Fmt::Sec,
     },
@@ -706,7 +710,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "pb_rel",
         name: "Part B Release",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.25,
         fmt: Fmt::Sec,
     },
@@ -1203,14 +1207,14 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "e3_att",
         name: "Env 3 Attack",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.003,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "e3_dec",
         name: "Env 3 Decay",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.4,
         fmt: Fmt::Sec,
     },
@@ -1224,21 +1228,21 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "e3_rel",
         name: "Env 3 Release",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.3,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "e4_att",
         name: "Env 4 Attack",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.003,
         fmt: Fmt::Sec,
     },
     Spec {
         id: "e4_dec",
         name: "Env 4 Decay",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.4,
         fmt: Fmt::Sec,
     },
@@ -1252,7 +1256,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "e4_rel",
         name: "Env 4 Release",
-        kind: Kind::Skew(0.001, 10.0, -3.0),
+        kind: Kind::Skew(0.001, 10.0, -2.0),
         default: 0.3,
         fmt: Fmt::Sec,
     },
@@ -2424,5 +2428,33 @@ pub static SPECS: [Spec; COUNT] = [
         kind: Kind::Lin(0.0, 12.0),
         default: 0.0,
         fmt: Fmt::Db,
+    },
+    Spec {
+        id: "fc_cutoff",
+        name: "Filter Control Cutoff",
+        kind: Kind::Lin(-1.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
+    },
+    Spec {
+        id: "fc_res",
+        name: "Filter Control Resonance",
+        kind: Kind::Lin(-1.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
+    },
+    Spec {
+        id: "fc_warm",
+        name: "Filter Control Warm",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(OFFON_NAMES),
+    },
+    Spec {
+        id: "fc_key",
+        name: "Filter Control Key Track",
+        kind: Kind::Lin(0.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
     },
 ];

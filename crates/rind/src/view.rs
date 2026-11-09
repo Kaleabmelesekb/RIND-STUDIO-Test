@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Honeydew contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Rind Studio's picture and its hit regions, in logical pixels: one screen, the whole synth in view. The oscillators
+//! Rind's picture and its hit regions, in logical pixels: one screen, the whole synth in view. The oscillators
 //! of the chosen part sit left and right of its amplitude envelope; below them the two filters, a display for the
 //! effects, arpeggiator and last-touched value, and the mixer; below that the two modulation envelopes, the two LFOs
 //! and two free modulation panels (the 16 matrix slots, a drop-down list for every source and target); a strip of
@@ -557,7 +557,7 @@ fn osc_panel(g: &mut Page, n: usize, x: f32, y: f32) {
 /// The filter panel of filter `n` at (`x`, `y`): `big` (the taller one) draws larger knobs.
 fn filter_panel(g: &mut Page, n: usize, x: f32, y: f32, h: f32, big: bool) {
     use ids::filt;
-    g.frame(format!("FILTER {}", n + 1), x, y, 218.0, h);
+    g.frame(if n == 0 { "FILTER A" } else { "FILTER B" }, x, y, 218.0, h);
     g.ctl(filt_param(n, filt::ON), x + 178.0, y + 1.0, 36.0, 14.0);
     g.ctl(filt_param(n, filt::TYPE), x + 8.0, y + 20.0, 56.0, 17.0);
     g.ctl(filt_param(n, filt::SLOPE), x + 68.0, y + 20.0, 44.0, 17.0);
@@ -593,6 +593,17 @@ fn filter_panel(g: &mut Page, n: usize, x: f32, y: f32, h: f32, big: bool) {
     for (f, dx, label) in knobs {
         g.knob(filt_param(n, f), x + dx, cy, rad, 25.0, label);
     }
+}
+
+/// Offsets that move both parts' filters together.
+fn filter_control_panel(g: &mut Page, x: f32, y: f32, h: f32) {
+    g.frame("FILTER CONTROL", x, y, 218.0, h);
+    let cy = y + 58.0;
+    g.knob(ids::FILTC_CUTOFF, x + 30.0, cy, 10.0, 25.0, "CUTOFF");
+    g.knob(ids::FILTC_RES, x + 82.0, cy, 10.0, 25.0, "RESONANCE");
+    g.text(x + 110.0, y + 25.0, "WARM DRIVE");
+    g.ctl(ids::FILTC_WARM, x + 176.0, y + 20.0, 36.0, 17.0);
+    g.knob(ids::FILTC_KEY, x + 186.0, cy, 10.0, 25.0, "KEY TRACK");
 }
 
 fn mod_env_panel(g: &mut Page, n: usize, x: f32, y: f32, w: f32) {
@@ -684,8 +695,9 @@ fn front(g: &mut Page, ui: &Ui) {
         );
     }
 
-    filter_panel(g, 0, 30.0, 135.0, 117.0, true);
-    filter_panel(g, 1, 30.0, 258.0, 87.0, false);
+    // Each part has its own filter; the one under the part button shows. The Filter Control below is global.
+    filter_panel(g, ui.part, 30.0, 135.0, 117.0, true);
+    filter_control_panel(g, 30.0, 258.0, 87.0);
 
     // The mixer.
     g.frame("MIXER", 658.0, 135.0, 222.0, 127.0);
@@ -705,10 +717,10 @@ fn front(g: &mut Page, ui: &Ui) {
         );
     }
     let mini = [
-        (filt_param(0, ids::filt::VOL), "F1 VOL", 806.0, 160.0),
-        (filt_param(0, ids::filt::PAN), "F1 PAN", 842.0, 160.0),
-        (filt_param(1, ids::filt::VOL), "F2 VOL", 806.0, 206.0),
-        (filt_param(1, ids::filt::PAN), "F2 PAN", 842.0, 206.0),
+        (filt_param(0, ids::filt::VOL), "FA VOL", 806.0, 160.0),
+        (filt_param(0, ids::filt::PAN), "FA PAN", 842.0, 160.0),
+        (filt_param(1, ids::filt::VOL), "FB VOL", 806.0, 206.0),
+        (filt_param(1, ids::filt::PAN), "FB PAN", 842.0, 206.0),
     ];
     for (p, label, x, y) in mini {
         g.cell_as(p, label, x, y, 34.0, 44.0);
@@ -967,7 +979,7 @@ fn paint_frame(c: &mut Canvas) {
     c.fill_rect(Rect::new(0.0, 0.0, w, s(27.0)), RAIL);
     c.fill_rect(Rect::new(0.0, s(27.0) - 1.0, w, 1.0), EDGE);
     let brand = Rect::new(w - s(190.0), 0.0, s(160.0), s(27.0));
-    c.text_center(Font::new(11).bold(), brand, EMBER, "RIND STUDIO");
+    c.text_center(Font::new(11).bold(), brand, EMBER, "RIND");
 }
 
 fn paint_panel(c: &mut Canvas, title: &str, r: Rect) {
@@ -986,9 +998,14 @@ fn paint_plate(c: &mut Canvas) {
     c.fill_rrect(r, 6.0, SLOT);
     c.stroke_rrect(r, 6.0, 1.0, EDGE);
     let word = Rect::new(r.x, r.y + s(8.0), r.w, s(40.0));
-    c.text_center(Font::new(26).bold(), word, EMBER, "Rind Studio");
+    c.text_center(Font::new(30).bold(), word, EMBER, "Rind");
     let sub = Rect::new(r.x, r.y + s(52.0), r.w, s(14.0));
-    c.text_center(Font::new(9), sub, MUTED, "MATRIX SYNTHESIZER");
+    c.text_center(
+        Font::new(9),
+        sub,
+        MUTED,
+        "n. the hard outer layer of a fruit",
+    );
 }
 
 fn paint_display(c: &mut Canvas, v: &dyn Values, last: Option<usize>) {
@@ -1001,7 +1018,7 @@ fn paint_display(c: &mut Canvas, v: &dyn Values, last: Option<usize>) {
     c.stroke_rrect(sc, 4.0, 1.5, LCD_EDGE);
     // The title, and the value last touched.
     let title = Rect::new(sc.x + s(96.0), s(148.0), sc.w - s(110.0), s(18.0));
-    c.text_center(VALUE, title, LCD_TEXT, "RIND STUDIO");
+    c.text_center(VALUE, title, LCD_TEXT, "RIND");
     let line = Rect::new(sc.x + s(6.0), s(170.0), sc.w - s(12.0), s(20.0));
     c.fill_rrect(line, 3.0, LCD_FIELD);
     c.stroke_rrect(line, 3.0, 1.0, LCD_EDGE);
@@ -1325,7 +1342,8 @@ fn paint_popup(c: &mut Canvas, v: &dyn Values, p: usize, anchor: Rect) {
 // ---- labels ----------------------------------------------------------------------------------------------------
 
 /// The prefixes the table's names share within a group, stripped from a label.
-const PREFIXES: [&str; 20] = [
+const PREFIXES: [&str; 21] = [
+    "Filter Control ",
     "Osc A1 ",
     "Osc A2 ",
     "Osc B1 ",
