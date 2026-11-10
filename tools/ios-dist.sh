@@ -44,7 +44,7 @@ cat > "$app/Info.plist" <<PLIST
     <key>CFBundleExecutable</key><string>Honeydew</string>
     <key>CFBundleIdentifier</key><string>dev.daijro.honeydew</string>
     <key>CFBundleName</key><string>Honeydew</string>
-    <key>CFBundleDisplayName</key><string>Honeydew</string>
+    <key>CFBundleDisplayName</key><string>Rind Studio</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
