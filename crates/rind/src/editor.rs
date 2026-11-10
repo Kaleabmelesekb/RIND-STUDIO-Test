@@ -1414,9 +1414,10 @@ mod tests {
         assert!(near(norm(&l, a), 0.2), "a single tap leaves it");
         l.touch_press(1, ax, ay, true);
         assert!(near(norm(&l, a), default), "{}", norm(&l, a));
-        l.touch_move(1, ax, ay - 30.0);
+        // The cutoff's default is its top, so the drag goes down.
+        l.touch_move(1, ax, ay + 30.0);
         l.touch_up(1);
-        assert!(near(norm(&l, a), default + 0.2), "{}", norm(&l, a));
+        assert!(near(norm(&l, a), default - 0.2), "{}", norm(&l, a));
     }
 
     #[test]
