@@ -450,7 +450,7 @@ mod tests {
     }
 
     #[test]
-	        fn flat_industrial_resolves_with_defaults() {
+    fn flat_industrial_resolves_with_defaults() {
         let c = theme_by_id(0).colors;
         assert_eq!(c.background.to_hex(), "141414");
         assert_eq!(c.text.to_hex(), "C7CEDA");

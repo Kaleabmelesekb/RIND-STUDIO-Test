@@ -324,15 +324,15 @@ fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>)
     let left = &children[0];
     let center = &children[1];
     let bottom = &children[2];
-    
+
     let left_visible = left.visible;
     let center_visible = center.visible;
     let bottom_visible = bottom.visible;
-    
+
     if !left_visible && !center_visible && !bottom_visible {
         return;
     }
-    
+
     // Calculate left width: fixed or flex, with margins
     let left_size = match left.record.w {
         Size::U(v) => v * u,
@@ -344,8 +344,12 @@ fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>)
     };
     let left_lead = left.record.margins.l * u;
     let left_trail = left.record.margins.r * u;
-    let left_w = if left_visible { left_size + left_lead + left_trail } else { 0.0 };
-    
+    let left_w = if left_visible {
+        left_size + left_lead + left_trail
+    } else {
+        0.0
+    };
+
     // Calculate bottom height: fixed or flex, with margins
     let bottom_size = match bottom.record.h {
         Size::U(v) => v * u,
@@ -357,12 +361,16 @@ fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>)
     };
     let bottom_lead = bottom.record.margins.t * u;
     let bottom_trail = bottom.record.margins.b * u;
-    let bottom_h = if bottom_visible { bottom_size + bottom_lead + bottom_trail } else { 0.0 };
-    
+    let bottom_h = if bottom_visible {
+        bottom_size + bottom_lead + bottom_trail
+    } else {
+        0.0
+    };
+
     // Center panel gets the remaining space
     let center_w = frame.w - left_w;
     let center_h = frame.h - bottom_h;
-    
+
     // Left panel: full height, left side
     if left_visible {
         let left_frame = Frame {
@@ -373,7 +381,7 @@ fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>)
         };
         place(left, left_frame, u, out);
     }
-    
+
     // Center panel: remaining width, remaining height
     if center_visible {
         let center_frame = Frame {
@@ -384,7 +392,7 @@ fn grid3(children: &[Node], frame: Frame, u: f32, out: &mut Vec<(NodeId, Rect)>)
         };
         place(center, center_frame, u, out);
     }
-    
+
     // Bottom panel: full width minus left, bottom of center
     if bottom_visible {
         let bottom_frame = Frame {
