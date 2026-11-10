@@ -875,7 +875,7 @@ mod tests {
         assert_eq!(rig.module.params, before);
         // The last pointer position still counts once the pointer is gone.
         rig.frame(vec![Event::PointerGone]);
-        assert_eq!(disc(&rig, 0).fill, Color32::from_rgb(238, 62, 65));
+        assert_eq!(disc(&rig, 0).fill, Color32::from_rgb(241, 62, 62));
         // Away from every handle: p = 0.
         let away = rig.rect_of(2).left_top();
         move_to(&mut rig, away);
