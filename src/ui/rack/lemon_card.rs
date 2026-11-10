@@ -291,7 +291,11 @@ fn touch_fingers(ui: &Ui, card: &mut LemonCard, response: &Response, rect: Rect,
         match f {
             Finger::Down(id, at) if id != MOUSE && !held(card, id) => {
                 let (x, y) = px(at);
-                send(Touch::Down { id, x, y });
+                let now = ui.input(|i| i.time);
+                let dbl = (card.click)
+                    .is_some_and(|(t, p)| now - t < DOUBLE_S && p.distance(at) < DOUBLE_PT);
+                card.click = (!dbl).then_some((now, at));
+                send(Touch::Down { id, x, y, dbl });
                 card.fingers.push((id, pass));
             }
             Finger::Move(id, at) if held(card, id) => {

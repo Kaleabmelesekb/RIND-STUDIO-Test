@@ -642,7 +642,20 @@ impl Logic {
 
     /// Finger `id` goes down at (`x`, `y`) in logical px: its press is its own, beside the other fingers' and the mouse.
     pub fn touch_down(&mut self, id: u64, x: f32, y: f32) -> Vec<Act> {
+        self.touch_press(id, x, y, false)
+    }
+
+    /// [`Self::touch_down`], the second tap of a double tap when `dbl`: a knob, number, wheel or fader under it goes back
+    /// to its default first, and the drag goes on from there.
+    pub fn touch_press(&mut self, id: u64, x: f32, y: f32, dbl: bool) -> Vec<Act> {
         self.up_as(id);
+        let hit = self.hit(x, y).filter(|h| {
+            dbl && matches!(h.kind, Kind::Knob | Kind::Num | Kind::Wheel | Kind::Fader)
+        });
+        if let Some(h) = hit {
+            self.claim(h.param);
+            self.reset(h.param);
+        }
         self.down_as(id, x, y, Btn::Left, Mods::default())
     }
 
@@ -924,7 +937,7 @@ mod gui {
             for t in touch::take(self.parent) {
                 let k = self.scale;
                 let mut acts = match t {
-                    Touch::Down { id, x, y } => self.logic.touch_down(id, x / k, y / k),
+                    Touch::Down { id, x, y, dbl } => self.logic.touch_press(id, x / k, y / k, dbl),
                     Touch::Move { id, x, y } => self.logic.touch_move(id, x / k, y / k),
                     Touch::Up { id } => self.logic.touch_up(id),
                 };
@@ -1386,6 +1399,23 @@ mod tests {
         l.touch_up(2);
         assert!(near(norm(&l, a), 0.7), "{}", norm(&l, a));
         assert!(near(norm(&l, b), 0.3), "{}", norm(&l, b));
+    }
+
+    #[test]
+    fn a_double_tap_puts_a_knob_back_and_the_drag_goes_on() {
+        let (mut l, _params) = logic();
+        let a = ids::FILT_BASE + ids::filt::CUTOFF;
+        let (ax, ay) = at(&l, a);
+        let default = l.vals.default_norm(SPECS[a].id);
+        l.vals.edit(SPECS[a].id, 0.2);
+        l.touch_press(1, ax, ay, false);
+        l.touch_up(1);
+        assert!(near(norm(&l, a), 0.2), "a single tap leaves it");
+        l.touch_press(1, ax, ay, true);
+        assert!(near(norm(&l, a), default), "{}", norm(&l, a));
+        l.touch_move(1, ax, ay - 30.0);
+        l.touch_up(1);
+        assert!(near(norm(&l, a), default + 0.2), "{}", norm(&l, a));
     }
 
     #[test]

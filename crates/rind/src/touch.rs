@@ -11,9 +11,21 @@ use std::sync::{Mutex, OnceLock};
 /// One step of a finger.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Touch {
-    Down { id: u64, x: f32, y: f32 },
-    Move { id: u64, x: f32, y: f32 },
-    Up { id: u64 },
+    /// `dbl`: the second tap of a double tap.
+    Down {
+        id: u64,
+        x: f32,
+        y: f32,
+        dbl: bool,
+    },
+    Move {
+        id: u64,
+        x: f32,
+        y: f32,
+    },
+    Up {
+        id: u64,
+    },
 }
 
 type Queues = Mutex<HashMap<u64, VecDeque<Touch>>>;
@@ -59,6 +71,7 @@ mod tests {
                 id: 1,
                 x: 1.0,
                 y: 2.0,
+                dbl: false,
             },
         );
         send(b, Touch::Up { id: 7 });
@@ -76,7 +89,8 @@ mod tests {
                 Touch::Down {
                     id: 1,
                     x: 1.0,
-                    y: 2.0
+                    y: 2.0,
+                    dbl: false
                 },
                 Touch::Move {
                     id: 1,
