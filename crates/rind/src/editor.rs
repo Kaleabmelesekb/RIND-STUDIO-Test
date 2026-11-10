@@ -641,6 +641,7 @@ impl Logic {
     // ---- fingers --------------------------------------------------------------------------------------------------
 
     /// Finger `id` goes down at (`x`, `y`) in logical px: its press is its own, beside the other fingers' and the mouse.
+    #[cfg(test)]
     pub fn touch_down(&mut self, id: u64, x: f32, y: f32) -> Vec<Act> {
         self.touch_press(id, x, y, false)
     }
