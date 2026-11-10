@@ -33,6 +33,8 @@ pub struct RindParams {
     /// The editor's edits the host has not handed back yet. The sound reads every parameter through it
     /// ([`LiveEdits::value`]), so an edit sounds at once.
     pub live: Arc<LiveEdits>,
+    /// Meters, the voice count and the on-screen keyboard's notes, shared with the editor.
+    pub shared: Arc<crate::shared::Shared>,
 }
 
 /// `v` as text, by `fmt`.
@@ -117,6 +119,7 @@ impl Default for RindParams {
         RindParams {
             slots: SPECS.iter().map(slot).collect(),
             live: Arc::new(LiveEdits::default()),
+            shared: Arc::new(crate::shared::Shared::default()),
         }
     }
 }

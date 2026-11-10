@@ -72,6 +72,11 @@ pub const FILTER_TYPE_NAMES: &[&str] = &["Low", "Band", "High"];
 pub const SLOPE_NAMES: &[&str] = &["12 dB", "24 dB"];
 pub const OFFON_NAMES: &[&str] = &["Off", "On"];
 pub const POLYMONO_NAMES: &[&str] = &["Poly", "Mono"];
+pub const PORTA_SCALE_NAMES: &[&str] = &["N", "S"];
+/// "-" is no wrap; n wraps the arpeggio after its first n notes.
+pub const WRAP_NAMES: &[&str] = &[
+    "-", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+];
 pub const PORTA_MODE_NAMES: &[&str] = &["Always", "Legato"];
 pub const ARP_MODE_NAMES: &[&str] = &[
     "Up",
@@ -159,7 +164,7 @@ pub const DIV_BEATS: [f32; 15] = [
     0.0625,
 ];
 
-pub const COUNT: usize = 267;
+pub const COUNT: usize = 276;
 pub const MASTER_VOL: usize = 0;
 pub const MASTER_TUNE: usize = 1;
 pub const POLY: usize = 2;
@@ -427,6 +432,16 @@ pub const CMP_RATIO: usize = 263;
 pub const CMP_ATT: usize = 264;
 pub const CMP_REL: usize = 265;
 pub const CMP_GAIN: usize = 266;
+// Added with the photo-matched editor (appended: the table only grows at its end).
+pub const SOLO_A: usize = 267;
+pub const SOLO_B: usize = 268;
+pub const PART_SYNC: usize = 269;
+pub const WARM: usize = 270;
+pub const ARP_WRAP: usize = 271;
+pub const PORTA_SCALE: usize = 272;
+pub const WHEEL_MOD: usize = 273;
+pub const WHEEL_PITCH: usize = 274;
+pub const PATCH: usize = 275;
 pub const PART_BASE: usize = 8;
 pub const PART_STRIDE: usize = 7;
 pub mod part {
@@ -2424,5 +2439,68 @@ pub static SPECS: [Spec; COUNT] = [
         kind: Kind::Lin(0.0, 12.0),
         default: 0.0,
         fmt: Fmt::Db,
+    },
+    Spec {
+        id: "solo_a",
+        name: "Part A Solo",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(OFFON_NAMES),
+    },
+    Spec {
+        id: "solo_b",
+        name: "Part B Solo",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(OFFON_NAMES),
+    },
+    Spec {
+        id: "part_sync",
+        name: "Part Sync",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(OFFON_NAMES),
+    },
+    Spec {
+        id: "warm",
+        name: "Warm Drive",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(OFFON_NAMES),
+    },
+    Spec {
+        id: "arp_wrap",
+        name: "Arp Wrap",
+        kind: Kind::Int(0, 16),
+        default: 0.0,
+        fmt: Fmt::Names(WRAP_NAMES),
+    },
+    Spec {
+        id: "porta_scale",
+        name: "Portamento Scale",
+        kind: Kind::Int(0, 1),
+        default: 0.0,
+        fmt: Fmt::Names(PORTA_SCALE_NAMES),
+    },
+    Spec {
+        id: "wheel_mod",
+        name: "Mod Wheel",
+        kind: Kind::Lin(0.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
+    },
+    Spec {
+        id: "wheel_pitch",
+        name: "Pitch Wheel",
+        kind: Kind::Lin(-1.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Plain,
+    },
+    Spec {
+        id: "patch",
+        name: "Patch",
+        kind: Kind::Int(0, 7),
+        default: 0.0,
+        fmt: Fmt::Int,
     },
 ];

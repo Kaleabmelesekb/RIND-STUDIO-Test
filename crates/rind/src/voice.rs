@@ -30,6 +30,17 @@ pub struct Step<'a> {
     pub lfo_hz: [f32; 2],
 }
 
+/// Warm Drive: a gentle asymmetric tube-style saturation after the filter (even harmonics), DC-free and unity at
+/// small levels.
+#[inline]
+pub fn warm_drive(x: f32) -> f32 {
+    const BIAS: f32 = 0.15;
+    const G: f32 = 1.6;
+    let b = (G * BIAS).tanh();
+    let k = G * (1.0 - b * b);
+    ((G * x + G * BIAS).tanh() - b) / k
+}
+
 fn balance(pan: f32) -> (f32, f32) {
     let pan = pan.clamp(-1.0, 1.0);
     (1.0 - pan.max(0.0), 1.0 + pan.min(0.0))
@@ -165,7 +176,11 @@ impl Voice {
         let sr = s.sr;
 
         // Portamento.
-        let porta = p[PORTA];
+        let mut porta = p[PORTA];
+        if p[PORTA_SCALE] >= 0.5 {
+            // Scaled: the glide time follows the distance, an octave taking the set time.
+            porta *= ((self.target - self.pos).abs() / 12.0).clamp(0.08, 4.0);
+        }
         if porta > 0.0 {
             let a = 1.0 - (-(n as f32) / (sr * porta * 0.33)).exp();
             self.pos += (self.target - self.pos) * a;
@@ -217,7 +232,9 @@ impl Voice {
         let mut pbal = [(1.0f32, 1.0f32); 2];
         for part in 0..2 {
             let b = PART_BASE + part * PART_STRIDE;
-            if p[b + part::ON] >= 0.5 {
+            let solo = [p[SOLO_A], p[SOLO_B]];
+            let muted = (solo[0] >= 0.5 || solo[1] >= 0.5) && solo[part] < 0.5;
+            if p[b + part::ON] >= 0.5 && !muted {
                 plev[part] = (p[b + part::LEVEL] + md[mtgt::LEVEL_A + part] + md[mtgt::LEVEL_ALL])
                     .clamp(0.0, 1.5);
                 pbal[part] = balance(p[b + part::PAN] + md[mtgt::PAN_A + part] + md[mtgt::PAN_ALL]);
@@ -305,6 +322,7 @@ impl Voice {
             }
         }
 
+        let warm = p[WARM] >= 0.5;
         let vel_gain = 1.0 - p[VEL_AMP] + p[VEL_AMP] * self.vel;
         let gain = VOICE_GAIN * vel_gain * (1.0 + md[mtgt::AMP_ALL]).max(0.0);
 
@@ -334,6 +352,11 @@ impl Voice {
                     ),
                     None => (il, ir),
                 };
+                let (fl, fr) = if warm {
+                    (warm_drive(fl), warm_drive(fr))
+                } else {
+                    (fl, fr)
+                };
                 ol += fl * fvol[f].0;
                 or += fr * fvol[f].1;
             }
@@ -350,5 +373,30 @@ impl Voice {
         } else {
             self.tail = 0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn warm_drive_is_transparent_when_small_and_bounded_when_loud() {
+        for x in [-0.01f32, 0.005, 0.02] {
+            assert!((warm_drive(x) - x).abs() < 0.01 * x.abs() + 1e-3, "{x}");
+        }
+        assert_eq!(warm_drive(0.0), 0.0);
+        assert!(warm_drive(8.0).abs() < 2.0 && warm_drive(-8.0).abs() < 2.0);
+    }
+
+    #[test]
+    fn warm_drive_adds_even_harmonics() {
+        // A symmetric curve has no even harmonics; this one must: the mean of a sine through it is not zero.
+        let n = 4096;
+        let mean: f32 = (0..n)
+            .map(|i| warm_drive(0.9 * (i as f32 / n as f32 * std::f32::consts::TAU).sin()))
+            .sum::<f32>()
+            / n as f32;
+        assert!(mean.abs() > 1e-3, "{mean}");
     }
 }

@@ -137,8 +137,9 @@ fn the_editor_takes_drags_resets_taps_and_switches_pages() {
     let reset = moved(ids::MASTER_VOL).expect("the reset moved the knob");
     assert!((reset - 0.7).abs() < 1e-3, "{reset}");
 
-    // A tap on an oscillator's wave opens a list of the waves; a name in it picks that wave.
-    let wave = ids::OSC_BASE + ids::osc::WAVE;
+    // A tap on the arpeggiator's mode opens a list of the modes; a name in it picks that mode. (An oscillator's wave is
+    // a spin box in the design: its arrows step it, it has no list.)
+    let wave = ids::ARP_MODE;
     let control = find(&ui, wave);
     run(&[
         down(&control, Button::Left),
@@ -154,8 +155,8 @@ fn the_editor_takes_drags_resets_taps_and_switches_pages() {
         .find(|h| h.kind == Kind::Item(4))
         .expect("the list holds the fifth name");
     run(&[down(&name, Button::Left), Input::Up { btn: Button::Left }]);
-    let picked = moved(wave).expect("the pick moved the wave");
-    assert!((picked - 4.0 / 7.0).abs() < 1e-3, "{picked}");
+    let picked = moved(wave).expect("the pick moved the mode");
+    assert!((picked - 4.0 / 9.0).abs() < 1e-3, "{picked}");
 
     // A tap on the arpeggiator's switch (the arpeggiator is the display's first effect).
     let on = find(&ui, ids::ARP_ON);

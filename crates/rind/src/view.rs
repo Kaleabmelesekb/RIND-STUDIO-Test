@@ -1,11 +1,13 @@
 // Copyright (C) 2026 The Honeydew contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Rind Studio's picture and its hit regions, in logical pixels: one screen, the whole synth in view. The oscillators
-//! of the chosen part sit left and right of its amplitude envelope; below them the two filters, a display for the
-//! effects, arpeggiator and last-touched value, and the mixer; below that the two modulation envelopes, the two LFOs
-//! and two free modulation panels (the 16 matrix slots, a drop-down list for every source and target); a strip of
-//! performance controls closes the screen. The look is its own: graphite panels, ember accents, a teal glass display.
+//! Rind's picture and its hit regions, in logical pixels: one screen, drawn to the Rind Audio Labs design (a 1278 x 832
+//! picture; every coordinate below is in that picture's pixels and `s` brings it to the window). A wooden frame and a
+//! cream top bar (polyphony, voices, part select, solo, sync); the two oscillators of the chosen part either side of
+//! its amplitude envelope; the filter of the part and the filter control; the display (patch bar, menu, the effect
+//! list, and the arpeggiator or an effect's controls); the mixer with its meters; two modulation envelopes, two LFOs
+//! and two free modulation panels; and the bend range, the wheels, a five-octave keyboard, mono legato, portamento
+//! and its mode.
 //!
 //! Everything is driven by the parameter table ([`crate::ids::SPECS`]); a page is a list of parameter indices.
 
@@ -13,15 +15,15 @@ use os_ui::{Canvas, Color, Font, Rect};
 
 use crate::ids::{self, Fmt, Kind as Range, SPECS};
 
-/// The editor's size at scale 1: the proportions of a 908 x 591 design.
+/// The editor's size at scale 1: the proportions of the 1278 x 832 design.
 pub const W: u32 = 800;
 pub const H: u32 = 521;
 
 /// Drag length in px for the whole range of a knob.
 pub const KNOB_PX: f32 = 150.0;
 
-/// A design pixel (of 908 x 591) in logical pixels.
-const K: f32 = 800.0 / 908.0;
+/// A design pixel (of 1278 x 832) in logical pixels.
+const K: f32 = 800.0 / 1278.0;
 
 fn s(v: f32) -> f32 {
     v * K
@@ -32,50 +34,88 @@ fn rr(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect::new(s(x), s(y), s(w), s(h))
 }
 
-const BG: Color = Color::rgb(0x0b0e17);
-const RAIL: Color = Color::rgb(0x11151f);
-const PANEL: Color = Color::rgb(0x171c2a);
-const HEAD_BG: Color = Color::rgb(0x212840);
-const EDGE: Color = Color::rgb(0x313a57);
-const HILITE: Color = Color::rgb(0x46517a);
-const SLOT: Color = Color::rgb(0x080a11);
-const KNOB_RIM: Color = Color::rgb(0x7782a8);
-const KNOB_BODY: Color = Color::rgb(0x2a3150);
-const CAP: Color = Color::rgb(0xdfe6ff);
-const EMBER: Color = Color::rgb(0x35d6b8);
-const EMBER_DIM: Color = Color::rgb(0x1c7f6d);
-const GOLD: Color = Color::rgb(0xffc86b);
-const MUTED: Color = Color::rgb(0x8e98b8);
-const TICK: Color = Color::rgb(0x5a6488);
-const LCD_BG: Color = Color::rgb(0x0a1428);
-const LCD_FIELD: Color = Color::rgb(0x14264a);
-const LCD_EDGE: Color = Color::rgb(0x3a5fa8);
-const LCD_TEXT: Color = Color::rgb(0x9fd4ff);
-const LCD_DIM: Color = Color::rgb(0x5c86c0);
-const DARK_TEXT: Color = Color::rgb(0x06241e);
+// The design's colours: the wooden frame, graphite and brown panels, the cream bar and the blue-grey display.
+const BG: Color = Color::rgb(0x19191b);
+const WOOD: Color = Color::rgb(0xa8693f);
+const WOOD_DARK: Color = Color::rgb(0x84502d);
+const WOOD_LIGHT: Color = Color::rgb(0xbd8157);
+const BAR_TOP: Color = Color::rgb(0xfdf8f0);
+const BAR_BOTTOM: Color = Color::rgb(0xe9dfce);
+const BAR_TEXT: Color = Color::rgb(0x4d453e);
+const BROWN: Color = Color::rgb(0x5a4f49);
+const BROWN_HI: Color = Color::rgb(0x675d57);
+const GRAPHITE: Color = Color::rgb(0x353535);
+const GRAPHITE_HI: Color = Color::rgb(0x424242);
+const HEAD: Color = Color::rgb(0x1d150e);
+const HEAD_TEXT: Color = Color::rgb(0xf2e8d8);
+const TEXT: Color = Color::rgb(0xf0e8dc);
+const TEXT_DIM: Color = Color::rgb(0xb8aea2);
+const SLOT: Color = Color::rgb(0x0b0b0b);
+const EDGE: Color = Color::rgb(0x161616);
+const TICK: Color = Color::rgb(0xd6cec2);
+const SHADOW: Color = Color::rgb(0x000000).with_alpha(0x80);
+const SKIRT: Color = Color::rgb(0x101010);
+const SKIRT_HI: Color = Color::rgb(0x3a3a3a);
+const CAP_LO: Color = Color::rgb(0x6f6f6f);
+const CAP_MID: Color = Color::rgb(0xa8a8a8);
+const CAP_HI: Color = Color::rgb(0xe6e6e6);
+const FIELD: Color = Color::rgb(0xa2b6c0);
+const FIELD_EDGE: Color = Color::rgb(0x56707c);
+const FIELD_TEXT: Color = Color::rgb(0x1c2a33);
+const ARROW: Color = Color::rgb(0xe9e1d4);
+const LAMP_ON: Color = Color::rgb(0xfffdf6);
+const LAMP_GLOW: Color = Color::rgb(0xffe7a6).with_alpha(0x90);
+const LAMP_OFF: Color = Color::rgb(0x2a2a2a);
+const CHIP: Color = Color::rgb(0xefd6b4);
+const CHIP_TEXT: Color = Color::rgb(0x5a3b20);
+const CHIP_DIM: Color = Color::rgb(0x6b5f58);
+const CASE: Color = Color::rgb(0x2a2a2e);
+const CASE_HI: Color = Color::rgb(0x45454b);
+const PAPER: Color = Color::rgb(0xc4d6dc);
+const PAPER_HI: Color = Color::rgb(0xd6e3e7);
+const BLUE: Color = Color::rgb(0x4b6586);
+const BLUE_DARK: Color = Color::rgb(0x394f70);
+const INK: Color = Color::rgb(0x34507c);
+const INK_DIM: Color = Color::rgb(0x6d86a6);
+const WHITE: Color = Color::rgb(0xf5f9fc);
 const SHADE: Color = Color::rgb(0x000000).with_alpha(0xaa);
-const SHADOW: Color = Color::rgb(0x000000).with_alpha(0x70);
-const SHEEN: Color = Color::rgb(0xffffff).with_alpha(0x1c);
-const VEIL: Color = Color::rgb(0x0b0e17).with_alpha(0xb8);
+const VEIL: Color = Color::rgb(0x19191b).with_alpha(0xb8);
+const GOLD: Color = Color::rgb(0xffc86b);
+const KEY_WHITE: Color = Color::rgb(0xf4f4f4);
+const KEY_SHADE: Color = Color::rgb(0xcfcfcf);
+const KEY_DOWN: Color = Color::rgb(0xf0b070);
+const KEY_BLACK: Color = Color::rgb(0x161616);
+const LAMP_RED: Color = Color::rgb(0xe0503a);
+const LAMP_RED_OFF: Color = Color::rgb(0x4a2a22);
+const LAMP_YELLOW: Color = Color::rgb(0xf4d24a);
+const LAMP_YELLOW_OFF: Color = Color::rgb(0x4a432a);
+const LAMP_GREEN: Color = Color::rgb(0x7be07a);
+const LAMP_GREEN_OFF: Color = Color::rgb(0x2a3a2a);
 
 const LABEL: Font = Font::new(7).bold();
 const VALUE: Font = Font::new(8).bold();
-const TITLE: Font = Font::new(8).bold();
+const TITLE: Font = Font::new(9).bold();
+const SMALL: Font = Font::new(6).bold();
+const BAR: Font = Font::new(9).bold().italic();
 
 /// What a tap on a navigation control changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nav {
-    /// The part whose oscillators and envelope the screen shows.
+    /// The part whose oscillators, envelope and filter the screen shows.
     Part(usize),
-    /// The display's tab.
+    /// The patch slot (1-4) the patch bar shows.
     Tab(usize),
     /// The effect (or the arpeggiator) the display shows.
     Fx(usize),
     /// The arpeggiator's steps 1-8 or 9-16.
     Page(usize),
+    /// The display's menu opens or closes.
+    Menu,
+    /// The next (true) or previous patch.
+    Patch(bool),
 }
 
-/// What the screen is showing, and the drop-down list open, if any (the parameter it picks).
+/// What the screen is showing, and the list open, if any (the parameter it picks).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ui {
     pub part: usize,
@@ -83,20 +123,28 @@ pub struct Ui {
     pub fx: usize,
     pub page: usize,
     pub popup: Option<usize>,
+    /// The display's menu is open.
+    pub menu: bool,
+    /// The key of the on-screen keyboard held down.
+    pub key: Option<u8>,
 }
 
 impl Ui {
     pub fn apply(&mut self, nav: Nav) {
         match nav {
             Nav::Part(i) => self.part = i.min(1),
-            Nav::Tab(i) => self.tab = i.min(DISPLAY_TABS.len() - 1),
+            Nav::Tab(i) => self.tab = i.min(3),
             Nav::Fx(i) => self.fx = i.min(FX_NAMES.len() - 1),
             Nav::Page(i) => self.page = i.min(1),
+            Nav::Menu => self.menu = !self.menu,
+            Nav::Patch(_) => {}
         }
     }
 }
 
-const DISPLAY_TABS: [&str; 2] = ["FX", "LFO"];
+/// What the display's menu offers, in order.
+pub const MENU_ITEMS: [&str; 4] = ["Reload Patch", "Init Patch", "Previous Patch", "Next Patch"];
+
 const FX_NAMES: [&str; 8] = [
     "ARPEG", "DISTORT", "PHASER", "CHORUS", "EQ", "DELAY", "REVERB", "COMPRESS",
 ];
@@ -176,16 +224,26 @@ pub enum Kind {
     /// A named range: a tap steps to the next name, or opens the list when there are many.
     Cycle,
     Toggle,
-    /// A whole-number box: a tap on its left half steps down, on its right half up.
-    Stepper,
+    /// A whole-number or named box with arrows: a press in its upper half steps up, in its lower half down.
+    Spin,
     /// A vertical fader: a press sets, a drag moves.
     Fader,
     /// A number cell: a vertical drag changes it.
     Num,
-    /// Part, tab, effect or page buttons.
+    /// A lamp or switch on a continuous parameter: lit (or, when `true`, lit at its low end) it flips between the ends.
+    Switch(bool),
+    /// A filter's input: A, B or both (a tap on the upper half steps forward, the lower back).
+    Route,
+    /// A wheel: a vertical drag (the pitch wheel springs back).
+    Wheel,
+    /// A key of the keyboard (the MIDI note).
+    Key(u8),
+    /// Part, tab, effect, page, menu or patch buttons.
     Nav(Nav),
     /// Name number `i` in the open drop-down list.
     Item(usize),
+    /// Entry `i` of the display's open menu.
+    MenuItem(usize),
     /// Anywhere else while a list is open: it closes.
     Dismiss,
 }
@@ -199,9 +257,12 @@ pub struct Hit {
 }
 
 impl Hit {
-    /// True for a control of a parameter (not chrome or a list).
+    /// True for a control of a parameter (not chrome, a key or a list).
     pub fn is_param(&self) -> bool {
-        !matches!(self.kind, Kind::Nav(_) | Kind::Item(_) | Kind::Dismiss)
+        !matches!(
+            self.kind,
+            Kind::Nav(_) | Kind::Item(_) | Kind::MenuItem(_) | Kind::Dismiss | Kind::Key(_)
+        )
     }
 }
 
@@ -211,6 +272,14 @@ pub trait Values {
     fn norm(&self, p: usize) -> f32;
     fn plain(&self, p: usize) -> f32;
     fn text(&self, p: usize) -> String;
+    /// The output meters' linear levels (left, right).
+    fn levels(&self) -> (f32, f32) {
+        (0.0, 0.0)
+    }
+    /// The voices sounding.
+    fn voices(&self) -> usize {
+        0
+    }
 }
 
 /// The kind of control a parameter gets by its range.
@@ -244,7 +313,7 @@ pub fn choices(p: usize) -> (&'static [&'static str], i32) {
     }
 }
 
-/// True for a selector that opens a list (four names or more); a shorter one steps on a tap.
+/// True for a selector that opens a list (four names or more) when tapped: a drop-down. (A spin box steps instead.)
 pub fn dropdown(p: usize) -> bool {
     widget(p) == Kind::Cycle && choices(p).0.len() >= 4
 }
@@ -257,8 +326,68 @@ pub fn fader_norm(r: Rect, y: f32) -> f32 {
 pub const FADER_PAD: f32 = 5.0;
 /// A drag over this many px runs a number cell through its range.
 pub const NUM_PX: f32 = 120.0;
-/// Share of a stepper's width at each end that steps (the middle drags).
-pub const STEP_END: f32 = 0.26;
+/// A drag over this many px runs a wheel through its range.
+pub const WHEEL_PX: f32 = 70.0;
+
+/// A filter's routing as the input select shows it: its two input levels as A, B, both, or R (a mix of its own).
+pub fn route_name(a: f32, b: f32) -> &'static str {
+    match (a >= 0.99, a <= 0.01, b >= 0.99, b <= 0.01) {
+        (true, _, _, true) => "A",
+        (_, true, true, _) => "B",
+        (true, _, true, _) => "AB",
+        _ => "R",
+    }
+}
+
+/// The input levels after stepping `from` (as [`route_name`] reads it) by `step` through A, B, AB.
+pub fn route_step(a: f32, b: f32, step: i32) -> (f32, f32) {
+    const ROUTES: [(f32, f32); 3] = [(1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
+    let now = match route_name(a, b) {
+        "A" => 0,
+        "B" => 1,
+        "AB" => 2,
+        _ => return ROUTES[if step >= 0 { 0 } else { 2 }],
+    };
+    ROUTES[(now as i32 + step).rem_euclid(3) as usize]
+}
+
+/// The parameter that mirrors `p` on the other part while Part Sync is on: the same control of the other oscillator
+/// pair, amplitude envelope or filter.
+pub fn mirror(p: usize) -> Option<usize> {
+    let osc_end = ids::OSC_BASE + 4 * ids::OSC_STRIDE;
+    if p >= ids::OSC_BASE && p < osc_end {
+        let (n, f) = (
+            (p - ids::OSC_BASE) / ids::OSC_STRIDE,
+            (p - ids::OSC_BASE) % ids::OSC_STRIDE,
+        );
+        return Some(osc_param((n + 2) % 4, f));
+    }
+    let part_end = ids::PART_BASE + 2 * ids::PART_STRIDE;
+    if p >= ids::PART_BASE && p < part_end {
+        let (n, f) = (
+            (p - ids::PART_BASE) / ids::PART_STRIDE,
+            (p - ids::PART_BASE) % ids::PART_STRIDE,
+        );
+        return (f >= ids::part::ATT).then(|| part_param(1 - n, f));
+    }
+    let filt_end = ids::FILT_BASE + 2 * ids::FILT_STRIDE;
+    if p >= ids::FILT_BASE && p < filt_end {
+        let (n, f) = (
+            (p - ids::FILT_BASE) / ids::FILT_STRIDE,
+            (p - ids::FILT_BASE) % ids::FILT_STRIDE,
+        );
+        let shared = [
+            ids::filt::TYPE,
+            ids::filt::SLOPE,
+            ids::filt::CUTOFF,
+            ids::filt::RES,
+            ids::filt::DRIVE,
+            ids::filt::KEY,
+        ];
+        return shared.contains(&f).then(|| filt_param(1 - n, f));
+    }
+    None
+}
 
 // ---- the matrix rows --------------------------------------------------------------------------------------------
 
@@ -336,14 +465,29 @@ pub fn derived_source(p: usize) -> bool {
 enum Look {
     /// A knob of this radius in design pixels, its label under it (none when the label is empty).
     Knob(f32),
-    Select,
-    Led,
+    /// A light field with its value; with arrows beside it when `true`.
+    Field(bool),
+    /// A dark box with the wave or filter shape and arrows beside it.
+    Icon,
+    /// A blue bar of the display: a name, with a chevron or arrows.
+    Bar(bool),
     Check,
-    Stepper,
+    /// A lamp: a lit square.
+    Lamp,
+    /// The 12 / 24 dB slide switch.
+    Slide,
     Fader,
+    /// A cell of the arpeggiator's table.
     Num,
-    /// A navigation button with its caption.
-    Button(&'static str),
+    /// A navigation button with its caption: in the top bar, or of the display.
+    TopBtn(&'static str),
+    Tab(&'static str),
+    /// The patch bar's previous (false) and next (true) buttons.
+    Step(bool),
+    /// The small blue triangle button of the display.
+    Menu(&'static str),
+    Wheel,
+    Key(bool),
 }
 
 struct Item {
@@ -351,56 +495,98 @@ struct Item {
     kind: Kind,
     r: Rect,
     look: Look,
-    /// The caption: above a select, switch or stepper, below a knob; empty for none.
+    /// The caption: above a bar or switch, below a knob; empty for none.
     label: &'static str,
     /// Drawn selected (a navigation button).
     on: bool,
+    /// Drawn in the display's colours.
+    lcd: bool,
 }
 
-/// Text that is only drawn.
+#[derive(Clone, Copy, PartialEq)]
+enum Align {
+    Left,
+    Center,
+    Right,
+}
+
+/// Text that is only drawn, at (`x`, `y` the middle line) in design pixels.
 struct Text {
     x: f32,
     y: f32,
     s: &'static str,
     font: Font,
     color: Color,
-    centered: bool,
+    align: Align,
+}
+
+/// A panel of the front: its title, rect, and look.
+#[derive(Clone, Copy, PartialEq)]
+enum Skin {
+    Brown,
+    Graphite,
+}
+
+struct Panel {
+    title: String,
+    r: Rect,
+    skin: Skin,
+    /// The small menu glyph at the right of the header.
+    glyph: bool,
 }
 
 #[derive(Default)]
 struct Page {
-    panels: Vec<(String, Rect)>,
+    panels: Vec<Panel>,
     items: Vec<Item>,
     texts: Vec<Text>,
-    /// New texts are drawn in the display's colours.
+    /// New items and texts are drawn in the display's colours.
     lcd: bool,
 }
 
 impl Page {
-    fn frame(&mut self, title: impl Into<String>, x: f32, y: f32, w: f32, h: f32) {
-        self.panels.push((title.into(), rr(x, y, w, h)));
+    fn frame(
+        &mut self,
+        title: impl Into<String>,
+        skin: Skin,
+        glyph: bool,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        self.panels.push(Panel {
+            title: title.into(),
+            r: rr(x, y, w, h),
+            skin,
+            glyph,
+        });
     }
 
+    fn put(&mut self, x: f32, y: f32, s: &'static str, align: Align, font: Font, color: Color) {
+        self.texts.push(Text {
+            x,
+            y,
+            s,
+            font,
+            color,
+            align,
+        });
+    }
+
+    fn ink(&self) -> Color {
+        if self.lcd { INK } else { TEXT }
+    }
+
+    /// A caption, left-aligned at `x`, its middle at `y`.
     fn text(&mut self, x: f32, y: f32, s: &'static str) {
-        self.texts.push(Text {
-            x: self::s(x),
-            y: self::s(y),
-            s,
-            font: LABEL,
-            color: if self.lcd { LCD_DIM } else { MUTED },
-            centered: false,
-        });
+        let c = self.ink();
+        self.put(x, y, s, Align::Left, LABEL, c);
     }
 
-    fn text_c(&mut self, cx: f32, y: f32, s: &'static str) {
-        self.texts.push(Text {
-            x: self::s(cx),
-            y: self::s(y),
-            s,
-            font: LABEL,
-            color: if self.lcd { LCD_DIM } else { MUTED },
-            centered: true,
-        });
+    fn text_r(&mut self, x: f32, y: f32, s: &'static str) {
+        let c = self.ink();
+        self.put(x, y, s, Align::Right, LABEL, c);
     }
 
     fn add(&mut self, param: usize, kind: Kind, r: Rect, look: Look, label: &'static str) {
@@ -411,87 +597,89 @@ impl Page {
             look,
             label,
             on: false,
+            lcd: self.lcd,
         });
     }
 
     /// A knob centred at (`cx`, `cy`) in design pixels with a hit region `hw` design pixels either side and from
-    /// `rad + 4` above to `below` under the centre.
+    /// `rad + 4` above to under the label.
     fn knob(&mut self, p: usize, cx: f32, cy: f32, rad: f32, hw: f32, label: &'static str) {
         let below = if label.is_empty() {
             rad + 4.0
         } else {
-            rad + 15.0
+            rad + 20.0
         };
         let r = rr(cx - hw, cy - rad - 4.0, 2.0 * hw, rad + 4.0 + below);
         self.add(p, Kind::Knob, r, Look::Knob(rad), label);
     }
 
-    /// A selector, a switch or a stepper by its parameter, in a rect of design pixels.
-    fn ctl(&mut self, p: usize, x: f32, y: f32, w: f32, h: f32) {
-        let r = rr(x, y, w, h);
-        match widget(p) {
-            Kind::Cycle => self.add(p, Kind::Cycle, r, Look::Select, ""),
-            Kind::Toggle => self.add(p, Kind::Toggle, r, Look::Led, ""),
-            _ => self.add(p, Kind::Knob, r, Look::Knob(7.0), ""),
-        }
+    /// A box with arrows beside it: a whole-number or short named parameter that steps.
+    fn spin(&mut self, p: usize, x: f32, y: f32, w: f32, h: f32, look: Look) {
+        self.add(p, Kind::Spin, rr(x, y, w, h), look, "");
     }
 
-    fn stepper(&mut self, p: usize, x: f32, y: f32, w: f32, h: f32) {
-        self.add(p, Kind::Stepper, rr(x, y, w, h), Look::Stepper, "");
+    /// A drop-down field (a name; a list opens on a tap).
+    fn pick(&mut self, p: usize, x: f32, y: f32, w: f32, h: f32) {
+        self.add(p, Kind::Cycle, rr(x, y, w, h), Look::Field(false), "");
     }
 
-    /// A parameter in a cell of design pixels (a knob with its label under it; a selector, switch or stepper with its
-    /// label above).
+    fn lamp(&mut self, p: usize, kind: Kind, x: f32, y: f32, w: f32, h: f32) {
+        self.add(p, kind, rr(x, y, w, h), Look::Lamp, "");
+    }
+
+    /// A parameter in a cell of design pixels on the display (a knob with its label under it; a bar, switch or arrows
+    /// with its label above).
     fn cell(&mut self, p: usize, x: f32, y: f32, w: f32, h: f32) {
         self.cell_as(p, short(p), x, y, w, h);
     }
 
-    /// [`Page::cell`] with its own caption.
     fn cell_as(&mut self, p: usize, label: &'static str, x: f32, y: f32, w: f32, h: f32) {
         let cx = x + w / 2.0;
         match widget(p) {
-            Kind::Knob if is_stepper(p) => {
-                self.add(p, Kind::Stepper, rr(x, y, w, h), Look::Stepper, label);
+            Kind::Knob if is_spin(p) => {
+                self.add(p, Kind::Spin, rr(x, y, w, h), Look::Bar(true), label);
             }
-            Kind::Knob => self.knob(p, cx, y + 15.0, 11.0, w / 2.0, label),
-            Kind::Cycle => self.add(p, Kind::Cycle, rr(x, y, w, h), Look::Select, label),
-            _ => self.add(p, Kind::Toggle, rr(x, y, w, h), Look::Led, label),
+            Kind::Knob => self.knob(p, cx, y + 20.0, 15.0, w / 2.0, label),
+            Kind::Cycle => self.add(p, Kind::Cycle, rr(x, y, w, h), Look::Bar(false), label),
+            _ => self.add(p, Kind::Toggle, rr(x, y, w, h), Look::Lamp, label),
         }
     }
 
-    /// A target row of a matrix slot: its amount as a small knob and its target as a drop-down.
-    fn row(&mut self, slot: usize, x: f32, y: f32, w: f32) {
-        self.knob(
-            mat_param(slot, ids::mat::AMT),
-            x + 15.0,
-            y + 9.5,
-            7.0,
-            10.0,
-            "",
+    /// A target row of a matrix slot, its middle at `cy`: its amount as a small knob and its target as a drop-down.
+    fn row(&mut self, slot: usize, x: f32, cy: f32, w: f32) {
+        self.knob(mat_param(slot, ids::mat::AMT), x + 33.0, cy, 9.0, 13.0, "");
+        self.pick(
+            mat_param(slot, ids::mat::DST),
+            x + 52.0,
+            cy - 11.0,
+            w - 62.0,
+            22.0,
         );
-        self.ctl(mat_param(slot, ids::mat::DST), x + 30.0, y, w - 36.0, 19.0);
     }
 
-    fn nav(&mut self, nav: Nav, label: &'static str, on: bool, x: f32, y: f32, w: f32, h: f32) {
+    fn nav(&mut self, nav: Nav, look: Look, on: bool, x: f32, y: f32, w: f32, h: f32) {
         self.items.push(Item {
             param: 0,
             kind: Kind::Nav(nav),
             r: rr(x, y, w, h),
-            look: Look::Button(label),
+            look,
             label: "",
             on,
+            lcd: self.lcd,
         });
     }
 }
 
-/// True for a parameter drawn as a stepper (a small whole number: octave, note, voices, polyphony, bend, steps).
-fn is_stepper(p: usize) -> bool {
+/// True for a parameter drawn as a spin box (a small whole number or short name: octave, note, voices, polyphony,
+/// bend, steps, wrap).
+fn is_spin(p: usize) -> bool {
     use ids::osc;
     let osc_at = |f: usize| (0..4).any(|n| p == ids::OSC_BASE + n * ids::OSC_STRIDE + f);
     p == ids::POLY
         || p == ids::BEND
         || p == ids::ARP_OCT
         || p == ids::ARP_STEPS
+        || p == ids::ARP_WRAP
         || osc_at(osc::OCT)
         || osc_at(osc::SEMI)
         || osc_at(osc::VOICES)
@@ -524,313 +712,584 @@ const OSC_TITLES: [&str; 4] = [
     "OSCILLATOR B2",
 ];
 
-/// One oscillator panel at (`x`, `y`), 342 x 102 design pixels.
+/// One oscillator panel at (`x`, `y`), 479 x 143 design pixels.
 fn osc_panel(g: &mut Page, n: usize, x: f32, y: f32) {
     use ids::osc;
-    g.frame(OSC_TITLES[n], x, y, 342.0, 102.0);
-    g.text(x + 12.0, y + 21.0, "PITCH");
-    g.text(x + 12.0, y + 38.0, "OCTAVE");
-    g.stepper(osc_param(n, osc::OCT), x + 52.0, y + 33.0, 36.0, 18.0);
-    g.text(x + 12.0, y + 59.0, "NOTE");
-    g.stepper(osc_param(n, osc::SEMI), x + 52.0, y + 54.0, 36.0, 18.0);
-    g.text(x + 12.0, y + 82.0, "FINE");
-    g.knob(osc_param(n, osc::FINE), x + 66.0, y + 85.0, 7.0, 11.0, "");
+    g.frame(OSC_TITLES[n], Skin::Brown, true, x, y, 479.0, 143.0);
+    g.text(x + 32.0, y + 30.0, "PITCH");
+    g.text(x + 12.0, y + 52.0, "OCTAVE");
+    g.spin(
+        osc_param(n, osc::OCT),
+        x + 75.0,
+        y + 43.0,
+        48.0,
+        20.0,
+        Look::Field(true),
+    );
+    g.text(x + 12.0, y + 79.0, "NOTE");
+    g.spin(
+        osc_param(n, osc::SEMI),
+        x + 75.0,
+        y + 70.0,
+        48.0,
+        20.0,
+        Look::Field(true),
+    );
+    g.text(x + 12.0, y + 105.0, "FINE");
+    g.knob(osc_param(n, osc::FINE), x + 60.0, y + 118.0, 12.0, 20.0, "");
     let knobs = [
-        (osc::VOL, 118.0, "VOLUME"),
-        (osc::PHASE, 166.0, "PHASE"),
-        (osc::DETUNE, 214.0, "DETUNE"),
-        (osc::STEREO, 262.0, "STEREO"),
-        (osc::PAN, 310.0, "PAN"),
+        (osc::VOL, 166.0, "VOLUME"),
+        (osc::PHASE, 232.0, "PHASE"),
+        (osc::DETUNE, 297.0, "DETUNE"),
+        (osc::STEREO, 364.0, "STEREO"),
+        (osc::PAN, 429.0, "PAN"),
     ];
     for (f, dx, label) in knobs {
-        g.knob(osc_param(n, f), x + dx, y + 43.0, 13.0, 24.0, label);
+        g.knob(osc_param(n, f), x + dx, y + 61.0, 19.0, 32.0, label);
     }
-    g.text(x + 86.0, y + 88.0, "INV");
-    g.ctl(osc_param(n, osc::INV), x + 102.0, y + 80.0, 22.0, 16.0);
-    g.ctl(osc_param(n, osc::WAVE), x + 130.0, y + 80.0, 60.0, 16.0);
-    g.text(x + 196.0, y + 88.0, "VOICES");
-    g.stepper(osc_param(n, osc::VOICES), x + 230.0, y + 80.0, 40.0, 16.0);
-    g.text(x + 278.0, y + 88.0, "RAND");
-    g.knob(osc_param(n, osc::RAND), x + 322.0, y + 88.0, 7.0, 11.0, "");
-}
-
-/// The filter panel of filter `n` at (`x`, `y`): `big` (the taller one) draws larger knobs.
-fn filter_panel(g: &mut Page, n: usize, x: f32, y: f32, h: f32, big: bool) {
-    use ids::filt;
-    g.frame(format!("FILTER {}", n + 1), x, y, 218.0, h);
-    g.ctl(filt_param(n, filt::ON), x + 178.0, y + 1.0, 36.0, 14.0);
-    g.ctl(filt_param(n, filt::TYPE), x + 8.0, y + 20.0, 56.0, 17.0);
-    g.ctl(filt_param(n, filt::SLOPE), x + 68.0, y + 20.0, 44.0, 17.0);
-    g.text(x + 118.0, y + 25.0, "IN A");
-    g.knob(
-        filt_param(n, filt::IN_A),
-        x + 146.0,
-        y + 28.0,
-        7.0,
-        11.0,
+    let by = y + 122.0;
+    g.text(x + 107.0, by, "INV");
+    g.add(
+        osc_param(n, osc::INV),
+        Kind::Toggle,
+        rr(x + 134.0, by - 10.0, 26.0, 20.0),
+        Look::Check,
         "",
     );
-    g.text(x + 162.0, y + 25.0, "IN B");
-    g.knob(
-        filt_param(n, filt::IN_B),
-        x + 190.0,
-        y + 28.0,
-        7.0,
-        11.0,
-        "",
+    g.text(x + 172.0, by, "WAVE");
+    g.spin(
+        osc_param(n, osc::WAVE),
+        x + 214.0,
+        by - 10.0,
+        58.0,
+        20.0,
+        Look::Icon,
     );
-    let (cy, rad) = if big {
-        (y + 74.0, 14.0)
-    } else {
-        (y + 58.0, 10.0)
-    };
-    let knobs = [
-        (filt::CUTOFF, 30.0, "CUTOFF"),
-        (filt::RES, 82.0, "RESONANCE"),
-        (filt::DRIVE, 134.0, "DRIVE"),
-        (filt::KEY, 186.0, "KEY TRACK"),
-    ];
-    for (f, dx, label) in knobs {
-        g.knob(filt_param(n, f), x + dx, cy, rad, 25.0, label);
-    }
+    g.text(x + 284.0, by, "VOICES");
+    g.spin(
+        osc_param(n, osc::VOICES),
+        x + 335.0,
+        by - 10.0,
+        50.0,
+        20.0,
+        Look::Field(true),
+    );
+    g.text(x + 392.0, by, "RETRIG");
+    // Retrigger: lit when the phase starts the same every note (no random phase).
+    g.lamp(
+        osc_param(n, osc::RAND),
+        Kind::Switch(true),
+        x + 440.0,
+        by - 11.0,
+        29.0,
+        22.0,
+    );
 }
 
-fn mod_env_panel(g: &mut Page, n: usize, x: f32, y: f32, w: f32) {
-    g.frame(format!("MOD ENV {}", n + 1), x, y, w, 156.0);
+fn envelope_faders(g: &mut Page, x: f32, y: f32, pitch: f32, params: [usize; 4]) {
     for (i, letter) in ["A", "D", "S", "R"].into_iter().enumerate() {
-        let cx = x + 27.0 + 27.0 * i as f32;
-        g.text_c(cx, y + 22.0, letter);
+        let cx = x + pitch * i as f32;
+        g.put(cx, y, letter, Align::Center, LABEL, TEXT);
         g.add(
-            env_param(n, i),
+            params[i],
             Kind::Fader,
-            rr(cx - 10.0, y + 34.0, 20.0, 62.0),
+            rr(cx - 15.0, y + 12.0, 30.0, 80.0),
             Look::Fader,
             "",
         );
     }
-    g.row(n * 2, x, y + 104.0, w);
-    g.row(n * 2 + 1, x, y + 130.0, w);
 }
 
-fn lfo_panel(g: &mut Page, n: usize, x: f32, y: f32, w: f32) {
+/// The filter panel of the part (filter `n`) and the filter control under it.
+fn filter_panels(g: &mut Page, n: usize) {
+    use ids::filt;
+    let name = ["FILTER A", "FILTER B"][n];
+    g.frame(name, Skin::Brown, true, 43.0, 190.0, 307.0, 167.0);
+    g.text(55.0, 258.0, "INPUT SELECT");
+    g.add(
+        filt_param(n, filt::IN_A),
+        Kind::Route,
+        rr(152.0, 246.0, 44.0, 24.0),
+        Look::Field(true),
+        "",
+    );
+    g.put(250.0, 235.0, "FILTER TYPE", Align::Center, LABEL, TEXT);
+    g.spin(
+        filt_param(n, filt::TYPE),
+        231.0,
+        246.0,
+        52.0,
+        24.0,
+        Look::Icon,
+    );
+    g.put(307.0, 252.0, "12 dB", Align::Left, LABEL, TEXT);
+    g.add(
+        filt_param(n, filt::SLOPE),
+        Kind::Toggle,
+        rr(305.0, 264.0, 24.0, 42.0),
+        Look::Slide,
+        "",
+    );
+    g.put(307.0, 316.0, "24 dB", Align::Left, LABEL, TEXT);
+    g.knob(
+        filt_param(n, filt::CUTOFF),
+        85.0,
+        302.0,
+        22.0,
+        36.0,
+        "CUTOFF",
+    );
+    g.knob(
+        filt_param(n, filt::RES),
+        157.0,
+        302.0,
+        22.0,
+        36.0,
+        "RESONANCE",
+    );
+    g.knob(
+        filt_param(n, filt::DRIVE),
+        248.0,
+        302.0,
+        22.0,
+        36.0,
+        "DRIVE",
+    );
+
+    // The filter control: the same filter's cutoff and resonance, warm drive and key track.
+    g.frame(
+        "FILTER CONTROL",
+        Skin::Graphite,
+        false,
+        43.0,
+        363.0,
+        307.0,
+        124.0,
+    );
+    g.knob(
+        filt_param(n, filt::CUTOFF),
+        85.0,
+        430.0,
+        20.0,
+        36.0,
+        "CUTOFF",
+    );
+    g.knob(
+        filt_param(n, filt::RES),
+        167.0,
+        432.0,
+        24.0,
+        40.0,
+        "RESONANCE",
+    );
+    g.put(245.0, 408.0, "WARM", Align::Center, LABEL, TEXT);
+    g.put(245.0, 420.0, "DRIVE", Align::Center, LABEL, TEXT);
+    g.lamp(ids::WARM, Kind::Toggle, 231.0, 435.0, 30.0, 22.0);
+    g.knob(
+        filt_param(n, filt::KEY),
+        304.0,
+        442.0,
+        16.0,
+        30.0,
+        "KEY TRACK",
+    );
+}
+
+fn mod_env_panel(g: &mut Page, n: usize, x: f32, y: f32) {
+    g.frame(
+        format!("MOD ENV {}", n + 1),
+        Skin::Graphite,
+        true,
+        x,
+        y,
+        192.0,
+        208.0,
+    );
+    envelope_faders(
+        g,
+        x + 26.0,
+        y + 52.0,
+        39.0,
+        [
+            env_param(n, 0),
+            env_param(n, 1),
+            env_param(n, 2),
+            env_param(n, 3),
+        ],
+    );
+    g.row(n * 2, x, y + 159.0, 192.0);
+    g.row(n * 2 + 1, x, y + 193.0, 192.0);
+}
+
+fn lfo_panel(g: &mut Page, n: usize, x: f32, y: f32) {
     use ids::lfo;
-    g.frame(format!("LFO {}", n + 1), x, y, w, 156.0);
-    g.ctl(lfo_param(n, lfo::WAVE), x + 8.0, y + 20.0, 58.0, 17.0);
-    g.text(x + 78.0, y + 27.0, "SYNC");
-    g.ctl(lfo_param(n, lfo::SYNC), x + 102.0, y + 20.0, 28.0, 17.0);
+    g.frame(
+        format!("LFO {}", n + 1),
+        Skin::Graphite,
+        true,
+        x,
+        y,
+        192.0,
+        208.0,
+    );
+    g.text(x + 9.0, y + 40.0, "WAVE");
+    g.spin(
+        lfo_param(n, lfo::WAVE),
+        x + 50.0,
+        y + 30.0,
+        58.0,
+        21.0,
+        Look::Icon,
+    );
+    g.text(x + 118.0, y + 40.0, "FREE");
+    // Free-running: lit when the LFO is not restarted by each note.
+    g.lamp(
+        lfo_param(n, lfo::RETRIG),
+        Kind::Switch(true),
+        x + 154.0,
+        y + 29.0,
+        29.0,
+        22.0,
+    );
     let knobs = [
-        (lfo::RATE, 24.0, "RATE"),
-        (lfo::GAIN, 69.0, "GAIN"),
-        (lfo::OFFSET, 114.0, "OFFSET"),
+        (lfo::RATE, 30.0, "RATE"),
+        (lfo::GAIN, 94.0, "GAIN"),
+        (lfo::OFFSET, 158.0, "OFFSET"),
     ];
     for (f, dx, label) in knobs {
-        g.knob(lfo_param(n, f), x + dx, y + 60.0, 11.0, 21.0, label);
+        g.knob(lfo_param(n, f), x + dx, y + 89.0, 17.0, 31.0, label);
     }
-    g.row(4 + n * 2, x, y + 104.0, w);
-    g.row(5 + n * 2, x, y + 130.0, w);
+    g.row(4 + n * 2, x, y + 159.0, 192.0);
+    g.row(5 + n * 2, x, y + 193.0, 192.0);
 }
 
-fn misc_panel(g: &mut Page, n: usize, x: f32, y: f32, w: f32) {
-    g.frame(format!("MISC {}", n + 1), x, y, w, 156.0);
+fn misc_panel(g: &mut Page, n: usize, x: f32, y: f32) {
+    g.frame(
+        format!("MISC {}", n + 1),
+        Skin::Graphite,
+        true,
+        x,
+        y,
+        192.0,
+        208.0,
+    );
     for group in 0..2 {
         let first = 8 + n * 4 + group * 2;
-        let top = y + 20.0 + group as f32 * 66.0;
-        g.text(x + 6.0, top + 6.0, "SRC");
-        g.ctl(
+        let top = y + 34.0 + group as f32 * 94.0;
+        g.text(x + 6.0, top, "SOURCE");
+        g.pick(
             mat_param(first, ids::mat::SRC),
-            x + 30.0,
-            top,
-            w - 36.0,
-            17.0,
+            x + 64.0,
+            top - 10.0,
+            120.0,
+            21.0,
         );
-        g.row(first, x, top + 22.0, w);
-        g.row(first + 1, x, top + 44.0, w);
+        g.row(first, x, top + 30.0, 192.0);
+        g.row(first + 1, x, top + 64.0, 192.0);
     }
 }
 
 /// The fixed part of the screen.
 fn front(g: &mut Page, ui: &Ui) {
     // The top bar.
-    g.text(62.0, 9.0, "POLYPHONY");
-    g.stepper(ids::POLY, 124.0, 3.0, 44.0, 21.0);
-    g.text(214.0, 9.0, "VOICE MODE");
-    g.ctl(ids::MONO, 270.0, 3.0, 60.0, 21.0);
-    g.text(352.0, 9.0, "PART SELECT");
-    g.nav(Nav::Part(0), "PART A", ui.part == 0, 412.0, 3.0, 52.0, 21.0);
-    g.nav(Nav::Part(1), "PART B", ui.part == 1, 468.0, 3.0, 52.0, 21.0);
-    g.text(540.0, 9.0, "PART ON");
-    g.ctl(part_param(ui.part, ids::part::ON), 584.0, 3.0, 34.0, 21.0);
+    g.put(88.0, 19.0, "Polyphony", Align::Left, BAR, BAR_TEXT);
+    g.spin(ids::POLY, 188.0, 9.0, 42.0, 21.0, Look::Field(true));
+    g.put(277.0, 19.0, "Voices", Align::Left, BAR, BAR_TEXT);
+    g.put(470.0, 19.0, "Part Select", Align::Left, BAR, BAR_TEXT);
+    g.nav(
+        Nav::Part(0),
+        Look::TopBtn("PART A"),
+        ui.part == 0,
+        576.0,
+        8.0,
+        61.0,
+        23.0,
+    );
+    g.nav(
+        Nav::Part(1),
+        Look::TopBtn("PART B"),
+        ui.part == 1,
+        643.0,
+        8.0,
+        64.0,
+        23.0,
+    );
+    g.put(760.0, 19.0, "Solo", Align::Left, BAR, BAR_TEXT);
+    g.lamp(
+        [ids::SOLO_A, ids::SOLO_B][ui.part],
+        Kind::Toggle,
+        803.0,
+        9.0,
+        28.0,
+        21.0,
+    );
+    g.put(878.0, 19.0, "Sync", Align::Left, BAR, BAR_TEXT);
+    g.lamp(ids::PART_SYNC, Kind::Toggle, 927.0, 9.0, 28.0, 21.0);
 
     // The oscillators of the part and its amplitude envelope.
     let (a, b) = (ui.part * 2, ui.part * 2 + 1);
-    osc_panel(g, a, 30.0, 30.0);
-    osc_panel(g, b, 537.0, 30.0);
+    osc_panel(g, a, 43.0, 42.0);
+    osc_panel(g, b, 757.0, 42.0);
     g.frame(
         format!("AMP ENV {}", ["A", "B"][ui.part]),
-        376.0,
-        30.0,
-        158.0,
-        102.0,
+        Skin::Brown,
+        true,
+        528.0,
+        42.0,
+        222.0,
+        143.0,
     );
-    for (i, letter) in ["A", "D", "S", "R"].into_iter().enumerate() {
-        let cx = 413.0 + 26.5 * i as f32;
-        g.text_c(cx, 50.0, letter);
-        g.add(
-            part_param(ui.part, ids::part::ATT + i),
-            Kind::Fader,
-            rr(cx - 10.0, 60.0, 20.0, 64.0),
-            Look::Fader,
-            "",
-        );
-    }
+    envelope_faders(
+        g,
+        583.0,
+        80.0,
+        36.3,
+        [
+            part_param(ui.part, ids::part::ATT),
+            part_param(ui.part, ids::part::DEC),
+            part_param(ui.part, ids::part::SUS),
+            part_param(ui.part, ids::part::REL),
+        ],
+    );
 
-    filter_panel(g, 0, 30.0, 135.0, 117.0, true);
-    filter_panel(g, 1, 30.0, 258.0, 87.0, false);
+    filter_panels(g, ui.part);
 
     // The mixer.
-    g.frame("MIXER", 658.0, 135.0, 222.0, 127.0);
+    g.frame("MIXER", Skin::Graphite, false, 930.0, 192.0, 305.0, 178.0);
+    g.put(977.0, 225.0, "MIX A", Align::Center, LABEL, TEXT);
+    g.put(1022.0, 225.0, "MIX B", Align::Center, LABEL, TEXT);
+    g.put(1090.0, 225.0, "MAIN VOL", Align::Center, LABEL, TEXT);
     let faders = [
-        (part_param(0, ids::part::LEVEL), 686.0, "MIX A"),
-        (part_param(1, ids::part::LEVEL), 722.0, "MIX B"),
-        (ids::MASTER_VOL, 766.0, "MAIN VOL"),
+        (part_param(0, ids::part::LEVEL), 977.0),
+        (part_param(1, ids::part::LEVEL), 1022.0),
+        (ids::MASTER_VOL, 1087.0),
     ];
-    for (p, cx, label) in faders {
-        g.text_c(cx, 154.0, label);
+    for (p, cx) in faders {
         g.add(
             p,
             Kind::Fader,
-            rr(cx - 10.0, 166.0, 20.0, 88.0),
+            rr(cx - 15.0, 236.0, 30.0, 122.0),
             Look::Fader,
             "",
         );
     }
-    let mini = [
-        (filt_param(0, ids::filt::VOL), "F1 VOL", 806.0, 160.0),
-        (filt_param(0, ids::filt::PAN), "F1 PAN", 842.0, 160.0),
-        (filt_param(1, ids::filt::VOL), "F2 VOL", 806.0, 206.0),
-        (filt_param(1, ids::filt::PAN), "F2 PAN", 842.0, 206.0),
-    ];
-    for (p, label, x, y) in mini {
-        g.cell_as(p, label, x, y, 34.0, 44.0);
-    }
+    g.put(1155.0, 225.0, "LEFT", Align::Center, LABEL, TEXT);
+    g.put(1204.0, 225.0, "RIGHT", Align::Center, LABEL, TEXT);
 
     // The bottom panels.
-    mod_env_panel(g, 0, 30.0, 352.0, 138.0);
-    mod_env_panel(g, 1, 173.0, 352.0, 139.0);
-    lfo_panel(g, 0, 316.0, 352.0, 139.0);
-    lfo_panel(g, 1, 460.0, 352.0, 137.0);
-    misc_panel(g, 0, 600.0, 352.0, 137.0);
-    misc_panel(g, 1, 741.0, 352.0, 139.0);
+    mod_env_panel(g, 0, 43.0, 497.0);
+    mod_env_panel(g, 1, 244.0, 497.0);
+    lfo_panel(g, 0, 444.0, 497.0);
+    lfo_panel(g, 1, 643.0, 497.0);
+    misc_panel(g, 0, 843.0, 497.0);
+    misc_panel(g, 1, 1043.0, 497.0);
 
     // The performance strip.
-    g.frame("PERFORMANCE", 30.0, 512.0, 850.0, 72.0);
-    let strip = [
-        ids::BEND,
-        ids::MASTER_TUNE,
-        ids::VEL_AMP,
-        ids::PORTA,
-        ids::PORTA_MODE,
-        part_param(0, ids::part::PAN),
-        part_param(1, ids::part::PAN),
-    ];
-    for (i, p) in strip.into_iter().enumerate() {
-        g.cell(p, 70.0 + 112.0 * i as f32, 528.0, 96.0, 52.0);
+    g.put(52.0, 740.0, "BEND", Align::Left, LABEL, TEXT);
+    g.put(52.0, 752.0, "RANGE", Align::Left, LABEL, TEXT);
+    g.spin(ids::BEND, 50.0, 766.0, 42.0, 22.0, Look::Field(true));
+    g.add(
+        ids::WHEEL_PITCH,
+        Kind::Wheel,
+        rr(105.0, 722.0, 28.0, 103.0),
+        Look::Wheel,
+        "",
+    );
+    g.add(
+        ids::WHEEL_MOD,
+        Kind::Wheel,
+        rr(143.0, 722.0, 28.0, 103.0),
+        Look::Wheel,
+        "",
+    );
+    keyboard(g);
+    g.put(1160.0, 725.0, "MONO", Align::Center, LABEL, TEXT);
+    g.put(1160.0, 737.0, "LEGATO", Align::Center, LABEL, TEXT);
+    g.lamp(ids::MONO, Kind::Toggle, 1195.0, 718.0, 30.0, 23.0);
+    g.put(1190.0, 757.0, "MODE", Align::Center, LABEL, TEXT);
+    g.add(
+        ids::PORTA_SCALE,
+        Kind::Toggle,
+        rr(1200.0, 766.0, 24.0, 37.0),
+        Look::Slide,
+        "",
+    );
+    g.put(1228.0, 775.0, "N", Align::Left, LABEL, TEXT);
+    g.put(1228.0, 794.0, "S", Align::Left, LABEL, TEXT);
+    g.knob(ids::PORTA, 1158.0, 779.0, 21.0, 36.0, "PORTAMENTO");
+}
+
+/// The keys: five octaves from C2, the white keys first and the black on top.
+pub const KEY_FIRST: u8 = 36;
+const KEY_X: f32 = 185.0;
+const KEY_Y: f32 = 718.0;
+const KEY_W: f32 = 923.0 / 35.0;
+const KEY_H: f32 = 107.0;
+const BLACK_W: f32 = 13.0;
+const BLACK_H: f32 = 68.0;
+const WHITE_STEPS: [u8; 7] = [0, 2, 4, 5, 7, 9, 11];
+
+fn keyboard(g: &mut Page) {
+    for i in 0..35usize {
+        let note = KEY_FIRST + 12 * (i / 7) as u8 + WHITE_STEPS[i % 7];
+        let x = KEY_X + KEY_W * i as f32;
+        g.add(
+            0,
+            Kind::Key(note),
+            rr(x, KEY_Y, KEY_W, KEY_H),
+            Look::Key(false),
+            "",
+        );
+    }
+    for i in 0..34usize {
+        if matches!(i % 7, 2 | 6) {
+            continue;
+        }
+        let note = KEY_FIRST + 12 * (i / 7) as u8 + WHITE_STEPS[i % 7] + 1;
+        let x = KEY_X + KEY_W * (i + 1) as f32 - BLACK_W / 2.0;
+        g.add(
+            0,
+            Kind::Key(note),
+            rr(x, KEY_Y, BLACK_W, BLACK_H),
+            Look::Key(true),
+            "",
+        );
     }
 }
 
 /// The display's contents.
 fn display(g: &mut Page, ui: &Ui) {
     g.lcd = true;
-    // The bezel and the tabs; the screen is drawn in `paint_display`.
-    for (i, name) in DISPLAY_TABS.iter().enumerate() {
+    // The patch bar: four slots, the patch and its steppers.
+    for i in 0..4 {
         g.nav(
             Nav::Tab(i),
-            name,
+            Look::Tab(["1", "2", "3", "4"][i]),
             ui.tab == i,
-            272.0 + 40.0 * i as f32,
-            148.0,
-            38.0,
-            18.0,
+            404.0 + 24.0 * i as f32,
+            225.0,
+            23.0,
+            24.0,
         );
     }
-    if ui.tab == 1 {
-        g.text(284.0, 214.0, "LFO 1");
-        g.text(284.0, 268.0, "LFO 2");
-        for n in 0..2 {
-            let y = if n == 0 { 202.0 } else { 256.0 };
-            use ids::lfo;
-            for (i, f) in [lfo::DIV, lfo::PHASE, lfo::RETRIG].into_iter().enumerate() {
-                g.cell(lfo_param(n, f), 330.0 + 76.0 * i as f32, y, 64.0, 46.0);
-            }
-        }
-        return;
-    }
+    g.nav(
+        Nav::Patch(false),
+        Look::Step(false),
+        false,
+        832.0,
+        225.0,
+        22.5,
+        24.0,
+    );
+    g.nav(
+        Nav::Patch(true),
+        Look::Step(true),
+        false,
+        855.0,
+        225.0,
+        22.5,
+        24.0,
+    );
+    g.nav(
+        Nav::Menu,
+        Look::Menu("MENU"),
+        ui.menu,
+        404.0,
+        251.0,
+        117.0,
+        26.0,
+    );
+
     // The effect list: a switch and a name to each.
     for (i, name) in FX_NAMES.iter().enumerate() {
-        let y = 196.0 + 16.0 * i as f32;
+        let y = 279.0 + 22.5 * i as f32;
         g.add(
             FX_ON[i],
             Kind::Toggle,
-            rr(268.0, y, 20.0, 16.0),
+            rr(403.0, y + 1.0, 23.0, 21.0),
             Look::Check,
             "",
         );
-        g.nav(Nav::Fx(i), name, ui.fx == i, 290.0, y, 70.0, 16.0);
+        g.nav(
+            Nav::Fx(i),
+            Look::Tab(name),
+            ui.fx == i,
+            427.0,
+            y,
+            96.0,
+            22.0,
+        );
     }
     if ui.fx != 0 {
         for (i, &p) in FX_PARAMS[ui.fx].iter().enumerate() {
             let (col, row) = (i % 6, i / 6);
             g.cell(
                 p,
-                366.0 + 42.0 * col as f32,
-                198.0 + 56.0 * row as f32,
-                40.0,
+                538.0 + 56.0 * col as f32,
+                300.0 + 78.0 * row as f32,
                 52.0,
+                60.0,
             );
         }
         return;
     }
     // The arpeggiator.
-    g.text(368.0, 202.0, "MODE");
-    g.ctl(ids::ARP_MODE, 404.0, 196.0, 84.0, 16.0);
-    g.text(368.0, 222.0, "VEL");
-    g.ctl(ids::ARP_VELMODE, 404.0, 216.0, 84.0, 16.0);
-    g.text(368.0, 242.0, "OCTAVE");
-    g.stepper(ids::ARP_OCT, 404.0, 236.0, 52.0, 16.0);
-    g.text(368.0, 262.0, "STEPS");
-    g.stepper(ids::ARP_STEPS, 404.0, 256.0, 52.0, 16.0);
-    g.text(498.0, 202.0, "RATE");
-    g.ctl(ids::ARP_DIV, 524.0, 196.0, 66.0, 16.0);
-    g.text(498.0, 222.0, "HOLD");
-    g.ctl(ids::ARP_HOLD, 524.0, 216.0, 44.0, 16.0);
-    g.knob(ids::ARP_GATE, 596.0, 228.0, 11.0, 24.0, "GATE");
-    g.text(500.0, 262.0, "PAGE");
-    g.nav(Nav::Page(0), "1-8", ui.page == 0, 524.0, 256.0, 40.0, 16.0);
-    g.nav(Nav::Page(1), "9-16", ui.page == 1, 568.0, 256.0, 44.0, 16.0);
-    g.text(366.0, 282.0, "HLD");
-    g.text(366.0, 301.0, "TRN");
-    g.text(366.0, 321.0, "VEL");
+    g.text(537.0, 302.0, "MODE");
+    g.add(
+        ids::ARP_MODE,
+        Kind::Cycle,
+        rr(606.0, 293.0, 90.0, 19.0),
+        Look::Bar(false),
+        "",
+    );
+    g.text(537.0, 325.0, "VELOCITY");
+    g.add(
+        ids::ARP_VELMODE,
+        Kind::Cycle,
+        rr(606.0, 316.0, 90.0, 19.0),
+        Look::Bar(false),
+        "",
+    );
+    g.text(537.0, 347.0, "OCTAVE");
+    g.spin(ids::ARP_OCT, 606.0, 338.0, 90.0, 19.0, Look::Bar(true));
+    g.text(537.0, 370.0, "WRAP");
+    g.spin(ids::ARP_WRAP, 606.0, 361.0, 90.0, 19.0, Look::Bar(true));
+    g.knob(ids::ARP_DIV, 746.0, 325.0, 26.0, 34.0, "TIME");
+    g.knob(ids::ARP_GATE, 816.0, 325.0, 26.0, 34.0, "GATE");
+    g.text(775.0, 384.0, "PAGE");
+    g.nav(
+        Nav::Page(1 - ui.page),
+        Look::Menu("PAGE"),
+        false,
+        835.5,
+        376.0,
+        23.0,
+        16.0,
+    );
+    g.text_r(607.0, 403.0, "HOLD");
+    g.text_r(607.0, 420.0, "TRANSPOSE");
+    g.text_r(607.0, 438.0, "VELOCITY");
     for i in 0..8 {
         let step = ui.page * 8 + i;
-        let x = 392.0 + 28.5 * i as f32;
+        let x = 618.0 + 29.75 * i as f32;
         g.add(
             ids::ARP_HOLD1 + step,
             Kind::Toggle,
-            rr(x, 276.0, 27.0, 18.0),
-            Look::Led,
+            rr(x, 395.0, 29.75, 16.0),
+            Look::Lamp,
             "",
         );
         g.add(
             ids::ARP_TR1 + step,
             Kind::Num,
-            rr(x, 296.0, 27.0, 18.0),
+            rr(x, 412.0, 29.75, 17.0),
             Look::Num,
             "",
         );
         g.add(
             ids::ARP_STEP1 + step,
             Kind::Num,
-            rr(x, 316.0, 27.0, 18.0),
+            rr(x, 430.0, 29.75, 17.0),
             Look::Num,
             "",
         );
@@ -846,14 +1305,14 @@ fn page(ui: &Ui) -> Page {
 
 /// The display's bezel and screen, in logical pixels.
 fn display_rect() -> Rect {
-    rr(257.0, 135.0, 373.0, 207.0)
+    rr(360.0, 190.0, 555.0, 298.0)
 }
 
 fn screen_rect() -> Rect {
-    rr(264.0, 142.0, 359.0, 193.0)
+    rr(392.0, 214.0, 493.0, 254.0)
 }
 
-// ---- the drop-down list ----------------------------------------------------------------------------------------
+// ---- the drop-down lists ---------------------------------------------------------------------------------------
 
 const ITEM_W: f32 = 104.0;
 
@@ -886,17 +1345,33 @@ pub fn popup_rects(anchor: Rect, n: usize) -> (Rect, Vec<Rect>) {
     (Rect::new(x, y, w, h), items)
 }
 
-/// Every hit region of `ui`'s screen, the last on top (no painting). With a list open, only the list and the rest of
-/// the window that closes it.
+/// The display's menu button.
+fn menu_rect() -> Rect {
+    rr(404.0, 251.0, 117.0, 26.0)
+}
+
+/// Every hit region of `ui`'s screen, the last on top (no painting). With a list or the menu open, only that and the
+/// rest of the window that closes it.
 pub fn layout(ui: &Ui) -> Vec<Hit> {
     let pg = page(ui);
+    let dismiss = Hit {
+        param: 0,
+        kind: Kind::Dismiss,
+        r: Rect::new(0.0, 0.0, W as f32, H as f32),
+    };
+    if ui.menu {
+        let (_, rects) = popup_rects(menu_rect(), MENU_ITEMS.len());
+        let mut hits = vec![dismiss];
+        hits.extend(rects.into_iter().enumerate().map(|(i, r)| Hit {
+            param: 0,
+            kind: Kind::MenuItem(i),
+            r,
+        }));
+        return hits;
+    }
     if let Some(p) = ui.popup {
         let anchor = pg.items.iter().find(|i| i.param == p).map(|i| i.r);
-        let mut hits = vec![Hit {
-            param: 0,
-            kind: Kind::Dismiss,
-            r: Rect::new(0.0, 0.0, W as f32, H as f32),
-        }];
+        let mut hits = vec![dismiss];
         if let Some(anchor) = anchor {
             let (names, _) = choices(p);
             let (_, rects) = popup_rects(anchor, names.len());
@@ -933,23 +1408,20 @@ pub fn paint(
     c.clear(BG);
     paint_frame(c);
     let pg = page(ui);
-    for (title, r) in &pg.panels {
-        paint_panel(c, title, *r);
+    for p in &pg.panels {
+        paint_panel(c, p);
     }
-    paint_plate(c);
-    paint_display(c, v, last);
+    paint_decor(c, v, ui);
+    paint_display(c, v, ui, last);
     for t in &pg.texts {
-        let w = if t.centered {
-            c.text_width(t.font, t.s)
-        } else {
-            0.0
-        };
-        c.text(t.font, (t.x - w / 2.0).round(), t.y.round(), t.color, t.s);
+        paint_text(c, t);
     }
     for it in &pg.items {
-        paint_item(c, v, it, pressed == Some(it.param));
+        paint_item(c, v, ui, it, pressed == Some(it.param));
     }
-    if let Some(p) = ui.popup
+    if ui.menu {
+        paint_menu(c);
+    } else if let Some(p) = ui.popup
         && let Some(anchor) = pg.items.iter().find(|i| i.param == p).map(|i| i.r)
     {
         paint_popup(c, v, p, anchor);
@@ -957,74 +1429,284 @@ pub fn paint(
     layout(ui)
 }
 
-/// The window's frame: the side rails and the top bar.
+fn paint_text(c: &mut Canvas, t: &Text) {
+    let w = c.text_width(t.font, t.s);
+    let h = c.line_height(t.font);
+    let x = match t.align {
+        Align::Left => s(t.x),
+        Align::Center => s(t.x) - w / 2.0,
+        Align::Right => s(t.x) - w,
+    };
+    c.text(t.font, x.round(), (s(t.y) - h / 2.0).round(), t.color, t.s);
+}
+
+/// Text centred on (`x`, `y`) in design pixels.
+fn mid(c: &mut Canvas, f: Font, x: f32, y: f32, color: Color, text: &str) {
+    let r = Rect::new(s(x) - 60.0, s(y) - 8.0, 120.0, 16.0);
+    c.text_center(f, r, color, text);
+}
+
+/// The wooden frame, the cream top bar and the dark strip under the panels.
 fn paint_frame(c: &mut Canvas) {
     let (w, h) = (W as f32, H as f32);
-    c.fill_rect(Rect::new(0.0, 0.0, s(27.0), h), RAIL);
-    c.fill_rect(Rect::new(w - s(27.0), 0.0, s(27.0), h), RAIL);
-    c.fill_rect(Rect::new(s(26.0), 0.0, 1.5, h), EMBER_DIM);
-    c.fill_rect(Rect::new(w - s(27.0) - 0.5, 0.0, 1.5, h), EMBER_DIM);
-    c.fill_rect(Rect::new(0.0, 0.0, w, s(27.0)), RAIL);
-    c.fill_rect(Rect::new(0.0, s(27.0) - 1.0, w, 1.0), EDGE);
-    let brand = Rect::new(w - s(190.0), 0.0, s(160.0), s(27.0));
-    c.text_center(Font::new(11).bold(), brand, EMBER, "RIND STUDIO");
+    c.fill_rect(
+        Rect::new(0.0, s(706.0), w, h - s(706.0)),
+        Color::rgb(0x131313),
+    );
+    for (x0, x1) in [(0.0, s(37.0)), (s(1240.0), w)] {
+        let r = Rect::new(x0, 0.0, x1 - x0, h);
+        c.fill_rect(r, WOOD);
+        // The grain: long lines at uneven distances, darker and lighter.
+        let mut seed = 0x2f6b_u32 ^ (x0 as u32);
+        let mut x = x0 + 1.0;
+        while x < x1 {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let dark = seed >> 31 == 0;
+            let a = 0x18 + ((seed >> 20) & 0x1f) as u8;
+            let col = if dark { WOOD_DARK } else { WOOD_LIGHT };
+            let drift = ((seed >> 8) & 7) as f32 - 3.5;
+            c.line(x, 0.0, x + drift, h, 1.1, col.with_alpha(a));
+            x += 1.2 + ((seed >> 4) & 3) as f32;
+        }
+        c.fill_rect(Rect::new(x1 - 1.0, 0.0, 1.0, h), SHADOW);
+        c.fill_rect(Rect::new(x0, 0.0, 1.0, h), SHADOW);
+    }
+    c.fill_rect(Rect::new(s(37.0), 0.0, s(1203.0), s(38.0)), BAR_BOTTOM);
+    c.fill_rect_gradient(
+        Rect::new(s(37.0), 0.0, s(1203.0), s(38.0)),
+        BAR_TOP,
+        BAR_BOTTOM,
+        0.0,
+    );
+    c.fill_rect(
+        Rect::new(s(37.0), s(38.0), s(1203.0), 1.0),
+        Color::rgb(0x8f8579),
+    );
+    // The maker's mark.
+    let (cx, cy) = (s(1040.0), s(19.0));
+    c.stroke_circle(cx, cy, s(12.0), 1.6, BAR_TEXT);
+    c.stroke_circle(cx, cy, s(6.0), 1.2, BAR_TEXT);
+    c.line(cx - s(12.0), cy, cx + s(12.0), cy, 1.0, BAR_TEXT);
+    c.text(
+        Font::new(11).bold(),
+        s(1062.0),
+        cy - s(8.0),
+        BAR_TEXT,
+        "RIND AUDIO LABS",
+    );
 }
 
-fn paint_panel(c: &mut Canvas, title: &str, r: Rect) {
-    c.fill_rrect(r.inset(-1.0), 6.0, SLOT);
-    c.fill_rrect(r, 5.0, PANEL);
-    c.stroke_rrect(r, 5.0, 1.0, EDGE);
-    let head = Rect::new(r.x + 1.0, r.y + 1.0, r.w - 2.0, s(15.0));
-    c.fill_rrect(head, 4.0, HEAD_BG);
-    c.fill_rect(Rect::new(r.x + 3.0, r.y + 1.0, r.w - 6.0, 1.0), HILITE);
-    c.text(TITLE, r.x + 8.0, r.y + 3.0, GOLD, title);
+fn paint_panel(c: &mut Canvas, p: &Panel) {
+    let r = p.r;
+    let (lo, hi) = match p.skin {
+        Skin::Brown => (BROWN, BROWN_HI),
+        Skin::Graphite => (GRAPHITE, GRAPHITE_HI),
+    };
+    c.fill_rrect(r.inset(-1.0), 7.0, EDGE);
+    c.fill_rect_gradient(r, hi, lo, 6.0);
+    let head = Rect::new(r.x + s(3.0), r.y + s(3.0), r.w - s(6.0), s(19.0));
+    c.fill_rrect(head, 6.0, HEAD);
+    c.fill_rect(
+        Rect::new(head.x + 4.0, head.y + 1.0, head.w - 8.0, 1.0),
+        Color::rgb(0x3a2d22),
+    );
+    let f = TITLE;
+    let w = c.text_width(f, &p.title);
+    let lh = c.line_height(f);
+    c.text(
+        f,
+        (head.cx() - w / 2.0).round(),
+        (head.cy() - lh / 2.0).round(),
+        HEAD_TEXT,
+        &p.title,
+    );
+    if p.glyph {
+        let (gx, gy) = (head.right() - s(15.0), head.cy());
+        c.fill_circle(gx, gy, s(8.0), Color::rgb(0x6e625a));
+        c.fill_circle(gx, gy - 0.4, s(7.0), Color::rgb(0xd9d1c6));
+        c.polyline(
+            &[(gx - 2.2, gy - 1.0), (gx, gy + 1.4), (gx + 2.2, gy - 1.0)],
+            1.3,
+            Color::rgb(0x2b231d),
+        );
+    }
 }
 
-/// The name plate under the mixer.
-fn paint_plate(c: &mut Canvas) {
-    let r = rr(658.0, 268.0, 222.0, 77.0);
-    c.fill_rrect(r, 6.0, SLOT);
-    c.stroke_rrect(r, 6.0, 1.0, EDGE);
-    let word = Rect::new(r.x, r.y + s(8.0), r.w, s(40.0));
-    c.text_center(Font::new(26).bold(), word, EMBER, "Rind Studio");
-    let sub = Rect::new(r.x, r.y + s(52.0), r.w, s(14.0));
-    c.text_center(Font::new(9), sub, MUTED, "MATRIX SYNTHESIZER");
+/// The painted-only parts of the screen: scales, routing chips, the voice count, the meters and the name plate.
+fn paint_decor(c: &mut Canvas, v: &dyn Values, ui: &Ui) {
+    // Fader scales: 10, 5 and 0 either side of the amplitude and modulation envelopes and the mixer.
+    let scales = |c: &mut Canvas, left: f32, right: f32, top: f32, bottom: f32| {
+        for (i, label) in ["10", "5", "0"].into_iter().enumerate() {
+            let y = top + (bottom - top) * i as f32 / 2.0;
+            mid(c, SMALL, left, y, TEXT, label);
+            if right > 0.0 {
+                mid(c, SMALL, right, y, TEXT, label);
+            }
+        }
+    };
+    scales(c, 551.0, 724.0, 100.0, 176.0);
+    for x in [43.0, 244.0] {
+        scales(c, x + 9.0, x + 183.0, 572.0, 646.0);
+    }
+    scales(c, 948.0, 1056.0, 244.0, 350.0);
+    scales(c, 1056.0, 0.0, 244.0, 350.0);
+    scales(c, 1056.0, 0.0, 244.0, 350.0);
+    // The filter's routing chips.
+    let n = ui.part;
+    let (a, b) = (
+        v.plain(filt_param(n, ids::filt::IN_A)),
+        v.plain(filt_param(n, ids::filt::IN_B)),
+    );
+    let from = match route_name(a, b) {
+        "B" => "OSC B",
+        "AB" => "OSC AB",
+        "R" => "OSC R",
+        _ => "OSC A",
+    };
+    let to = ["FILT A", "FILT B"][n];
+    let dim = ["PILT A", "PILT B"][n];
+    let chip = |c: &mut Canvas, r: Rect, on: bool, text: &str| {
+        c.fill_rrect(r, 3.0, if on { CHIP } else { CHIP_DIM.with_alpha(0xa0) });
+        let col = if on { CHIP_TEXT } else { Color::rgb(0x8b7f77) };
+        c.text_center(LABEL, r, col, text);
+    };
+    chip(c, rr(60.0, 216.0, 52.0, 17.0), true, from);
+    c.line(s(114.0), s(224.0), s(138.0), s(224.0), 1.0, TEXT);
+    c.polyline(
+        &[
+            (s(133.0), s(221.0)),
+            (s(138.0), s(224.0)),
+            (s(133.0), s(227.0)),
+        ],
+        1.0,
+        TEXT,
+    );
+    chip(c, rr(141.0, 216.0, 57.0, 17.0), true, to);
+    chip(c, rr(60.0, 236.0, 52.0, 17.0), false, dim);
+    // The voices sounding over the voices it may use.
+    let field = rr(340.0, 9.0, 75.0, 21.0);
+    c.fill_rrect(field, 3.0, FIELD);
+    c.stroke_rrect(field, 3.0, 1.0, FIELD_EDGE);
+    let text = format!("{} / {}", v.voices(), v.plain(ids::POLY).round() as i32);
+    c.text_center(VALUE, field, FIELD_TEXT, &text);
+    // The meters.
+    paint_meters(c, v);
+    // The name plate.
+    let word = Font::new(58).bold().italic();
+    c.text(
+        word,
+        s(996.0),
+        s(378.0),
+        Color::rgb(0x000000).with_alpha(0x90),
+        "Rind",
+    );
+    c.text(word, s(990.0), s(372.0), Color::rgb(0xdadada), "Rind");
+    let vw = c.text_width(Font::new(8), "v3.0.2");
+    c.text(Font::new(8), s(1236.0) - vw, s(376.0), TEXT_DIM, "v3.0.2");
+    c.text(
+        Font::new(9),
+        s(928.0),
+        s(472.0),
+        Color::rgb(0xc9c9c9),
+        "\u{a9} 2024 Rind Audio Labs",
+    );
 }
 
-fn paint_display(c: &mut Canvas, v: &dyn Values, last: Option<usize>) {
+fn paint_meters(c: &mut Canvas, v: &dyn Values) {
+    let (l, r) = v.levels();
+    let lit = [crate::shared::lamps(l), crate::shared::lamps(r)];
+    const DB: [&str; 10] = [
+        "+3", "0", "-3", "-6", "-8", "-12", "-15", "-18", "-21", "-24",
+    ];
+    for (row, label) in DB.iter().enumerate() {
+        let y = 244.0 + 12.4 * row as f32;
+        mid(c, SMALL, 1177.0, y, TEXT, label);
+        for (side, x) in [1147.0, 1205.0].into_iter().enumerate() {
+            let on = 9 - row < lit[side];
+            let (col_on, col_off) = match row {
+                0 => (LAMP_RED, LAMP_RED_OFF),
+                1 | 2 => (LAMP_YELLOW, LAMP_YELLOW_OFF),
+                _ => (LAMP_GREEN, LAMP_GREEN_OFF),
+            };
+            if on {
+                c.fill_circle(s(x), s(y), s(8.0), col_on.with_alpha(0x40));
+            }
+            c.fill_circle(s(x), s(y), s(5.5), if on { col_on } else { col_off });
+        }
+        for x in [1161.0, 1194.0] {
+            c.fill_rect(rr(x - 2.5, y - 2.5, 5.0, 5.0), Color::rgb(0xc9c9c9));
+        }
+    }
+}
+
+fn paint_display(c: &mut Canvas, v: &dyn Values, ui: &Ui, last: Option<usize>) {
     let d = display_rect();
-    c.fill_rrect(d.inset(-1.0), 8.0, SLOT);
-    c.fill_rrect(d, 7.0, HEAD_BG);
-    c.stroke_rrect(d, 7.0, 1.0, HILITE);
+    c.fill_rrect(d.inset(-1.0), 12.0, Color::rgb(0x0c0c0e));
+    c.fill_rect_gradient(d, CASE_HI, CASE, 11.0);
     let sc = screen_rect();
-    c.fill_rrect(sc, 4.0, LCD_BG);
-    c.stroke_rrect(sc, 4.0, 1.5, LCD_EDGE);
-    // The title, and the value last touched.
-    let title = Rect::new(sc.x + s(96.0), s(148.0), sc.w - s(110.0), s(18.0));
-    c.text_center(VALUE, title, LCD_TEXT, "RIND STUDIO");
-    let line = Rect::new(sc.x + s(6.0), s(170.0), sc.w - s(12.0), s(20.0));
-    c.fill_rrect(line, 3.0, LCD_FIELD);
-    c.stroke_rrect(line, 3.0, 1.0, LCD_EDGE);
-    match last {
-        Some(p) => {
-            c.text(VALUE, line.x + 6.0, line.y + s(6.0), LCD_DIM, SPECS[p].name);
-            c.text_right(
-                VALUE,
-                line.right() - 6.0,
-                line.y + s(6.0),
-                LCD_TEXT,
-                &v.text(p),
-            );
+    c.fill_rrect(sc.inset(-2.0), 5.0, Color::rgb(0x121214));
+    c.fill_rrect(sc, 3.0, PAPER);
+    // The patch bar.
+    let bar = rr(500.0, 225.0, 334.0, 24.0);
+    c.fill_rrect(bar, 2.0, BLUE);
+    c.fill_circle(s(512.0), s(237.0), s(3.0), WHITE);
+    let name = crate::presets::name(v.plain(ids::PATCH).round().max(0.0) as usize);
+    let f = Font::new(10).bold();
+    c.text_center(f, bar, WHITE, &name);
+    // The line of the value last touched.
+    let line = rr(524.0, 251.0, 350.0, 26.0);
+    c.fill_rrect(line, 2.0, PAPER_HI);
+    c.stroke_rrect(line, 2.0, 1.0, INK_DIM);
+    let (label, value) = match last {
+        Some(p) => (SPECS[p].name.to_owned(), v.text(p)),
+        None => (
+            "Rind".to_owned(),
+            format!("{:.3}", v.norm(ids::MASTER_VOL) * 10.0),
+        ),
+    };
+    let f = Font::new(10);
+    let ty = (line.cy() - c.line_height(f) / 2.0).round();
+    c.text(f, line.x + s(8.0), ty, INK, &label);
+    c.text_center(f, line, INK, "=");
+    c.text_right(f, line.right() - s(8.0), ty, INK, &value);
+    // The panel the arpeggiator or an effect fills.
+    let area = rr(525.0, 279.0, 347.0, 178.0);
+    c.stroke_rrect(area, 2.0, 1.0, INK_DIM);
+    c.fill_rrect(rr(850.0, 283.0, 20.0, 15.0), 2.0, BLUE);
+    c.fill_polygon(
+        &[
+            (s(856.0), s(288.0)),
+            (s(864.0), s(288.0)),
+            (s(860.0), s(294.0)),
+        ],
+        WHITE,
+    );
+    if ui.fx == 0 {
+        // The page box and the table's frame.
+        let page = rr(813.0, 377.0, 15.0, 15.0);
+        c.fill_rect(page, BLUE);
+        c.text_center(VALUE, page, WHITE, &format!("{}", ui.page + 1));
+        c.stroke_rrect(rr(618.0, 395.0, 238.0, 52.0), 0.0, 1.0, INK_DIM);
+        for k in 1..8 {
+            let x = s(618.0 + 29.75 * k as f32);
+            c.line(x, s(395.0), x, s(447.0), 1.0, INK_DIM);
         }
-        None => {
-            c.text(
-                VALUE,
-                line.x + 6.0,
-                line.y + s(6.0),
-                LCD_DIM,
-                "Touch a control to read it here",
-            );
+        for y in [412.0, 430.0] {
+            c.line(s(618.0), s(y), s(856.0), s(y), 1.0, INK_DIM);
         }
+    } else {
+        let text = FX_NAMES[ui.fx];
+        c.text(VALUE, s(540.0), s(286.0), INK, text);
+    }
+}
+
+fn paint_menu(c: &mut Canvas) {
+    c.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), SHADE);
+    let (all, rects) = popup_rects(menu_rect(), MENU_ITEMS.len());
+    c.fill_rrect(all.inset(-2.0), 5.0, INK_DIM);
+    c.fill_rrect(all, 4.0, PAPER);
+    for (r, name) in rects.iter().zip(MENU_ITEMS) {
+        c.text_center(VALUE, *r, INK, name);
     }
 }
 
@@ -1034,7 +1716,7 @@ fn slot_of(p: usize) -> Option<usize> {
     (p >= ids::MAT_BASE && p < end).then(|| (p - ids::MAT_BASE) / ids::MAT_STRIDE)
 }
 
-fn paint_item(c: &mut Canvas, v: &dyn Values, it: &Item, held: bool) {
+fn paint_item(c: &mut Canvas, v: &dyn Values, ui: &Ui, it: &Item, held: bool) {
     // A matrix row whose source is not the one its panel stands for and which is in use: veiled, with its source.
     let veiled = row_source(v, it.param)
         .filter(|&(sp, want)| (v.plain(sp) - want).abs() > 0.5)
@@ -1048,19 +1730,38 @@ fn paint_item(c: &mut Canvas, v: &dyn Values, it: &Item, held: bool) {
     let ctrl = ctrl_rect(it);
     match it.look {
         Look::Knob(rad) => paint_knob(c, v, it, rad, held),
-        Look::Select => paint_select(c, v, it.param, ctrl, held),
-        Look::Led => paint_led(c, v, it.param, ctrl),
-        Look::Check => paint_check(c, v, it.param, ctrl),
-        Look::Stepper => paint_stepper(c, v, it.param, ctrl, held),
+        Look::Field(arrows) => paint_field(c, v, it, ctrl, arrows),
+        Look::Icon => paint_icon(c, v, it.param, ctrl),
+        Look::Bar(arrows) => paint_bar(c, v, it.param, ctrl, arrows, held),
+        Look::Check => paint_check(c, v, it, ctrl),
+        Look::Lamp => paint_lamp(c, v, it, ctrl),
+        Look::Slide => paint_slide(c, v, it.param, ctrl),
         Look::Fader => paint_fader(c, v, it, held),
         Look::Num => paint_num(c, v, it.param, ctrl, held),
-        Look::Button(name) => paint_button(c, name, it.r, it.on),
+        Look::TopBtn(name) => paint_top_button(c, name, it.r, it.on),
+        Look::Tab(name) => paint_tab(
+            c,
+            name,
+            it.r,
+            it.on,
+            matches!(it.kind, Kind::Nav(Nav::Fx(_))),
+        ),
+        Look::Step(next) => paint_step(c, it.r, next),
+        Look::Menu(name) => paint_menu_button(c, name, it.r, it.on),
+        Look::Wheel => paint_wheel(c, v, it.param, it.r, held),
+        Look::Key(black) => paint_key(
+            c,
+            it.r,
+            black,
+            matches!(it.kind, Kind::Key(n) if ui.key == Some(n)),
+        ),
     }
     if !it.label.is_empty() && !matches!(it.look, Look::Knob(_)) {
         let text = it.label.to_uppercase();
         let f = c.fit_font(LABEL, &text, it.r.w);
         let w = c.text_width(f, &text);
-        c.text(f, (it.r.cx() - w / 2.0).round(), it.r.y, MUTED, &text);
+        let col = if it.lcd { INK } else { TEXT };
+        c.text(f, (it.r.cx() - w / 2.0).round(), it.r.y, col, &text);
     }
     if let Some(sp) = veiled {
         c.fill_rrect(ctrl, 3.0, VEIL);
@@ -1077,14 +1778,9 @@ fn ctrl_rect(it: &Item) -> Rect {
     if it.label.is_empty() {
         return r;
     }
-    let top = s(11.0);
-    let h = (r.h - top).min(s(18.0));
-    let w = match it.look {
-        Look::Stepper => (r.w - 4.0).min(s(58.0)),
-        Look::Led => (r.w - 4.0).min(s(36.0)),
-        _ => r.w - 4.0,
-    };
-    Rect::new(r.cx() - w / 2.0, r.y + top, w, h)
+    let top = s(16.0);
+    let h = (r.h - top).min(s(26.0));
+    Rect::new(r.x + 2.0, r.y + top, r.w - 4.0, h)
 }
 
 fn paint_knob(c: &mut Canvas, v: &dyn Values, it: &Item, rad: f32, held: bool) {
@@ -1097,148 +1793,295 @@ fn paint_knob(c: &mut Canvas, v: &dyn Values, it: &Item, rad: f32, held: bool) {
         it.r.y + s(4.0) + rad
     };
     let (start, sweep) = (0.75 * std::f32::consts::PI, 1.5 * std::f32::consts::PI);
+    let tick = if it.lcd { INK } else { TICK };
     for i in 0..=10 {
         let a = start + sweep * i as f32 / 10.0;
         let (sa, ca) = a.sin_cos();
+        let long = if i % 5 == 0 { 3.0 } else { 1.8 };
         c.line(
-            cx + (rad + 2.5) * ca,
-            cy + (rad + 2.5) * sa,
-            cx + (rad + 4.5) * ca,
-            cy + (rad + 4.5) * sa,
+            cx + (rad + 2.0) * ca,
+            cy + (rad + 2.0) * sa,
+            cx + (rad + 2.0 + long) * ca,
+            cy + (rad + 2.0 + long) * sa,
             0.8,
-            TICK,
+            tick,
         );
     }
-    if bipolar(it.param) {
-        let (mid, a) = (start + sweep * 0.5, start + sweep * n);
-        if (a - mid).abs() > 0.01 {
-            c.arc(cx, cy, rad + 2.0, mid.min(a), (a - mid).abs(), 1.8, EMBER);
-        }
-    } else if n > 0.002 {
-        c.arc(cx, cy, rad + 2.0, start, sweep * n, 1.8, EMBER);
+    if rad >= s(14.0) {
+        // The scale: 0 and 10 at the ends of the sweep, 5 at the top.
+        mid_px(c, SMALL, cx, cy - rad - 8.5, tick, "5");
+        mid_px(c, SMALL, cx - rad * 0.95, cy + rad + 4.5, tick, "0");
+        mid_px(c, SMALL, cx + rad * 0.95, cy + rad + 4.5, tick, "10");
     }
-    c.fill_circle(cx + 0.8, cy + 1.4, rad, SHADOW);
-    c.fill_circle(cx, cy, rad, if held { EMBER_DIM } else { KNOB_RIM });
-    c.fill_circle(cx, cy, rad - 1.3, KNOB_BODY);
-    c.fill_circle(cx - rad * 0.22, cy - rad * 0.3, rad * 0.5, SHEEN);
     let a = start + sweep * n;
     let (sa, ca) = a.sin_cos();
-    c.line(
-        cx + rad * 0.3 * ca,
-        cy + rad * 0.3 * sa,
-        cx + rad * 0.85 * ca,
-        cy + rad * 0.85 * sa,
-        1.6,
-        CAP,
-    );
+    if it.lcd {
+        c.fill_circle(cx + 0.8, cy + 1.2, rad, SHADOW);
+        c.fill_circle(cx, cy, rad, if held { BLUE_DARK } else { BLUE });
+        c.fill_circle(cx, cy, rad * 0.62, WHITE);
+        c.fill_circle(cx, cy, rad * 0.5, if held { BLUE_DARK } else { BLUE });
+        c.line(
+            cx + rad * 0.25 * ca,
+            cy + rad * 0.25 * sa,
+            cx + rad * 0.98 * ca,
+            cy + rad * 0.98 * sa,
+            2.4,
+            WHITE,
+        );
+    } else {
+        c.fill_circle(cx + 0.8, cy + 1.6, rad + 1.0, SHADOW);
+        c.fill_circle(cx, cy, rad + 0.6, SKIRT_HI);
+        c.fill_circle(cx, cy, rad, SKIRT);
+        // The knurled skirt: light notches round the rim.
+        for i in 0..14 {
+            let b = std::f32::consts::TAU * i as f32 / 14.0;
+            let (sb, cb) = b.sin_cos();
+            c.line(
+                cx + rad * 0.82 * cb,
+                cy + rad * 0.82 * sb,
+                cx + rad * 0.97 * cb,
+                cy + rad * 0.97 * sb,
+                0.7,
+                SKIRT_HI,
+            );
+        }
+        let cap = rad * 0.7;
+        c.fill_circle(cx, cy, cap, CAP_LO);
+        c.fill_circle(cx - cap * 0.12, cy - cap * 0.14, cap * 0.86, CAP_MID);
+        c.fill_circle(
+            cx - cap * 0.2,
+            cy - cap * 0.26,
+            cap * 0.5,
+            CAP_HI.with_alpha(0xb0),
+        );
+        if held {
+            c.stroke_circle(cx, cy, rad + 1.5, 1.2, GOLD);
+        }
+        c.line(
+            cx + rad * 0.2 * ca,
+            cy + rad * 0.2 * sa,
+            cx + rad * 0.98 * ca,
+            cy + rad * 0.98 * sa,
+            2.2,
+            Color::rgb(0x1c1c1c),
+        );
+        c.line(
+            cx + rad * 0.55 * ca,
+            cy + rad * 0.55 * sa,
+            cx + rad * 0.96 * ca,
+            cy + rad * 0.96 * sa,
+            1.0,
+            CAP_HI,
+        );
+    }
     if !it.label.is_empty() {
         let text = it.label.to_uppercase();
-        let f = c.fit_font(LABEL, &text, it.r.w - 1.0);
+        let f = c.fit_font(LABEL, &text, it.r.w + 8.0);
         let w = c.text_width(f, &text);
+        let col = if it.lcd { INK } else { TEXT };
         c.text(
             f,
             (cx - w / 2.0).round(),
-            (cy + rad + s(5.0)).round(),
-            MUTED,
+            (cy + rad + s(16.0)).round(),
+            col,
             &text,
         );
     }
 }
 
-fn chevron(c: &mut Canvas, x: f32, y: f32) {
-    c.polyline(
-        &[(x - 2.5, y - 1.2), (x, y + 1.6), (x + 2.5, y - 1.2)],
-        1.2,
-        LCD_DIM,
+/// Text centred on a point in logical pixels.
+fn mid_px(c: &mut Canvas, f: Font, x: f32, y: f32, color: Color, text: &str) {
+    c.text_center(f, Rect::new(x - 20.0, y - 6.0, 40.0, 12.0), color, text);
+}
+
+fn arrows(c: &mut Canvas, zone: Rect, color: Color) {
+    let (cx, cy) = (zone.cx(), zone.cy());
+    let a = (zone.w * 0.28).clamp(2.0, 3.5);
+    c.fill_polygon(
+        &[
+            (cx - a, cy - 1.2),
+            (cx + a, cy - 1.2),
+            (cx, cy - 1.2 - a * 1.5),
+        ],
+        color,
+    );
+    c.fill_polygon(
+        &[
+            (cx - a, cy + 1.2),
+            (cx + a, cy + 1.2),
+            (cx, cy + 1.2 + a * 1.5),
+        ],
+        color,
     );
 }
 
-fn paint_select(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, held: bool) {
-    c.fill_rrect(r, 3.0, if held { LCD_EDGE } else { LCD_FIELD });
-    c.stroke_rrect(r, 3.0, 1.0, LCD_EDGE);
-    let text = v.text(p);
-    let mut body = Rect::new(r.x + 2.0, r.y, r.w - 12.0, r.h);
-    if is_wave(p) {
-        wave_icon(
-            c,
-            v.plain(p).round() as i32,
-            Rect::new(r.x + 4.0, r.y + 3.0, 14.0, r.h - 6.0),
-        );
-        body = Rect::new(r.x + 20.0, r.y, r.w - 30.0, r.h);
-    }
-    let f = c.fit_font(VALUE, &text, body.w);
-    c.text_center(f, body, LCD_TEXT, &text);
-    if dropdown(p) {
-        chevron(c, r.right() - 6.0, r.cy());
+/// The text a spin field shows: a whole number plainly, a name as it is.
+fn field_text(v: &dyn Values, p: usize) -> String {
+    match SPECS[p].fmt {
+        Fmt::Int | Fmt::Oct | Fmt::Semi => format!("{}", v.plain(p).round() as i32),
+        _ => v.text(p),
     }
 }
 
-fn paint_led(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect) {
-    let on = v.plain(p) > 0.5;
-    if on {
-        c.fill_rrect(r.inset(-1.5), 5.0, EMBER_DIM);
-    }
-    c.fill_rrect(r, 4.0, if on { EMBER } else { SLOT });
-    c.stroke_rrect(r, 4.0, 1.0, if on { GOLD } else { EDGE });
-    if on {
-        c.text_center(LABEL, r, DARK_TEXT, "ON");
+fn paint_field(c: &mut Canvas, v: &dyn Values, it: &Item, r: Rect, arrows_beside: bool) {
+    let zone = if arrows_beside { s(15.0) } else { 0.0 };
+    let b = Rect::new(r.x, r.y, r.w - zone, r.h);
+    c.fill_rrect(b, 3.0, FIELD);
+    c.stroke_rrect(b, 3.0, 1.0, FIELD_EDGE);
+    let text = if it.kind == Kind::Route {
+        let (a, bb) = (it.param, it.param + 1);
+        route_name(v.plain(a), v.plain(bb)).to_owned()
+    } else if it.kind == Kind::Cycle {
+        let t = v.text(it.param);
+        if t == "Off" { "-".to_owned() } else { t }
     } else {
-        c.text_center(LABEL, r, TICK, "OFF");
+        field_text(v, it.param)
+    };
+    let f = c.fit_font(VALUE.italic(), &text, b.w - 4.0);
+    c.text_center(f, b, FIELD_TEXT, &text);
+    if arrows_beside {
+        arrows(c, Rect::new(b.right(), r.y, zone, r.h), ARROW);
     }
 }
 
-fn paint_check(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect) {
-    let on = v.plain(p) > 0.5;
-    let b = Rect::new(r.x + 3.0, r.cy() - 5.0, 10.0, 10.0);
-    c.fill_rrect(b, 2.0, if on { LCD_TEXT } else { LCD_FIELD });
-    c.stroke_rrect(b, 2.0, 1.0, LCD_EDGE);
+fn paint_icon(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect) {
+    let zone = s(15.0);
+    let b = Rect::new(r.x, r.y, r.w - zone, r.h);
+    c.fill_rrect(b, 4.0, Color::rgb(0x1a1a1a));
+    c.stroke_rrect(b, 4.0, 1.0, Color::rgb(0x4a4a4a));
+    let icon = Rect::new(b.x + 4.0, b.y + 3.0, b.w - 8.0, b.h - 6.0);
+    let now = v.plain(p).round() as i32;
+    if is_wave(p) {
+        wave_icon(c, now, icon);
+    } else if is_lfo_wave(p) {
+        shape_icon(c, icon, |t| lfo_shape(now, t));
+    } else {
+        // A filter's response: low-pass, band-pass or high-pass.
+        shape_icon(c, icon, |t| match now {
+            0 => {
+                if t < 0.55 {
+                    0.7
+                } else {
+                    0.7 - (t - 0.55) * 3.4
+                }
+            }
+            1 => 0.75 - ((t - 0.5) * 2.0).powi(2) * 1.5,
+            _ => {
+                if t > 0.45 {
+                    0.7
+                } else {
+                    0.7 - (0.45 - t) * 3.4
+                }
+            }
+        });
+    }
+    arrows(c, Rect::new(b.right(), r.y, zone, r.h), ARROW);
+}
+
+fn shape_icon(c: &mut Canvas, r: Rect, f: impl Fn(f32) -> f32) {
+    let pts: Vec<(f32, f32)> = (0..=24)
+        .map(|i| {
+            let t = i as f32 / 24.0;
+            (r.x + t * r.w, r.cy() - f(t).clamp(-1.0, 1.0) * r.h * 0.5)
+        })
+        .collect();
+    c.polyline(&pts, 1.5, CHIP);
+}
+
+fn paint_bar(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, spin: bool, held: bool) {
+    c.fill_rrect(r, 2.0, if held { BLUE_DARK } else { BLUE });
+    let text = field_text(v, p);
+    let body = Rect::new(r.x, r.y, r.w - if spin { s(14.0) } else { 0.0 }, r.h);
+    let f = c.fit_font(VALUE, &text, body.w - 4.0);
+    c.text_center(f, body, WHITE, &text);
+    if spin {
+        arrows(c, Rect::new(r.right() - s(14.0), r.y, s(12.0), r.h), WHITE);
+    }
+}
+
+fn paint_check(c: &mut Canvas, v: &dyn Values, it: &Item, r: Rect) {
+    let on = v.plain(it.param) > 0.5;
+    if it.lcd {
+        c.fill_rrect(r, 2.0, PAPER_HI);
+        c.stroke_rrect(r, 2.0, 1.0, INK_DIM);
+        if on {
+            c.polyline(
+                &[
+                    (r.x + r.w * 0.22, r.cy()),
+                    (r.x + r.w * 0.44, r.bottom() - r.h * 0.26),
+                    (r.right() - r.w * 0.2, r.y + r.h * 0.26),
+                ],
+                2.0,
+                BLUE_DARK,
+            );
+        }
+    } else {
+        c.fill_rrect(r, 3.0, Color::rgb(0x9a9a9a));
+        c.stroke_rrect(r, 3.0, 1.0, EDGE);
+        if on {
+            c.polyline(
+                &[
+                    (r.x + r.w * 0.22, r.cy()),
+                    (r.x + r.w * 0.44, r.bottom() - r.h * 0.26),
+                    (r.right() - r.w * 0.2, r.y + r.h * 0.26),
+                ],
+                2.0,
+                EDGE,
+            );
+        }
+    }
+}
+
+fn paint_lamp(c: &mut Canvas, v: &dyn Values, it: &Item, r: Rect) {
+    let low = v.plain(it.param) <= 0.5;
+    let on = match it.kind {
+        Kind::Switch(true) => low,
+        _ => !low,
+    };
+    if it.lcd {
+        // A cell of the table: a tie bar when on.
+        c.fill_rect(r.inset(0.5), if on { BLUE } else { PAPER });
+        if on {
+            let (y, a) = (r.cy(), r.w * 0.22);
+            c.line(r.cx() - a, y, r.cx() + a, y, 1.6, WHITE);
+            c.line(r.cx() - a, y - 3.0, r.cx() - a, y + 3.0, 1.6, WHITE);
+            c.line(r.cx() + a, y - 3.0, r.cx() + a, y + 3.0, 1.6, WHITE);
+        }
+        return;
+    }
     if on {
-        c.polyline(
-            &[
-                (b.x + 2.0, b.cy()),
-                (b.x + 4.2, b.bottom() - 2.5),
-                (b.right() - 2.0, b.y + 2.5),
-            ],
-            1.5,
-            LCD_BG,
-        );
+        c.fill_rrect(r.inset(-2.0), 6.0, LAMP_GLOW);
     }
+    c.fill_rrect(r, 4.0, if on { LAMP_ON } else { LAMP_OFF });
+    c.stroke_rrect(
+        r,
+        4.0,
+        1.0,
+        if on {
+            Color::rgb(0xffffff)
+        } else {
+            Color::rgb(0x4a4a4a)
+        },
+    );
 }
 
-fn paint_stepper(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, held: bool) {
-    c.fill_rrect(r, 4.0, if held { LCD_EDGE } else { LCD_FIELD });
-    c.stroke_rrect(r, 4.0, 1.0, LCD_EDGE);
-    // The arrows are the ends of the box: a press on either third steps, the middle drags.
-    let end = (r.w * 0.26).min(r.h);
-    c.fill_rect(Rect::new(r.x + end, r.y + 2.0, 1.0, r.h - 4.0), LCD_EDGE);
-    c.fill_rect(
-        Rect::new(r.right() - end - 1.0, r.y + 2.0, 1.0, r.h - 4.0),
-        LCD_EDGE,
-    );
-    let text = v.text(p);
-    let body = Rect::new(r.x + end + 1.0, r.y, r.w - 2.0 * end - 2.0, r.h);
-    let f = c.fit_font(VALUE, &text, body.w);
-    c.text_center(f, body, LCD_TEXT, &text);
-    let (y, a) = (r.cy(), (r.h * 0.26).clamp(3.0, 6.0));
-    let lx = r.x + end / 2.0;
-    let rx = r.right() - end / 2.0;
-    c.polyline(
-        &[
-            (lx + a * 0.6, y - a),
-            (lx - a * 0.6, y),
-            (lx + a * 0.6, y + a),
-        ],
-        2.2,
-        EMBER,
-    );
-    c.polyline(
-        &[
-            (rx - a * 0.6, y - a),
-            (rx + a * 0.6, y),
-            (rx - a * 0.6, y + a),
-        ],
-        2.2,
-        EMBER,
+fn paint_slide(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect) {
+    let n = v.plain(p) > 0.5;
+    let slot = Rect::new(r.cx() - r.w * 0.28, r.y, r.w * 0.56, r.h);
+    c.fill_rrect(slot, slot.w / 2.0, SLOT);
+    c.stroke_rrect(slot, slot.w / 2.0, 1.0, Color::rgb(0x3c3c3c));
+    let y = if n {
+        slot.bottom() - slot.w
+    } else {
+        slot.y + slot.w * 0.4
+    };
+    c.fill_circle(slot.cx(), y + slot.w / 2.0 - 0.6, slot.w * 0.75, SHADOW);
+    c.fill_circle(slot.cx(), y + slot.w / 2.0 - 1.0, slot.w * 0.7, CAP_MID);
+    c.fill_circle(
+        slot.cx() - 1.0,
+        y + slot.w / 2.0 - 2.0,
+        slot.w * 0.3,
+        CAP_HI,
     );
 }
 
@@ -1249,25 +2092,42 @@ fn paint_fader(c: &mut Canvas, v: &dyn Values, it: &Item, held: bool) {
     let (top, bot) = (r.y + FADER_PAD, r.bottom() - FADER_PAD);
     for i in 0..=10 {
         let y = top + (bot - top) * i as f32 / 10.0;
-        c.line(cx - 9.0, y, cx - 6.0, y, 0.8, TICK);
-        c.line(cx + 6.0, y, cx + 9.0, y, 0.8, TICK);
+        let long = if i % 5 == 0 { 6.0 } else { 3.5 };
+        c.line(cx - 12.0, y, cx - 12.0 + long, y, 0.9, TICK);
+        c.line(cx + 12.0, y, cx + 12.0 - long, y, 0.9, TICK);
     }
-    c.fill_rrect(Rect::new(cx - 2.0, top, 4.0, bot - top), 2.0, SLOT);
-    let y = top + (1.0 - n) * (bot - top);
     c.fill_rrect(
-        Rect::new(cx - 1.0, y, 2.0, (bot - y).max(0.5)),
-        1.0,
-        EMBER_DIM,
+        Rect::new(cx - 2.5, top - 2.0, 5.0, bot - top + 4.0),
+        2.5,
+        SLOT,
     );
-    let cap = Rect::new(cx - 7.0, y - 5.0, 14.0, 10.0);
-    c.fill_rrect(Rect::new(cx - 8.0, y - 4.0, 16.0, 12.0), 3.0, SHADOW);
-    c.fill_rrect(cap, 3.0, if held { GOLD } else { CAP });
-    c.line(cx - 5.0, y, cx + 5.0, y, 1.4, EMBER);
+    let y = top + (1.0 - n) * (bot - top);
+    let cap = Rect::new(cx - 9.0, y - 5.5, 18.0, 11.0);
+    c.fill_rrect(Rect::new(cx - 9.5, y - 4.0, 19.0, 11.5), 3.0, SHADOW);
+    c.fill_rect_gradient(
+        cap,
+        if held { GOLD } else { Color::rgb(0xd0d0d0) },
+        Color::rgb(0x55555a),
+        3.0,
+    );
+    c.fill_rect(
+        Rect::new(cx - 8.0, y - 0.6, 16.0, 1.2),
+        Color::rgb(0x1a1a1a),
+    );
+    c.fill_rect(
+        Rect::new(cx - 8.0, y + 0.6, 16.0, 0.8),
+        Color::rgb(0xf0f0f0),
+    );
 }
 
 fn num_text(v: &dyn Values, p: usize) -> String {
-    if is_int(p) {
-        format!("{:+}", v.plain(p).round() as i32)
+    if step_of(p).is_some() && (ids::ARP_STEP1..ids::ARP_STEP1 + 16).contains(&p) {
+        format!("{}", (v.plain(p) * 127.0).round() as i32)
+    } else if is_int(p) {
+        match v.plain(p).round() as i32 {
+            0 => "0".to_owned(),
+            n => format!("{n:+}"),
+        }
     } else {
         format!("{}", (v.plain(p) * 100.0).round() as i32)
     }
@@ -1275,26 +2135,158 @@ fn num_text(v: &dyn Values, p: usize) -> String {
 
 fn paint_num(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, held: bool) {
     let live = step_of(p).is_none_or(|st| (st as f32) < v.plain(ids::ARP_STEPS));
-    c.fill_rrect(r, 3.0, if held { LCD_EDGE } else { LCD_FIELD });
-    c.stroke_rrect(r, 3.0, 1.0, LCD_EDGE);
+    c.fill_rect(r.inset(0.5), if held { PAPER_HI } else { PAPER });
+    c.text_center(VALUE, r, if live { INK } else { INK_DIM }, &num_text(v, p));
+}
+
+fn paint_top_button(c: &mut Canvas, name: &str, r: Rect, on: bool) {
+    c.fill_rrect(r, 3.0, if on { LAMP_ON } else { Color::rgb(0xb9b2a6) });
+    c.stroke_rrect(
+        r,
+        3.0,
+        1.0,
+        if on {
+            Color::rgb(0xc99a63)
+        } else {
+            Color::rgb(0x8f877b)
+        },
+    );
     c.text_center(
         VALUE,
         r,
-        if live { LCD_TEXT } else { LCD_DIM },
-        &num_text(v, p),
+        if on {
+            Color::rgb(0xb8651f)
+        } else {
+            Color::rgb(0x7a7268)
+        },
+        name,
     );
 }
 
-fn paint_button(c: &mut Canvas, name: &str, r: Rect, on: bool) {
-    c.fill_rrect(r, 4.0, if on { EMBER } else { LCD_FIELD });
-    c.stroke_rrect(r, 4.0, 1.0, if on { GOLD } else { LCD_EDGE });
-    let f = c.fit_font(VALUE, name, r.w - 4.0);
-    c.text_center(f, r, if on { DARK_TEXT } else { LCD_TEXT }, name);
+fn paint_tab(c: &mut Canvas, name: &str, r: Rect, on: bool, listed: bool) {
+    c.fill_rect(r, if on { PAPER_HI } else { BLUE });
+    if on {
+        c.stroke_rrect(r, 0.0, 1.0, INK_DIM);
+    }
+    let f = if listed {
+        Font::new(9).bold().italic()
+    } else {
+        VALUE
+    };
+    let f = c.fit_font(f, name, r.w - 4.0);
+    c.text_center(f, r, if on { INK } else { WHITE }, name);
+}
+
+fn paint_step(c: &mut Canvas, r: Rect, next: bool) {
+    c.fill_rect(r, BLUE_DARK);
+    let (cx, cy, a) = (r.cx(), r.cy(), r.h * 0.22);
+    let d = if next { 1.0 } else { -1.0 };
+    c.fill_polygon(
+        &[
+            (cx - d * a, cy - a * 1.3),
+            (cx - d * a, cy + a * 1.3),
+            (cx + d * a, cy),
+        ],
+        WHITE,
+    );
+}
+
+fn paint_menu_button(c: &mut Canvas, name: &str, r: Rect, on: bool) {
+    if name == "PAGE" {
+        c.fill_rect(r, BLUE);
+        let (cx, cy, a) = (r.cx(), r.cy(), r.h * 0.22);
+        c.fill_polygon(
+            &[
+                (cx - a * 1.4, cy - a),
+                (cx + a * 1.4, cy - a),
+                (cx, cy + a * 1.2),
+            ],
+            WHITE,
+        );
+        return;
+    }
+    c.fill_rect(r, if on { BLUE_DARK } else { BLUE });
+    let f = Font::new(10).bold();
+    let ty = (r.cy() - c.line_height(f) / 2.0).round();
+    c.text(f, r.x + s(8.0), ty, WHITE, name);
+    arrows(c, Rect::new(r.right() - s(18.0), r.y, s(14.0), r.h), WHITE);
+}
+
+fn paint_wheel(c: &mut Canvas, v: &dyn Values, p: usize, r: Rect, held: bool) {
+    let n = v.norm(p).clamp(0.0, 1.0);
+    c.fill_rrect(r.inset(-1.0), 5.0, Color::rgb(0x050505));
+    c.fill_rect_gradient(r, Color::rgb(0x4a4a4a), Color::rgb(0x0e0e0e), 4.0);
+    // The ridges roll with the value.
+    let step = 6.0;
+    let off = n * 60.0 % step;
+    let mut y = r.y + off;
+    while y < r.bottom() {
+        c.line(
+            r.x + 2.0,
+            y,
+            r.right() - 2.0,
+            y,
+            1.0,
+            Color::rgb(0x8a8a8a).with_alpha(0x70),
+        );
+        y += step;
+    }
+    c.fill_rect(
+        Rect::new(r.cx() - 1.0, r.y + 2.0, 2.0, r.h - 4.0),
+        Color::rgb(0xffffff).with_alpha(if held { 0x50 } else { 0x28 }),
+    );
+}
+
+fn paint_key(c: &mut Canvas, r: Rect, black: bool, down: bool) {
+    if black {
+        c.fill_rect_gradient(
+            r,
+            if down { KEY_DOWN } else { Color::rgb(0x3a3a3a) },
+            KEY_BLACK,
+            1.5,
+        );
+        c.fill_rect(
+            Rect::new(r.x + 1.0, r.y, 1.0, r.h * 0.85),
+            Color::rgb(0xffffff).with_alpha(0x28),
+        );
+    } else {
+        c.fill_rect_gradient(
+            r.inset(0.4),
+            if down { KEY_DOWN } else { KEY_WHITE },
+            if down { KEY_DOWN } else { KEY_SHADE },
+            1.0,
+        );
+        c.fill_rect(
+            Rect::new(r.right() - 0.8, r.y, 0.8, r.h),
+            Color::rgb(0x6a6a6a),
+        );
+    }
+}
+
+fn paint_popup(c: &mut Canvas, v: &dyn Values, p: usize, anchor: Rect) {
+    c.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), SHADE);
+    let (names, lo) = choices(p);
+    let (all, rects) = popup_rects(anchor, names.len());
+    c.fill_rrect(all.inset(-2.0), 5.0, INK_DIM);
+    c.fill_rrect(all, 4.0, PAPER);
+    let now = v.plain(p).round() as i32 - lo;
+    for (i, (r, name)) in rects.iter().zip(names).enumerate() {
+        let on = i as i32 == now;
+        if on {
+            c.fill_rrect(r.inset(1.5), 3.0, BLUE);
+        }
+        let f = c.fit_font(VALUE, name, r.w - 10.0);
+        c.text_center(f, *r, if on { WHITE } else { INK }, name);
+    }
 }
 
 fn is_wave(p: usize) -> bool {
     let end = ids::OSC_BASE + 4 * ids::OSC_STRIDE;
     p >= ids::OSC_BASE && p < end && (p - ids::OSC_BASE) % ids::OSC_STRIDE == ids::osc::WAVE
+}
+
+fn is_lfo_wave(p: usize) -> bool {
+    p == lfo_param(0, ids::lfo::WAVE) || p == lfo_param(1, ids::lfo::WAVE)
 }
 
 /// The step an arpeggiator per-step parameter belongs to (0-based).
@@ -1303,23 +2295,6 @@ fn step_of(p: usize) -> Option<usize> {
         .iter()
         .find(|&&b| p >= b && p < b + 16)
         .map(|&b| p - b)
-}
-
-fn paint_popup(c: &mut Canvas, v: &dyn Values, p: usize, anchor: Rect) {
-    c.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), SHADE);
-    let (names, lo) = choices(p);
-    let (all, rects) = popup_rects(anchor, names.len());
-    c.fill_rrect(all.inset(-2.0), 7.0, EMBER);
-    c.fill_rrect(all, 6.0, LCD_BG);
-    let now = v.plain(p).round() as i32 - lo;
-    for (i, (r, name)) in rects.iter().zip(names).enumerate() {
-        let on = i as i32 == now;
-        if on {
-            c.fill_rrect(r.inset(1.5), 4.0, EMBER);
-        }
-        let f = c.fit_font(VALUE, name, r.w - 10.0);
-        c.text_center(f, *r, if on { DARK_TEXT } else { LCD_TEXT }, name);
-    }
 }
 
 // ---- labels ----------------------------------------------------------------------------------------------------
@@ -1349,8 +2324,10 @@ const PREFIXES: [&str; 20] = [
 ];
 
 /// What a name becomes where a label is a few letters wide.
-const SHORT: [(&str, &str); 38] = [
+const SHORT: [(&str, &str); 40] = [
+    ("Pitch Wheel", "Pitch"),
     ("Master Volume", "Master"),
+    ("Warm Drive", "Warm"),
     ("Master Tune", "Tune"),
     ("Polyphony", "Poly"),
     ("Voice Mode", "Mode"),
@@ -1410,7 +2387,7 @@ fn wave_icon(c: &mut Canvas, wave: i32, r: Rect) {
             (r.x + t * r.w, r.cy() - wave_shape(wave, t) * r.h * 0.45)
         })
         .collect();
-    c.polyline(&pts, 1.3, GOLD);
+    c.polyline(&pts, 1.5, CHIP);
 }
 
 /// One cycle of oscillator wave `wave` (see [`ids::WAVE_NAMES`]) at phase `t` in `[0, 1]`, for the icons.
@@ -1430,11 +2407,31 @@ fn wave_shape(wave: i32, t: f32) -> f32 {
     }
 }
 
+/// One cycle of LFO wave `wave` (see [`ids::LFO_WAVE_NAMES`]) at phase `t` in `[0, 1]`, for the icons.
+fn lfo_shape(wave: i32, t: f32) -> f32 {
+    let tau = std::f32::consts::TAU;
+    let tri = 1.0 - 4.0 * ((t + 0.25).rem_euclid(1.0) - 0.5).abs();
+    let pulse = |width: f32| if t < width { 1.0 } else { -1.0 };
+    match wave {
+        0 => (t * tau).sin(),
+        1 => tri,
+        2 => 2.0 * t - 1.0,
+        3 => 1.0 - 2.0 * t,
+        4 => pulse(0.5),
+        5 => pulse(0.25),
+        6 => pulse(0.125),
+        7 => [0.6, -0.3, 0.9, -0.8, 0.2][((t * 5.0) as usize).min(4)],
+        8 => (t * tau).sin() * 0.6 + (t * tau * 2.3).sin() * 0.4,
+        9 => ((t * 4.0).floor() / 3.0) * 2.0 - 1.0,
+        _ => (t * tau).sin().abs() * 2.0 - 1.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every screen: each part, with the display on each effect, each arpeggiator page and the LFO tab.
+    /// Every screen: each part, with the display on each effect and each arpeggiator page.
     fn screens() -> Vec<Ui> {
         let mut out = Vec::new();
         for part in 0..2 {
@@ -1442,18 +2439,12 @@ mod tests {
                 for page in 0..if fx == 0 { 2 } else { 1 } {
                     out.push(Ui {
                         part,
-                        tab: 0,
                         fx,
                         page,
-                        popup: None,
+                        ..Ui::default()
                     });
                 }
             }
-            out.push(Ui {
-                part,
-                tab: 1,
-                ..Ui::default()
-            });
         }
         out
     }
@@ -1472,6 +2463,10 @@ mod tests {
         i.w < 0.01 || i.h < 0.01
     }
 
+    fn key(h: &Hit) -> bool {
+        matches!(h.kind, Kind::Key(_))
+    }
+
     #[test]
     fn every_screen_lays_out_inside_the_window_without_overlap() {
         for ui in screens() {
@@ -1479,6 +2474,10 @@ mod tests {
             for (i, a) in hits.iter().enumerate() {
                 assert!(inside(window(), a.r), "{ui:?}: {a:?} leaves the window");
                 for b in &hits[i + 1..] {
+                    // The black keys stand on the white ones.
+                    if key(a) && key(b) {
+                        continue;
+                    }
                     assert!(apart(a.r, b.r), "{ui:?}: {a:?} overlaps {b:?}");
                 }
             }
@@ -1491,15 +2490,46 @@ mod tests {
             for h in layout(&ui) {
                 let (w, hh) = match h.kind {
                     Kind::Fader => (14.0, 50.0),
-                    _ => (14.0, 12.0),
+                    Kind::Key(n) if matches!(n % 12, 1 | 3 | 6 | 8 | 10) => (7.0, 30.0),
+                    Kind::Key(_) => (14.0, 60.0),
+                    _ => (14.0, 10.0),
                 };
                 assert!(h.r.w >= w && h.r.h >= hh, "{ui:?}: {h:?}");
             }
         }
     }
 
+    /// The parameters the design draws no control for: they stay in the table (a song or a host reaches them) and the
+    /// sound, but the screen shows only what the design shows.
+    const UNDRAWN: [&str; 24] = [
+        "master_tune",
+        "porta_mode",
+        "vel_amp",
+        "pa_on",
+        "pa_pan",
+        "pb_on",
+        "pb_pan",
+        "f1_on",
+        "f1_in_b",
+        "f1_vol",
+        "f1_pan",
+        "f2_on",
+        "f2_in_b",
+        "f2_vol",
+        "f2_pan",
+        "l1_sync",
+        "l1_div",
+        "l1_phase",
+        "l2_sync",
+        "l2_div",
+        "l2_phase",
+        "arp_hold",
+        "arp_steps",
+        "patch",
+    ];
+
     #[test]
-    fn every_parameter_has_a_control_on_some_screen() {
+    fn every_parameter_has_a_control_unless_the_design_leaves_it_out() {
         let mut seen = vec![false; ids::COUNT];
         for ui in screens() {
             for h in layout(&ui) {
@@ -1508,19 +2538,32 @@ mod tests {
                 }
             }
         }
-        // A source the screen sets for its rows has no control of its own.
+        // A source the screen sets for its rows has no control of its own; a filter's second input rides on its first
+        // (the input select).
         let missing: Vec<_> = (0..ids::COUNT)
             .filter(|&i| !seen[i] && !derived_source(i))
             .map(|i| SPECS[i].id)
+            .filter(|id| !UNDRAWN.contains(id))
             .collect();
         assert!(missing.is_empty(), "no control for {missing:?}");
+        for id in UNDRAWN {
+            let i = SPECS.iter().position(|s| s.id == id).expect(id);
+            assert!(!seen[i], "{id} has a control after all");
+        }
     }
 
     #[test]
-    fn no_parameter_has_two_controls_on_one_screen() {
+    fn no_parameter_has_two_controls_on_one_screen_but_the_filter_control_mirrors() {
         for ui in screens() {
             let mut seen = std::collections::HashSet::new();
+            let mirrored = [
+                filt_param(ui.part, ids::filt::CUTOFF),
+                filt_param(ui.part, ids::filt::RES),
+            ];
             for h in layout(&ui).iter().filter(|h| h.is_param()) {
+                if mirrored.contains(&h.param) {
+                    continue;
+                }
                 assert!(
                     seen.insert(h.param),
                     "{ui:?}: {} is twice",
@@ -1535,7 +2578,7 @@ mod tests {
         for ui in screens() {
             for h in layout(&ui)
                 .iter()
-                .filter(|h| h.is_param() && dropdown(h.param))
+                .filter(|h| h.kind == Kind::Cycle && dropdown(h.param))
             {
                 let open = Ui {
                     popup: Some(h.param),
@@ -1561,15 +2604,45 @@ mod tests {
     }
 
     #[test]
-    fn selectors_with_many_names_are_drop_downs_and_short_ones_step() {
+    fn the_menu_lists_its_entries_inside_the_window() {
+        let open = Ui {
+            menu: true,
+            ..Ui::default()
+        };
+        let hits = layout(&open);
+        assert_eq!(hits[0].kind, Kind::Dismiss);
+        let items: Vec<_> = hits
+            .iter()
+            .filter(|h| matches!(h.kind, Kind::MenuItem(_)))
+            .collect();
+        assert_eq!(items.len(), MENU_ITEMS.len());
+        for a in items {
+            assert!(inside(window(), a.r) && a.r.h >= 22.0, "{a:?}");
+        }
+    }
+
+    #[test]
+    fn selectors_with_many_names_are_drop_downs_and_boxes_with_arrows_step() {
         assert!(dropdown(mat_param(8, ids::mat::SRC)));
         assert!(dropdown(mat_param(0, ids::mat::DST)));
-        assert!(dropdown(osc_param(0, ids::osc::WAVE)));
         assert!(dropdown(ids::ARP_MODE));
+        assert!(dropdown(ids::ARP_WRAP));
         assert!(!dropdown(ids::MONO));
         assert!(!dropdown(filt_param(0, ids::filt::SLOPE)));
         assert!(!dropdown(filt_param(0, ids::filt::TYPE)));
         assert!(!dropdown(ids::MASTER_VOL));
+        // What the design draws with arrows steps; no list.
+        let hits = layout(&Ui::default());
+        for p in [
+            osc_param(0, ids::osc::WAVE),
+            ids::ARP_WRAP,
+            ids::POLY,
+            filt_param(0, ids::filt::TYPE),
+            lfo_param(0, ids::lfo::WAVE),
+        ] {
+            let h = hits.iter().find(|h| h.param == p).expect(SPECS[p].id);
+            assert_eq!(h.kind, Kind::Spin, "{}", SPECS[p].id);
+        }
     }
 
     #[test]
@@ -1601,6 +2674,12 @@ mod tests {
         }
         fn text(&self, p: usize) -> String {
             format!("{}", SPECS[p].default)
+        }
+        fn levels(&self) -> (f32, f32) {
+            (0.7, 0.4)
+        }
+        fn voices(&self) -> usize {
+            2
         }
     }
 
@@ -1637,6 +2716,7 @@ mod tests {
     #[test]
     fn widgets_follow_the_spec() {
         assert_eq!(widget(ids::ARP_ON), Kind::Toggle);
+        assert_eq!(widget(ids::WARM), Kind::Toggle);
         assert_eq!(widget(ids::ARP_MODE), Kind::Cycle);
         assert_eq!(widget(ids::MASTER_VOL), Kind::Knob);
         assert!(is_int(ids::POLY));
@@ -1677,7 +2757,83 @@ mod tests {
         ui.apply(Nav::Tab(9));
         ui.apply(Nav::Fx(99));
         ui.apply(Nav::Page(5));
-        assert_eq!((ui.part, ui.tab, ui.fx, ui.page), (1, 1, 7, 1));
+        ui.apply(Nav::Menu);
+        assert_eq!(
+            (ui.part, ui.tab, ui.fx, ui.page, ui.menu),
+            (1, 3, 7, 1, true)
+        );
+        ui.apply(Nav::Menu);
+        assert!(!ui.menu);
+    }
+
+    #[test]
+    fn the_input_select_steps_through_a_b_and_both() {
+        assert_eq!(route_name(1.0, 0.0), "A");
+        assert_eq!(route_name(0.0, 1.0), "B");
+        assert_eq!(route_name(1.0, 1.0), "AB");
+        assert_eq!(route_name(0.5, 0.2), "R");
+        assert_eq!(route_step(1.0, 0.0, 1), (0.0, 1.0));
+        assert_eq!(route_step(0.0, 1.0, 1), (1.0, 1.0));
+        assert_eq!(route_step(1.0, 1.0, 1), (1.0, 0.0));
+        assert_eq!(route_step(1.0, 0.0, -1), (1.0, 1.0));
+        // A mix of its own goes to the first (up) or last (down) route.
+        assert_eq!(route_step(0.5, 0.2, 1), (1.0, 0.0));
+        assert_eq!(route_step(0.5, 0.2, -1), (1.0, 1.0));
+    }
+
+    #[test]
+    fn part_sync_mirrors_the_controls_the_parts_share() {
+        use ids::{filt, osc, part};
+        assert_eq!(mirror(osc_param(0, osc::VOL)), Some(osc_param(2, osc::VOL)));
+        assert_eq!(
+            mirror(osc_param(3, osc::DETUNE)),
+            Some(osc_param(1, osc::DETUNE))
+        );
+        assert_eq!(
+            mirror(part_param(0, part::ATT)),
+            Some(part_param(1, part::ATT))
+        );
+        assert_eq!(
+            mirror(part_param(1, part::REL)),
+            Some(part_param(0, part::REL))
+        );
+        // A part's level, pan and switch are its own.
+        assert_eq!(mirror(part_param(0, part::LEVEL)), None);
+        assert_eq!(mirror(part_param(0, part::ON)), None);
+        assert_eq!(
+            mirror(filt_param(0, filt::CUTOFF)),
+            Some(filt_param(1, filt::CUTOFF))
+        );
+        assert_eq!(mirror(filt_param(0, filt::IN_A)), None);
+        assert_eq!(mirror(filt_param(1, filt::VOL)), None);
+        assert_eq!(mirror(ids::MASTER_VOL), None);
+        assert_eq!(mirror(ids::MAT_BASE), None);
+    }
+
+    #[test]
+    fn the_keyboard_is_five_octaves_of_distinct_notes_with_the_black_keys_on_top() {
+        let hits = layout(&Ui::default());
+        let keys: Vec<_> = hits.iter().filter(|h| key(h)).collect();
+        assert_eq!(keys.len(), 35 + 25);
+        let notes: std::collections::BTreeSet<u8> = keys
+            .iter()
+            .map(|h| match h.kind {
+                Kind::Key(n) => n,
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(notes.len(), 60);
+        assert_eq!(*notes.iter().next().unwrap(), KEY_FIRST);
+        assert_eq!(*notes.iter().last().unwrap(), KEY_FIRST + 59);
+        // The last hit at a point on a black key is the black key.
+        for h in keys.iter().filter(|h| h.r.w < 9.0) {
+            let top = hits
+                .iter()
+                .rev()
+                .find(|o| o.r.contains(h.r.cx(), h.r.y + 2.0))
+                .unwrap();
+            assert_eq!(top.kind, h.kind);
+        }
     }
 
     #[test]
@@ -1691,5 +2847,11 @@ mod tests {
             ..Ui::default()
         };
         assert_eq!(paint(&mut c, &Defaults, &open, None, None), layout(&open));
+        let menu = Ui {
+            menu: true,
+            key: Some(60),
+            ..Ui::default()
+        };
+        assert_eq!(paint(&mut c, &Defaults, &menu, None, None), layout(&menu));
     }
 }

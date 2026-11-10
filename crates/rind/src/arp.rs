@@ -170,7 +170,12 @@ impl Arp {
         if mode != 7 {
             sorted[..m].sort_by_key(|h| h.note);
         }
-        let total = m * oct;
+        let wrap = p[ARP_WRAP] as usize;
+        let total = if wrap > 0 {
+            (m * oct).min(wrap)
+        } else {
+            m * oct
+        };
         let k = self.step - 1;
         let idx = match mode {
             0 => k % total,

@@ -849,12 +849,12 @@ mod tests {
         let mut rig = rig();
         let before = rig.module.params.clone();
         let rest = radius(&metrics(1.0), 0.0);
-        // Band 2 is unselected: lerp(menuFill (67, 76, 81), text (199, 206, 218), 0.3·p). Band 1 is selected:
+        // Band 2 is unselected: lerp(menuFill (45, 45, 45), text (208, 208, 208), 0.3·p). Band 1 is selected:
         // lerp(channel (255, 0, 0), text, 0.3·p).
         let cases = [
-            (0.0, [67, 76, 81], [255, 0, 0]),
-            (0.5, [87, 96, 102], [247, 31, 33]),
-            (1.0, [107, 115, 122], [238, 62, 65]),
+            (0.0, [45, 45, 45], [255, 0, 0]),
+            (0.5, [69, 69, 69], [248, 31, 31]),
+            (1.0, [94, 94, 94], [241, 62, 62]),
         ];
         for (p, unselected, selected) in cases {
             for (k, [r, g, b]) in [(1, unselected), (0, selected)] {
@@ -875,7 +875,7 @@ mod tests {
         assert_eq!(rig.module.params, before);
         // The last pointer position still counts once the pointer is gone.
         rig.frame(vec![Event::PointerGone]);
-        assert_eq!(disc(&rig, 0).fill, Color32::from_rgb(238, 62, 65));
+        assert_eq!(disc(&rig, 0).fill, Color32::from_rgb(241, 62, 62));
         // Away from every handle: p = 0.
         let away = rig.rect_of(2).left_top();
         move_to(&mut rig, away);

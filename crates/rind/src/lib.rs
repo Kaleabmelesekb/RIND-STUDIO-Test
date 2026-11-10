@@ -28,7 +28,9 @@ pub mod fx;
 pub mod ids;
 pub mod osc;
 pub mod params;
+pub mod presets;
 pub mod ranges;
+pub mod shared;
 pub mod util;
 pub mod view;
 pub mod voice;
@@ -117,6 +119,13 @@ impl Plugin for Rind {
         let (a, b) = channels.split_at_mut(1);
         let (l, r) = (&mut *a[0], &mut *b[0]);
 
+        while let Some((note, on)) = self.params.shared.pop_key() {
+            if on {
+                self.engine.note_on(note, 0.8);
+            } else {
+                self.engine.note_off(note);
+            }
+        }
         let mut next = ctx.next_event();
         let mut pos = 0;
         while pos < n {
@@ -143,6 +152,11 @@ impl Plugin for Rind {
                 .render(&self.snap, tempo, &mut l[pos..end], &mut r[pos..end]);
             pos = end;
         }
+        let peak = |x: &[f32]| x.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        self.params
+            .shared
+            .set_levels(peak(&l[..n]), peak(&r[..n]), 0.9);
+        self.params.shared.set_voices(self.engine.active_voices());
         ProcessStatus::Normal
     }
 }

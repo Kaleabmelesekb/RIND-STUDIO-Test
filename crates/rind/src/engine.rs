@@ -358,8 +358,8 @@ impl Engine {
                 env(ENV_BASE, step_rate),
                 env(ENV_BASE + ENV_STRIDE, step_rate),
             ],
-            bend: self.bend,
-            wheel: self.wheel,
+            bend: (self.bend + p[WHEEL_PITCH]).clamp(-1.0, 1.0),
+            wheel: self.wheel.max(p[WHEEL_MOD]),
             touch: self.touch,
             lfo_hz,
         };

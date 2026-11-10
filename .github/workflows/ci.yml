@@ -7,11 +7,18 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Full debuginfo made the dozens of test binaries so large that the linker died with a bus error (a full runner disk).
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          df -h /
       - uses: actions/checkout@v4
       # Keep lint rules aligned with the validated development toolchain.
       - uses: dtolnay/rust-toolchain@1.91.0
