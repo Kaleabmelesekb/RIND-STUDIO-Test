@@ -164,7 +164,7 @@ pub const DIV_BEATS: [f32; 15] = [
     0.0625,
 ];
 
-pub const COUNT: usize = 276;
+pub const COUNT: usize = 279;
 pub const MASTER_VOL: usize = 0;
 pub const MASTER_TUNE: usize = 1;
 pub const POLY: usize = 2;
@@ -442,6 +442,10 @@ pub const PORTA_SCALE: usize = 272;
 pub const WHEEL_MOD: usize = 273;
 pub const WHEEL_PITCH: usize = 274;
 pub const PATCH: usize = 275;
+/// The global filter (the FILTER CONTROL panel): its own cutoff, resonance and key track, apart from filters A and B.
+pub const GF_CUTOFF: usize = 276;
+pub const GF_RES: usize = 277;
+pub const GF_KEY: usize = 278;
 pub const PART_BASE: usize = 8;
 pub const PART_STRIDE: usize = 7;
 pub mod part {
@@ -2502,5 +2506,26 @@ pub static SPECS: [Spec; COUNT] = [
         kind: Kind::Int(0, 7),
         default: 0.0,
         fmt: Fmt::Int,
+    },
+    Spec {
+        id: "gf_cutoff",
+        name: "Global Filter Cutoff",
+        kind: Kind::Skew(20.0, 20000.0, -2.5),
+        default: 20000.0,
+        fmt: Fmt::Hz,
+    },
+    Spec {
+        id: "gf_res",
+        name: "Global Filter Resonance",
+        kind: Kind::Lin(0.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
+    },
+    Spec {
+        id: "gf_key",
+        name: "Global Filter Key Track",
+        kind: Kind::Lin(0.0, 1.0),
+        default: 0.0,
+        fmt: Fmt::Pct,
     },
 ];

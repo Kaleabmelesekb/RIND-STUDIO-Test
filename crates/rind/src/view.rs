@@ -21,6 +21,17 @@ pub const H: u32 = 521;
 
 /// Drag length in px for the whole range of a knob.
 pub const KNOB_PX: f32 = 150.0;
+/// A spin box counts one step per this many px of drag.
+pub const SPIN_STEP_PX: f32 = 10.0;
+
+/// The drag length (px) over the whole range of spin box `p`: a step is [`SPIN_STEP_PX`] (a range that is not whole
+/// takes as long as a knob).
+pub fn spin_px(p: usize) -> f32 {
+    match ids::SPECS[p].kind {
+        ids::Kind::Int(lo, hi) if hi > lo => (hi - lo) as f32 * SPIN_STEP_PX,
+        _ => KNOB_PX,
+    }
+}
 
 /// A design pixel (of 1278 x 832) in logical pixels.
 const K: f32 = 800.0 / 1278.0;
@@ -125,8 +136,8 @@ pub struct Ui {
     pub popup: Option<usize>,
     /// The display's menu is open.
     pub menu: bool,
-    /// The key of the on-screen keyboard held down.
-    pub key: Option<u8>,
+    /// The keys of the on-screen keyboard held down, one bit per note (any number at once).
+    pub keys: u128,
 }
 
 impl Ui {
@@ -856,7 +867,8 @@ fn filter_panels(g: &mut Page, n: usize) {
         "DRIVE",
     );
 
-    // The filter control: the same filter's cutoff and resonance, warm drive and key track.
+    // The filter control: the global filter (its own cutoff, resonance and key track, apart from filters A and B) and the
+    // warm drive.
     g.frame(
         "FILTER CONTROL",
         Skin::Graphite,
@@ -866,33 +878,12 @@ fn filter_panels(g: &mut Page, n: usize) {
         307.0,
         124.0,
     );
-    g.knob(
-        filt_param(n, filt::CUTOFF),
-        85.0,
-        430.0,
-        20.0,
-        36.0,
-        "CUTOFF",
-    );
-    g.knob(
-        filt_param(n, filt::RES),
-        167.0,
-        432.0,
-        24.0,
-        40.0,
-        "RESONANCE",
-    );
+    g.knob(ids::GF_CUTOFF, 85.0, 430.0, 20.0, 36.0, "CUTOFF");
+    g.knob(ids::GF_RES, 167.0, 432.0, 24.0, 40.0, "RESONANCE");
     g.put(245.0, 408.0, "WARM", Align::Center, LABEL, TEXT);
     g.put(245.0, 420.0, "DRIVE", Align::Center, LABEL, TEXT);
     g.lamp(ids::WARM, Kind::Toggle, 231.0, 435.0, 30.0, 22.0);
-    g.knob(
-        filt_param(n, filt::KEY),
-        304.0,
-        442.0,
-        16.0,
-        30.0,
-        "KEY TRACK",
-    );
+    g.knob(ids::GF_KEY, 304.0, 442.0, 16.0, 30.0, "KEY TRACK");
 }
 
 fn mod_env_panel(g: &mut Page, n: usize, x: f32, y: f32) {
@@ -1753,7 +1744,7 @@ fn paint_item(c: &mut Canvas, v: &dyn Values, ui: &Ui, it: &Item, held: bool) {
             c,
             it.r,
             black,
-            matches!(it.kind, Kind::Key(n) if ui.key == Some(n)),
+            matches!(it.kind, Kind::Key(n) if ui.keys >> n.min(127) & 1 == 1),
         ),
     }
     if !it.label.is_empty() && !matches!(it.look, Look::Knob(_)) {
@@ -2324,7 +2315,10 @@ const PREFIXES: [&str; 20] = [
 ];
 
 /// What a name becomes where a label is a few letters wide.
-const SHORT: [(&str, &str); 40] = [
+const SHORT: [(&str, &str); 43] = [
+    ("Global Filter Cutoff", "Cutoff"),
+    ("Global Filter Resonance", "Resonance"),
+    ("Global Filter Key Track", "Key Track"),
     ("Pitch Wheel", "Pitch"),
     ("Master Volume", "Master"),
     ("Warm Drive", "Warm"),
@@ -2501,7 +2495,7 @@ mod tests {
 
     /// The parameters the design draws no control for: they stay in the table (a song or a host reaches them) and the
     /// sound, but the screen shows only what the design shows.
-    const UNDRAWN: [&str; 24] = [
+    const UNDRAWN: [&str; 26] = [
         "master_tune",
         "porta_mode",
         "vel_amp",
@@ -2525,6 +2519,8 @@ mod tests {
         "l2_phase",
         "arp_hold",
         "arp_steps",
+        "f1_key",
+        "f2_key",
         "patch",
     ];
 
@@ -2849,9 +2845,27 @@ mod tests {
         assert_eq!(paint(&mut c, &Defaults, &open, None, None), layout(&open));
         let menu = Ui {
             menu: true,
-            key: Some(60),
+            keys: 1 << 60 | 1 << 64,
             ..Ui::default()
         };
         assert_eq!(paint(&mut c, &Defaults, &menu, None, None), layout(&menu));
+    }
+
+    #[test]
+    fn the_filter_control_is_its_own_filter() {
+        for part in 0..2 {
+            let ui = Ui {
+                part,
+                ..Ui::default()
+            };
+            let hits = layout(&ui);
+            let count = |p: usize| hits.iter().filter(|h| h.param == p && h.is_param()).count();
+            for p in [ids::GF_CUTOFF, ids::GF_RES, ids::GF_KEY] {
+                assert_eq!(count(p), 1, "{}", ids::SPECS[p].id);
+            }
+            for f in [ids::filt::CUTOFF, ids::filt::RES] {
+                assert_eq!(count(filt_param(part, f)), 1, "filter {part} field {f}");
+            }
+        }
     }
 }

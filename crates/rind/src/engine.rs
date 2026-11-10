@@ -6,6 +6,7 @@
 
 use crate::arp::{Arp, ArpEv};
 use crate::env::EnvCoef;
+use crate::filter::{Filter, Setup};
 use crate::fx::Fx;
 use crate::ids::*;
 use crate::params::{RindParams, Snapshot};
@@ -35,6 +36,8 @@ pub struct Engine {
     touch: f32,
     lfo_phase: [f32; 2],
     master: f32,
+    /// The global filter (the FILTER CONTROL panel) on the sum of the voices.
+    gfilter: Filter,
 }
 
 impl Engine {
@@ -57,6 +60,7 @@ impl Engine {
             touch: 0.0,
             lfo_phase: [0.0; 2],
             master: 0.0,
+            gfilter: Filter::default(),
         }
     }
 
@@ -71,6 +75,7 @@ impl Engine {
         self.last_note = None;
         self.pedal = false;
         self.fx = Fx::new(self.sr);
+        self.gfilter.reset();
         self.primed = false;
     }
 
@@ -368,6 +373,19 @@ impl Engine {
                 v.render(&s, l, r);
             }
         }
+        // The global filter: a 24 dB low pass on everything the voices made, apart from filters A and B. Wide open with
+        // no resonance it is out of the signal path.
+        if p[GF_CUTOFF] < 19_900.0 || p[GF_RES] > 0.001 {
+            let key = self.last_note.unwrap_or(60.0);
+            let hz = p[GF_CUTOFF] * 2f32.powf(p[GF_KEY] * (key - 60.0) / 12.0);
+            let f = Setup::new(0, true, hz.clamp(20.0, 20_000.0), p[GF_RES], 0.0, sr);
+            for i in 0..n {
+                l[i] = self.gfilter.tick(0, l[i], &f);
+                r[i] = self.gfilter.tick(1, r[i], &f);
+            }
+        } else {
+            self.gfilter.reset();
+        }
         // The master volume, smoothly.
         let target_gain = p[MASTER_VOL] * p[MASTER_VOL];
         let from = self.master;
@@ -522,5 +540,29 @@ mod tests {
         }
         let (l, r) = play(&mut e, &p, 200);
         assert!(l.iter().chain(&r).all(|s| s.is_finite() && s.abs() <= 1.0));
+    }
+
+    #[test]
+    fn the_global_filter_darkens_everything_apart_from_filters_a_and_b() {
+        let loud = |p: &Snapshot| {
+            let mut e = Engine::new(44_100.0);
+            play(&mut e, p, 1);
+            e.note_on(72, 1.0);
+            let (l, _) = play(&mut e, p, 200);
+            rms(&l[l.len() / 2..])
+        };
+        let open = defaults();
+        let mut shut = defaults();
+        shut[GF_CUTOFF] = 300.0;
+        assert!(loud(&shut) < 0.3 * loud(&open));
+        // Filters A and B keep their own cutoff: moving the global one leaves them where they were.
+        assert_eq!(
+            shut[FILT_BASE + filt::CUTOFF],
+            open[FILT_BASE + filt::CUTOFF]
+        );
+        // Wide open it is out of the path: the sound is what it was without a global filter.
+        let mut wide = defaults();
+        wide[GF_CUTOFF] = 20_000.0;
+        assert_eq!(loud(&wide), loud(&open));
     }
 }
