@@ -40,8 +40,12 @@ pub mod zip;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod update;
 
-/// Display name, used for the window title, and the name of the app's data and settings folders.
-pub const APP_NAME: &str = "Honeydew";
+/// Display name, used for the window title and every message that names the app.
+pub const APP_NAME: &str = "Rind Studio";
+
+/// The name of the app's data and settings folders. It stays what the app was first called, so that a user's songs and
+/// settings are found where they were: only the name shown changed.
+pub const DATA_DIR_NAME: &str = "Honeydew";
 
 /// The app's former name: its data and settings folders, and its web storage keys, were named after it.
 pub const LEGACY_APP_NAME: &str = "Studio";

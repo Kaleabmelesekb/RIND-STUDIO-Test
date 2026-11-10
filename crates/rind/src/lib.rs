@@ -31,6 +31,7 @@ pub mod params;
 pub mod presets;
 pub mod ranges;
 pub mod shared;
+pub mod touch;
 pub mod util;
 pub mod view;
 pub mod voice;

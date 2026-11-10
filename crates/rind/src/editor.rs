@@ -17,6 +17,7 @@
 #![cfg_attr(not(feature = "embed"), allow(dead_code))]
 
 use std::any::Any;
+use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(feature = "embed")]
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -68,6 +69,22 @@ struct Drag {
     v: f32,
     px: f32,
     axis: Axis,
+    /// A spin box's press: up (1) or down (-1) by the half pressed, done on release when the press did not move.
+    tap: Option<i32>,
+    /// How far the press has moved (px).
+    travel: f32,
+}
+
+/// The pointer id of the mouse; a finger's is the one its touch has.
+pub const MOUSE: u64 = u64::MAX;
+
+/// What one pointer (the mouse or a finger) is doing: each finger has its own drag and its own key, so a chord plays
+/// while a wheel is held.
+#[derive(Default)]
+struct Pointer {
+    drag: Option<Drag>,
+    held: Option<u8>,
+    at: (f32, f32),
 }
 
 /// The values of a [`Vals`], by table index, and the meters and voice count the audio thread shares.
@@ -96,13 +113,10 @@ pub struct Logic {
     pub vals: Vals,
     ui: Ui,
     hits: Vec<Hit>,
-    drag: Option<Drag>,
-    pressed: Option<usize>,
+    ptrs: HashMap<u64, Pointer>,
     last: Option<usize>,
     /// The audio thread's meters and the queue the on-screen keyboard plays through; none in the tests that need neither.
     shared: Option<Arc<Shared>>,
-    /// The note of the on-screen key held down.
-    held: Option<u8>,
     /// What each of the four patch slots held when it was left (a slot never visited keeps what is on the screen).
     slots: [Option<Vec<f32>>; 4],
 }
@@ -113,6 +127,8 @@ const FINE: f32 = 0.25;
 const WHEEL_STEP: f32 = 0.02;
 /// A press on a spin box that is not a whole-number range moves it this much of its range.
 const SPIN_STEP: f32 = 0.05;
+/// A press on a spin box that moves less than this (px) is a tap.
+const TAP_SLOP: f32 = 4.0;
 
 impl Logic {
     pub fn new(vals: Vals) -> Self {
@@ -121,11 +137,9 @@ impl Logic {
             vals,
             hits: view::layout(&ui),
             ui,
-            drag: None,
-            pressed: None,
+            ptrs: HashMap::new(),
             last: None,
             shared: None,
-            held: None,
             slots: Default::default(),
         }
     }
@@ -136,13 +150,33 @@ impl Logic {
         self
     }
 
+    /// The parameter a pointer is dragging.
+    fn pressed(&self) -> Option<usize> {
+        self.ptrs.values().find_map(|p| p.drag.map(|d| d.param))
+    }
+
+    /// Some pointer is dragging a control.
+    #[cfg(test)]
+    fn dragging(&self) -> bool {
+        self.ptrs.values().any(|p| p.drag.is_some())
+    }
+
+    /// The keys held down, by every pointer, for the keyboard to light.
+    fn sync_keys(&mut self) {
+        self.ui.keys = self
+            .ptrs
+            .values()
+            .filter_map(|p| p.held)
+            .fold(0u128, |m, n| m | (1u128 << n.min(127)));
+    }
+
     /// Paints the editor and keeps its hit regions.
     pub fn paint(&mut self, c: &mut Canvas) {
         let hits = view::paint(
             c,
             &Shown(&self.vals, self.shared.as_deref()),
             &self.ui,
-            self.pressed,
+            self.pressed(),
             self.last,
         );
         self.hits = hits;
@@ -221,27 +255,37 @@ impl Logic {
         self.put(p, default);
     }
 
-    fn begin_drag(&mut self, p: usize, px: f32, axis: Axis, at: Option<f32>) -> Vec<Act> {
-        let id = SPECS[p].id;
+    fn begin_drag(
+        &mut self,
+        id: u64,
+        p: usize,
+        px: f32,
+        axis: Axis,
+        at: Option<f32>,
+        tap: Option<i32>,
+    ) -> Vec<Act> {
+        let pid = SPECS[p].id;
         let twin = self.twin(p);
-        self.vals.begin(id);
+        self.vals.begin(pid);
         if let Some(q) = twin {
             self.vals.begin(SPECS[q].id);
         }
         if let Some(v) = at {
-            self.vals.set(id, v);
+            self.vals.set(pid, v);
             if let Some(q) = twin {
                 self.vals.set(SPECS[q].id, v);
             }
         }
-        self.drag = Some(Drag {
+        let v = at.unwrap_or_else(|| self.vals.norm(SPECS[p].id));
+        self.ptrs.entry(id).or_default().drag = Some(Drag {
             param: p,
             twin,
-            v: at.unwrap_or_else(|| self.vals.norm(id)),
+            v,
             px,
             axis,
+            tap,
+            travel: 0.0,
         });
-        self.pressed = Some(p);
         vec![Act::Repaint, Act::Lock]
     }
 
@@ -366,32 +410,43 @@ impl Logic {
 
     // ---- the on-screen keyboard ----------------------------------------------------------------------------------
 
-    fn press_key(&mut self, note: u8) {
-        self.release_key();
+    /// Pointer `id` presses key `note` (and lets go of the one it held).
+    fn press_key(&mut self, id: u64, note: u8) {
+        self.release_key(id);
         if let Some(s) = &self.shared {
             s.push_key(note, true);
         }
-        self.held = Some(note);
-        self.ui.key = Some(note);
+        self.ptrs.entry(id).or_default().held = Some(note);
+        self.sync_keys();
     }
 
-    fn release_key(&mut self) {
-        if let Some(note) = self.held.take()
+    /// Pointer `id` lets go of its key; the note stops unless another pointer holds the same key.
+    fn release_key(&mut self, id: u64) {
+        let Some(note) = self.ptrs.get_mut(&id).and_then(|p| p.held.take()) else {
+            return;
+        };
+        if !self.ptrs.values().any(|p| p.held == Some(note))
             && let Some(s) = &self.shared
         {
             s.push_key(note, false);
         }
-        self.ui.key = None;
+        self.sync_keys();
     }
 
     // ---- input ---------------------------------------------------------------------------------------------------
 
-    /// A press at (`x`, `y`) in logical px.
+    /// A mouse press at (`x`, `y`) in logical px.
     pub fn down(&mut self, x: f32, y: f32, btn: Btn, m: Mods) -> Vec<Act> {
+        self.down_as(MOUSE, x, y, btn, m)
+    }
+
+    /// A press of pointer `id` at (`x`, `y`) in logical px.
+    fn down_as(&mut self, id: u64, x: f32, y: f32, btn: Btn, m: Mods) -> Vec<Act> {
         let Some(h) = self.hit(x, y) else {
             return Vec::new();
         };
         let p = h.param;
+        self.ptrs.entry(id).or_default().at = (x, y);
         match h.kind {
             Kind::Nav(n) => {
                 if btn == Btn::Left {
@@ -436,7 +491,7 @@ impl Logic {
             // A key plays while it is held.
             Kind::Key(note) => {
                 if btn == Btn::Left {
-                    self.press_key(note);
+                    self.press_key(id, note);
                     return vec![Act::Repaint];
                 }
                 return Vec::new();
@@ -468,7 +523,11 @@ impl Logic {
                         self.relayout();
                     }
                     Kind::Cycle | Kind::Toggle => self.step(p, 1, true),
-                    Kind::Spin => self.spin(p, up),
+                    // A spin box steps on a tap and counts up and down as the press is dragged.
+                    Kind::Spin => {
+                        let px = view::spin_px(p);
+                        return self.begin_drag(id, p, px, Axis::Up, None, Some(up));
+                    }
                     Kind::Route => self.route(p, up),
                     // A lamp or switch on a continuous parameter flips between its ends.
                     Kind::Switch(_) => {
@@ -479,13 +538,17 @@ impl Logic {
                         };
                         self.put(p, v);
                     }
-                    Kind::Knob => return self.begin_drag(p, view::KNOB_PX, Axis::Up, None),
-                    Kind::Num => return self.begin_drag(p, view::NUM_PX, Axis::Up, None),
-                    Kind::Wheel => return self.begin_drag(p, view::WHEEL_PX, Axis::Up, None),
+                    Kind::Knob => {
+                        return self.begin_drag(id, p, view::KNOB_PX, Axis::Up, None, None);
+                    }
+                    Kind::Num => return self.begin_drag(id, p, view::NUM_PX, Axis::Up, None, None),
+                    Kind::Wheel => {
+                        return self.begin_drag(id, p, view::WHEEL_PX, Axis::Up, None, None);
+                    }
                     Kind::Fader => {
                         let at = view::fader_norm(h.r, y);
                         let px = h.r.h - 2.0 * view::FADER_PAD;
-                        return self.begin_drag(p, px, Axis::Up, Some(at));
+                        return self.begin_drag(id, p, px, Axis::Up, Some(at), None);
                     }
                     Kind::Nav(_)
                     | Kind::Item(_)
@@ -498,15 +561,21 @@ impl Logic {
         vec![Act::Repaint]
     }
 
-    /// Movement of a locked drag in logical px since the last event.
-    pub fn delta(&mut self, _dx: f32, dy: f32, m: Mods) -> Vec<Act> {
+    /// Movement of the mouse's locked drag in logical px since the last event.
+    pub fn delta(&mut self, dx: f32, dy: f32, m: Mods) -> Vec<Act> {
+        self.delta_as(MOUSE, dx, dy, m)
+    }
+
+    fn delta_as(&mut self, id: u64, _dx: f32, dy: f32, m: Mods) -> Vec<Act> {
         let Some(Drag {
             param,
             twin,
             v,
             px,
             axis,
-        }) = self.drag
+            tap,
+            travel,
+        }) = self.ptrs.get(&id).and_then(|p| p.drag)
         else {
             return Vec::new();
         };
@@ -514,24 +583,42 @@ impl Logic {
         let moved = match axis {
             Axis::Up => -dy,
         };
-        let v = (v + moved * fine / px).clamp(0.0, 1.0);
-        self.vals.set(SPECS[param].id, v);
-        if let Some(q) = twin {
-            self.vals.set(SPECS[q].id, v);
+        let reached = (v + moved * fine / px).clamp(0.0, 1.0);
+        // A press on a spin box that has not moved yet is still a tap: nothing changes until it has.
+        let travel = travel + dy.abs();
+        let tapping = tap.is_some() && travel < TAP_SLOP;
+        if !tapping {
+            self.vals.set(SPECS[param].id, reached);
+            if let Some(q) = twin {
+                self.vals.set(SPECS[q].id, reached);
+            }
         }
-        self.drag = Some(Drag {
+        let keep = if tapping { v } else { reached };
+        self.ptrs.entry(id).or_default().drag = Some(Drag {
             param,
             twin,
-            v,
+            v: keep,
             px,
             axis,
+            tap,
+            travel,
         });
-        vec![Act::Repaint]
+        if tapping {
+            Vec::new()
+        } else {
+            vec![Act::Repaint]
+        }
     }
 
-    /// The press ends: a drag lets go (the pitch wheel springs back to the middle) and a held key stops.
+    /// The mouse's press ends.
     pub fn up(&mut self) -> Vec<Act> {
-        if let Some(drag) = self.drag.take() {
+        self.up_as(MOUSE)
+    }
+
+    /// The press of pointer `id` ends: its drag lets go (the pitch wheel springs back to the middle, a spin box that did
+    /// not move steps) and its key stops.
+    fn up_as(&mut self, id: u64) -> Vec<Act> {
+        if let Some(drag) = self.ptrs.get_mut(&id).and_then(|p| p.drag.take()) {
             self.vals.end(SPECS[drag.param].id);
             if let Some(q) = drag.twin {
                 self.vals.end(SPECS[q].id);
@@ -540,10 +627,50 @@ impl Logic {
                 let middle = self.vals.default_norm(SPECS[ids::WHEEL_PITCH].id);
                 self.vals.edit(SPECS[ids::WHEEL_PITCH].id, middle);
             }
+            if let Some(dir) = drag.tap
+                && drag.travel < TAP_SLOP
+            {
+                self.spin(drag.param, dir);
+            }
         }
-        self.release_key();
-        self.pressed = None;
+        self.release_key(id);
+        self.ptrs.remove(&id);
         vec![Act::Repaint]
+    }
+
+    // ---- fingers --------------------------------------------------------------------------------------------------
+
+    /// Finger `id` goes down at (`x`, `y`) in logical px: its press is its own, beside the other fingers' and the mouse.
+    pub fn touch_down(&mut self, id: u64, x: f32, y: f32) -> Vec<Act> {
+        self.up_as(id);
+        self.down_as(id, x, y, Btn::Left, Mods::default())
+    }
+
+    /// Finger `id` moves to (`x`, `y`): it drags what it holds, or slides from one key to the next.
+    pub fn touch_move(&mut self, id: u64, x: f32, y: f32) -> Vec<Act> {
+        let Some(ptr) = self.ptrs.get_mut(&id) else {
+            return Vec::new();
+        };
+        let dy = y - ptr.at.1;
+        ptr.at = (x, y);
+        if ptr.drag.is_some() {
+            return self.delta_as(id, 0.0, dy, Mods::default());
+        }
+        let Some(held) = ptr.held else {
+            return Vec::new();
+        };
+        match self.hit(x, y).map(|h| h.kind) {
+            Some(Kind::Key(note)) if note != held => {
+                self.press_key(id, note);
+                vec![Act::Repaint]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Finger `id` lifts.
+    pub fn touch_up(&mut self, id: u64) -> Vec<Act> {
+        self.up_as(id)
     }
 
     /// The wheel over a control: `notches` up are positive.
@@ -683,6 +810,8 @@ mod gui {
 
     /// The editor on the app thread.
     struct Ed {
+        /// The host's handle of this editor: its fingers queue under it ([`crate::touch`]).
+        parent: u64,
         win: Window,
         canvas: Canvas,
         buf: Vec<u32>,
@@ -716,6 +845,7 @@ mod gui {
             let vals = Vals::new(&*params, params.live.clone(), Some(ctx));
             let signature = vals.signature();
             let ed = Ed {
+                parent: parent as u64,
                 win,
                 canvas,
                 buf: Vec::new(),
@@ -738,9 +868,16 @@ mod gui {
         }
     }
 
+    impl Drop for Ed {
+        fn drop(&mut self) {
+            crate::touch::forget(self.parent);
+        }
+    }
+
     impl Ed {
         fn run(mut self) {
             while let Some(input) = self.win.next() {
+                self.fingers();
                 match input {
                     Input::Expose => self.dirty = true,
                     Input::Tick => self.poll(),
@@ -779,6 +916,22 @@ mod gui {
                 }
             }
             os_plugkit::park!(self);
+        }
+
+        /// The fingers the host queued: each presses, drags and lifts on its own.
+        fn fingers(&mut self) {
+            use crate::touch::{self, Touch};
+            for t in touch::take(self.parent) {
+                let k = self.scale;
+                let mut acts = match t {
+                    Touch::Down { id, x, y } => self.logic.touch_down(id, x / k, y / k),
+                    Touch::Move { id, x, y } => self.logic.touch_move(id, x / k, y / k),
+                    Touch::Up { id } => self.logic.touch_up(id),
+                };
+                // A finger does not hold the cursor.
+                acts.retain(|a| *a != Act::Lock);
+                self.act(acts);
+            }
         }
 
         fn mods(&self) -> Mods {
@@ -940,12 +1093,12 @@ mod tests {
             l.down(h.r.cx(), top, Btn::Left, NONE),
             [Act::Repaint, Act::Lock]
         );
-        assert!(l.drag.is_some());
+        assert!(l.dragging());
         assert!((live(&params, ids::MASTER_VOL) - 1.0).abs() < 1e-3);
         // A fifth of the travel down.
         l.delta(0.0, 0.2 * (h.r.h - 2.0 * view::FADER_PAD), NONE);
         l.up();
-        assert!(l.drag.is_none());
+        assert!(!l.dragging());
         let heard = live(&params, ids::MASTER_VOL);
         assert!((heard - 0.8).abs() < 1e-3, "{heard}");
         l.down(h.r.cx(), h.r.cy(), Btn::Middle, NONE);
@@ -1035,7 +1188,7 @@ mod tests {
         let before = live(&params, ids::MASTER_VOL);
         assert!(l.down(fx, fy, Btn::Left, NONE).contains(&Act::Repaint));
         assert_eq!(l.ui.popup, None);
-        assert!(l.drag.is_none());
+        assert!(!l.dragging());
         assert_eq!(live(&params, mode), 0.0);
         assert_eq!(live(&params, ids::MASTER_VOL), before);
         // A right click on a name closes it without picking.
@@ -1117,15 +1270,146 @@ mod tests {
         let h = hit_of(&l, ids::ARP_OCT);
         assert_eq!(h.kind, Kind::Spin);
         assert_eq!(live(&params, ids::ARP_OCT), 1.0);
+        // A tap steps on release, by the half pressed.
         l.down(h.r.cx(), h.r.y + 1.0, Btn::Left, NONE);
+        assert_eq!(
+            live(&params, ids::ARP_OCT),
+            1.0,
+            "nothing before the finger lifts"
+        );
+        l.up();
         assert_eq!(live(&params, ids::ARP_OCT), 2.0);
         l.wheel(h.r.cx(), h.r.cy(), 1.0, NONE);
         assert_eq!(live(&params, ids::ARP_OCT), 3.0);
         l.down(h.r.cx(), h.r.bottom() - 1.0, Btn::Left, NONE);
+        l.up();
         assert_eq!(live(&params, ids::ARP_OCT), 2.0);
         // A right click goes down too.
         l.down(h.r.cx(), h.r.cy(), Btn::Right, NONE);
         assert_eq!(live(&params, ids::ARP_OCT), 1.0);
+    }
+
+    #[test]
+    fn dragging_a_spin_box_counts_a_step_per_ten_pixels() {
+        let (mut l, params) = logic();
+        let poly = ids::POLY;
+        let h = hit_of(&l, poly);
+        assert_eq!(h.kind, Kind::Spin);
+        let before = live(&params, poly);
+        l.down(h.r.cx(), h.r.cy(), Btn::Left, NONE);
+        l.delta(0.0, -30.0, NONE);
+        l.up();
+        assert_eq!(live(&params, poly), before + 3.0, "30 px up is three steps");
+        l.down(h.r.cx(), h.r.cy(), Btn::Left, NONE);
+        l.delta(0.0, 50.0, NONE);
+        l.up();
+        assert_eq!(live(&params, poly), (before - 2.0).max(1.0));
+        // A drag does not also step on release.
+        let now = live(&params, poly);
+        l.down(h.r.cx(), h.r.y + 1.0, Btn::Left, NONE);
+        l.delta(0.0, -10.0, NONE);
+        l.up();
+        assert_eq!(live(&params, poly), now + 1.0);
+    }
+
+    #[test]
+    fn two_fingers_hold_a_wheel_and_play_keys_together() {
+        let (mut l, params) = logic();
+        let key = |l: &Logic, n: u8| *l.hits.iter().find(|h| h.kind == Kind::Key(n)).expect("key");
+        let (c, e, g) = (key(&l, 60), key(&l, 64), key(&l, 67));
+        let (px, py) = at(&l, ids::WHEEL_PITCH);
+        // A chord with three fingers, and the pitch wheel under a fourth.
+        l.touch_down(1, c.r.cx(), c.r.bottom() - 4.0);
+        l.touch_down(2, e.r.cx(), e.r.bottom() - 4.0);
+        l.touch_down(3, g.r.cx(), g.r.bottom() - 4.0);
+        l.touch_down(4, px, py);
+        l.touch_move(4, px, py - 35.0);
+        assert_eq!(l.ui.keys, 1 << 60 | 1 << 64 | 1 << 67);
+        assert!(
+            live(&params, ids::WHEEL_PITCH) > 0.9,
+            "bent while the chord sounds"
+        );
+        let mut on = Vec::new();
+        while let Some(k) = params.shared.pop_key() {
+            on.push(k);
+        }
+        assert_eq!(on, [(60, true), (64, true), (67, true)]);
+        // One finger lifts: only its note stops.
+        l.touch_up(2);
+        assert_eq!(l.ui.keys, 1 << 60 | 1 << 67);
+        assert_eq!(params.shared.pop_key(), Some((64, false)));
+        assert_eq!(params.shared.pop_key(), None);
+        l.touch_up(4);
+        assert!(
+            live(&params, ids::WHEEL_PITCH).abs() < 1e-4,
+            "the wheel springs back"
+        );
+        l.touch_up(1);
+        l.touch_up(3);
+        assert_eq!(l.ui.keys, 0);
+        assert!(!l.dragging());
+    }
+
+    #[test]
+    fn a_finger_slides_from_key_to_key_and_two_fingers_share_a_note() {
+        let (mut l, params) = logic();
+        let key = |l: &Logic, n: u8| *l.hits.iter().find(|h| h.kind == Kind::Key(n)).unwrap();
+        let (c, d) = (key(&l, 60), key(&l, 62));
+        l.touch_down(1, c.r.cx(), c.r.bottom() - 4.0);
+        l.touch_move(1, d.r.cx(), d.r.bottom() - 4.0);
+        assert_eq!(l.ui.keys, 1 << 62);
+        assert_eq!(params.shared.pop_key(), Some((60, true)));
+        assert_eq!(params.shared.pop_key(), Some((60, false)));
+        assert_eq!(params.shared.pop_key(), Some((62, true)));
+        // A second finger on the same key: the note keeps sounding until the last one lifts.
+        l.touch_down(2, d.r.cx(), d.r.bottom() - 4.0);
+        l.touch_up(1);
+        assert_eq!(params.shared.pop_key(), Some((62, true)));
+        assert_eq!(params.shared.pop_key(), None);
+        l.touch_up(2);
+        assert_eq!(params.shared.pop_key(), Some((62, false)));
+    }
+
+    #[test]
+    fn fingers_turn_different_knobs_at_once() {
+        let (mut l, _params) = logic();
+        let a = ids::FILT_BASE + ids::filt::CUTOFF;
+        let b = ids::GF_CUTOFF;
+        let ((ax, ay), (bx, by)) = (at(&l, a), at(&l, b));
+        l.vals.edit(SPECS[a].id, 0.5);
+        l.vals.edit(SPECS[b].id, 0.5);
+        l.touch_down(1, ax, ay);
+        l.touch_down(2, bx, by);
+        l.touch_move(1, ax, ay - 30.0);
+        l.touch_move(2, bx, by + 30.0);
+        l.touch_up(1);
+        l.touch_up(2);
+        assert!(near(norm(&l, a), 0.7), "{}", norm(&l, a));
+        assert!(near(norm(&l, b), 0.3), "{}", norm(&l, b));
+    }
+
+    #[test]
+    fn the_global_filter_knobs_are_not_the_filters() {
+        let (mut l, _params) = logic();
+        let cutoff = ids::FILT_BASE + ids::filt::CUTOFF;
+        let global = ids::GF_CUTOFF;
+        l.vals.edit(SPECS[cutoff].id, 0.5);
+        l.vals.edit(SPECS[global].id, 0.5);
+        let (x, y) = at(&l, global);
+        l.down(x, y, Btn::Left, NONE);
+        l.delta(0.0, -30.0, NONE);
+        l.up();
+        assert!(near(norm(&l, global), 0.7));
+        assert!(near(norm(&l, cutoff), 0.5), "filter A stays where it was");
+        let (x, y) = at(&l, cutoff);
+        l.down(x, y, Btn::Left, NONE);
+        l.delta(0.0, 30.0, NONE);
+        l.up();
+        assert!(near(norm(&l, cutoff), 0.3));
+        assert!(
+            near(norm(&l, global), 0.7),
+            "the global filter stays where it was"
+        );
     }
 
     #[test]
@@ -1184,10 +1468,10 @@ mod tests {
             .find(|h| h.kind == Kind::Key(60))
             .expect("middle C");
         l.down(key.r.cx(), key.r.bottom() - 4.0, Btn::Left, NONE);
-        assert_eq!(l.ui.key, Some(60));
+        assert_eq!(l.ui.keys, 1 << 60);
         assert_eq!(params.shared.pop_key(), Some((60, true)));
         l.up();
-        assert_eq!(l.ui.key, None);
+        assert_eq!(l.ui.keys, 0);
         assert_eq!(params.shared.pop_key(), Some((60, false)));
         assert_eq!(params.shared.pop_key(), None);
     }

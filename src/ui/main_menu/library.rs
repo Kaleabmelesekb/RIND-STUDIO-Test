@@ -515,7 +515,7 @@ fn new_user_dir() -> Option<PathBuf> {
 fn new_user_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     if let Some(documents) = known_documents() {
-        return Some(documents.join(crate::APP_NAME));
+        return Some(documents.join(crate::DATA_DIR_NAME));
     }
     // Tests never read the user's files (`user-dirs.dirs`).
     let read = |path: &Path| match cfg!(test) {
@@ -523,7 +523,7 @@ fn new_user_dir() -> Option<PathBuf> {
         false => std::fs::read_to_string(path).ok(),
     };
     let documents = documents_dir_from(|key| std::env::var_os(key), read)?;
-    Some(documents.join(crate::APP_NAME))
+    Some(documents.join(crate::DATA_DIR_NAME))
 }
 
 /// The documents folder, from the environment variables `var` reads and the file `read` reads: `Documents` in the
@@ -734,12 +734,12 @@ fn move_files(
 /// folder is unknown or not an absolute path.
 #[cfg(target_os = "android")]
 pub fn app_data_dir() -> Option<PathBuf> {
-    Some(crate::android::data_dir()?.join(crate::APP_NAME))
+    Some(crate::android::data_dir()?.join(crate::DATA_DIR_NAME))
 }
 
 #[cfg(target_os = "ios")]
 pub fn app_data_dir() -> Option<PathBuf> {
-    Some(crate::ios::data_dir()?.join(crate::APP_NAME))
+    Some(crate::ios::data_dir()?.join(crate::DATA_DIR_NAME))
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(mobile)))]
@@ -777,7 +777,7 @@ fn app_data_dir_from(
             data.join(app.to_lowercase())
         }
     };
-    let app = migrate(&named(crate::LEGACY_APP_NAME), &named(crate::APP_NAME));
+    let app = migrate(&named(crate::LEGACY_APP_NAME), &named(crate::DATA_DIR_NAME));
     Some(if cfg!(windows) { app.join("data") } else { app })
 }
 
@@ -2261,7 +2261,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(base);
         let (old, new) = (
             base.join("old"),
-            base.join("Documents").join(crate::APP_NAME),
+            base.join("Documents").join(crate::DATA_DIR_NAME),
         );
         for (path, bytes) in [
             ("My Songs/A.flm", &b"song"[..]),
@@ -2363,7 +2363,7 @@ mod tests {
         use crate::settings::{FileStorage, SETTINGS_FILE};
         let base = Temp::new("settings-userdir");
         let (old, new) = (
-            base.0.join("files").join(crate::APP_NAME),
+            base.0.join("files").join(crate::DATA_DIR_NAME),
             base.0.join("external"),
         );
         let other_disk = |_: &Path, _: &Path| Err(io::ErrorKind::CrossesDevices.into());

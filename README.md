@@ -1,5 +1,5 @@
-<p align="center"><img src="assets/branding/honeydew.svg" width="160" alt="Honeydew logo"></p>
-<h1 align="center">Honeydew</h1>
+<p align="center"><img src="assets/branding/honeydew.svg" width="160" alt="Rind Studio logo"></p>
+<h1 align="center">Rind Studio</h1>
 <p align="center">A free, open-source music studio modelled on FL Studio Mobile, written in Rust.</p>
 <p align="center">Runs on Windows, Linux, macOS, Android and in the browser.</p>
 

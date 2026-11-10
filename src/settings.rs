@@ -587,7 +587,7 @@ pub const SETTINGS_FILE: &str = "storage.json";
 fn open_storage(dir: &std::path::Path) -> Box<dyn eframe::Storage> {
     let app = crate::migrate_legacy_dir_once(
         &dir.join(crate::LEGACY_APP_NAME),
-        &dir.join(crate::APP_NAME),
+        &dir.join(crate::DATA_DIR_NAME),
     );
     let mut storage = FileStorage::open(app.join(SETTINGS_FILE));
     migrate_legacy_keys(&mut storage);

@@ -56,6 +56,8 @@ pub(crate) struct LemonCard {
     pressed: Option<Button>,
     /// That press is a finger's other than the pointer's ([`other_finger`]): its id and the pass it was last seen in.
     finger: Option<(u64, u64)>,
+    /// Rind's card ([`touch_fingers`]): the fingers down on it, each with the pass it was last seen in.
+    fingers: Vec<(u64, u64)>,
     /// The pointer's last position, and whether it was over the editor.
     last: Pos2,
     over: bool,
@@ -141,8 +143,14 @@ pub(crate) fn show(
     let k = card.size.0 as f32 / rect.width();
     let modal = embed::modal(editor);
     if modal.is_none() && card.size.0 > 0 {
-        other_finger(ui, card, &response, rect, k);
-        forward(ui, card, rect, k, response.hovered());
+        // Rind takes every finger of its own (a chord while a wheel is held); the other editors the pointer and one more.
+        let multi = plugin.clap_id() == rind::CLAP_ID;
+        if multi {
+            touch_fingers(ui, card, &response, rect, k);
+        } else {
+            other_finger(ui, card, &response, rect, k);
+        }
+        forward(ui, card, rect, k, response.hovered(), multi);
     } else {
         // The press that asked is the modal's (its answer delivers it again, with its release): the next press is new.
         (card.pressed, card.finger) = (None, None);
@@ -262,6 +270,49 @@ fn mods(m: Modifiers) -> (bool, bool, bool) {
     (m.ctrl || m.mac_cmd, m.shift, m.alt)
 }
 
+/// Every finger on Rind's editor, by itself ([`rind::touch`]): a press, its moves and its lift, whatever the other
+/// fingers and the pointer do. The editor wakes to take them. A focus loss or a frame without the card lifts them all.
+fn touch_fingers(ui: &Ui, card: &mut LemonCard, response: &Response, rect: Rect, k: f32) {
+    use rind::touch::{self, Touch};
+    let (editor, pass) = (card.editor, ui.ctx().cumulative_pass_nr());
+    let px = |p: Pos2| ((p.x - rect.left()) * k, (p.y - rect.top()) * k);
+    let mut sent = false;
+    let mut send = |t: Touch| {
+        touch::send(editor as u64, t);
+        sent = true;
+    };
+    if card.fingers.iter().any(|f| f.1 + 1 != pass) || ui.input(focus_lost) {
+        for (id, _) in card.fingers.drain(..) {
+            send(Touch::Up { id });
+        }
+    }
+    for f in fingers(ui, response.id) {
+        let held = |card: &LemonCard, id| card.fingers.iter().any(|f| f.0 == id);
+        match f {
+            Finger::Down(id, at) if id != MOUSE && !held(card, id) => {
+                let (x, y) = px(at);
+                send(Touch::Down { id, x, y });
+                card.fingers.push((id, pass));
+            }
+            Finger::Move(id, at) if held(card, id) => {
+                let (x, y) = px(at);
+                send(Touch::Move { id, x, y });
+            }
+            Finger::Up(id, _) if held(card, id) => {
+                send(Touch::Up { id });
+                card.fingers.retain(|f| f.0 != id);
+            }
+            _ => {}
+        }
+    }
+    for f in &mut card.fingers {
+        f.1 = pass;
+    }
+    if sent {
+        embed::input(editor, Input::Tick, (false, false, false));
+    }
+}
+
 /// Issue #68: a finger other than the pointer's (egui's pointer follows the first finger down only) presses, moves and
 /// lifts as the pointer does while no press holds the editor, so that a knob turns while another finger plays keys; the
 /// pointer waits meanwhile ([`forward`]). A focus loss or a frame without the card lifts it.
@@ -316,7 +367,7 @@ fn other_finger(ui: &Ui, card: &mut LemonCard, response: &Response, rect: Rect, 
 
 /// This frame's pointer input to the editor shown in `rect` (`k` editor pixels per point); `hovered`: the pointer is
 /// on it, with nothing over it. Nothing while another finger holds the editor ([`other_finger`]).
-fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool) {
+fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool, multi: bool) {
     let editor = card.editor;
     if card.finger.is_some() {
         return;
@@ -324,8 +375,11 @@ fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool) {
     let px = |p: Pos2| ((p.x - rect.left()) * k, (p.y - rect.top()) * k);
     let (events, now, held) = ui.input(|i| (i.events.clone(), i.time, i.modifiers));
     let send = |e: Input, m: Modifiers| embed::input(editor, e, mods(m));
+    // Rind's fingers go by [`touch_fingers`]: in a frame with touches the pointer events repeat the first one.
+    let touching = multi && events.iter().any(|e| matches!(e, Event::Touch { .. }));
     for event in events {
         match event {
+            Event::PointerMoved(_) | Event::PointerButton { .. } if touching => {}
             Event::PointerMoved(p) => {
                 if card.pressed.is_some() && embed::locked(editor) {
                     let d = (p - card.last) * k;
