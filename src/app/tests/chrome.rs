@@ -154,7 +154,7 @@ fn the_add_channel_plus_sits_under_the_last_row_on_the_screen_centre_and_the_rac
     rig.frame(vec![]);
     let rect = rig.ctx.read_response(plus).unwrap().rect;
     let expected = egui::Rect::from_min_size(
-        pos2(585.0 - U, RULER + 6.0 * U + 0.75 * U),
+        pos2(585.0 - U, TOP_BAR + RULER + 6.0 * U + 0.75 * U),
         vec2(2.0 * U, 2.0 * U),
     );
     assert_eq!(rect, expected);
@@ -770,7 +770,7 @@ fn regions_at(panel_u: f32) -> Regions {
 /// The keyboard settings button and the strip's icon 13 on a panel `panel_u` U tall.
 fn settings_buttons(panel_u: f32) -> (Pos2, Pos2) {
     let r = regions_at(panel_u);
-    let bar = r.transport.center().y;
+    let bar = r.top.center().y;
     (
         pos2(KEYBOARD_SETTINGS.x, bar),
         pos2(TWO_ROWS.x, r.transport.bottom() + 1.74 * U),
@@ -1128,10 +1128,11 @@ fn a_tap_on_the_cpu_or_ram_readout_opens_project_scrolled_to_its_performance_gra
     let mut rig = Rig::with_synth();
     rig.open_menu(MenuTab::Project);
     let unscrolled = rig.text_rect("Performance:").top();
-    // The readout's slot: one b = 1.75 U left of ↘'s, at the bar's right end.
+    // The readout's slot: one b = 1.75 U left of ↘'s (which sits in the dock), in the control bar, left of the logo's
+    // corner (3.75 U).
     let b = 1.75 * U;
     let mut rig = Rig::with_synth();
-    rig.click(pos2(1170.0 - 1.5 * b, BAR_Y));
+    rig.click(pos2(1170.0 - 3.75 * U - 1.5 * b, BAR_Y));
     assert_eq!(rig.overlays(), [Overlay::MainMenu(MenuTab::Project)]);
     for _ in 0..12 {
         rig.frame(vec![]);
@@ -1253,7 +1254,7 @@ fn a_mod_wheel_move_records_while_armed_and_rolling() {
 
 /// REC's centre on a panel `panel_u` U tall.
 fn transport_rec(panel_u: f32) -> Pos2 {
-    let bar = regions_at(panel_u).transport;
+    let bar = regions_at(panel_u).top;
     pos2(bar.center().x - 2.0 * 1.75 * U, bar.center().y)
 }
 

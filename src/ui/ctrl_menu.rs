@@ -4,7 +4,7 @@
 //!
 //! An item is enabled when its condition holds **and** the caller lists it as implemented: [`IMPLEMENTED`], every
 //! item now: the three MIDI CC link items, the four automation items and `Fine tune control`
-//! ([`crate::ui::fine_tune`]). The popup sits right above the CTRL button, centred on it and kept on screen.
+//! ([`crate::ui::fine_tune`]). The popup hangs right under the CTRL button in the control bar, centred on it and kept on screen.
 //!
 //! The recent control comes from the views as [`Touch`]es: a bound control's press, or its parameter menu's pick of
 //! one of these items, which the app acts on as on this menu's.
@@ -143,7 +143,7 @@ pub struct CtrlMenu {
 }
 
 impl CtrlMenu {
-    /// Shows the menu while it is open, its bottom on the top of `button` (the CTRL button's rect) and centred
+    /// Shows the menu while it is open, its top on the bottom of `button` (the CTRL button's rect) and centred
     /// on it. Returns the action picked this frame; a pick, a tap outside or Escape closes it.
     pub fn show(
         &mut self,
@@ -155,8 +155,8 @@ impl CtrlMenu {
         if !self.open {
             return None;
         }
-        // Placement keeps the popup inside its bounds: ending them at the button's top puts it on the button.
-        let bounds = ctx.content_rect().with_max_y(button.top());
+        // Placement keeps the popup inside its bounds: starting them at the button's bottom hangs it from the button.
+        let bounds = ctx.content_rect().with_min_y(button.bottom());
         let result = popup::show(
             ctx,
             Id::new("ctrl_menu"),
@@ -365,10 +365,10 @@ mod tests {
         }
     }
 
-    /// The CTRL button: a 1.75 U slot at the bottom of the screen.
+    /// The CTRL button: a 1.75 U slot in the control bar at the top of the screen.
     const BUTTON: Rect = Rect {
-        min: pos2(700.0, 440.0),
-        max: pos2(756.0, 496.0),
+        min: pos2(700.0, 0.0),
+        max: pos2(756.0, 56.0),
     };
 
     struct Rig {
@@ -423,10 +423,10 @@ mod tests {
     }
 
     #[test]
-    fn the_popup_stands_on_the_button_centred_on_it() {
+    fn the_popup_hangs_from_the_button_centred_on_it() {
         let mut rig = Rig::new(menu_items(None, None, &[]));
         let r = rig.popup_rect().unwrap();
-        assert_eq!(r.bottom(), BUTTON.top());
+        assert_eq!(r.top(), BUTTON.bottom());
         assert!((r.center().x - BUTTON.center().x).abs() <= 1.0, "{r:?}");
         // Eight rows of 1.25 U.
         assert_eq!(r.height(), 8.0 * 40.0);

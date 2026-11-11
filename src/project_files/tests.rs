@@ -264,7 +264,8 @@ fn a_project_from_a_newer_version_waits_for_an_answer() {
         files.message,
         lines(&[
             &format!(
-                "This project was saved in a newer format (5.1) than Honeydew {} can read,",
+                "This project was saved in a newer format (5.1) than {} {} can read,",
+                crate::APP_NAME,
                 env!("CARGO_PKG_VERSION")
             ),
             "and will probably not load correctly.",

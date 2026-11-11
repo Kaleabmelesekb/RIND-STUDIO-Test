@@ -2926,7 +2926,11 @@ mod tests {
     /// centre line under it, and the keys' top under the 1.75 U bar (y 380, 408, 436); the keys run to the screen's
     /// bottom, 540. Checked against the layout by `the_rigs_panel_constants_are_the_layouts`.
     const PANEL_TOP: f32 = 540.0 - PANEL_H * U;
-    const BAR_Y: f32 = PANEL_TOP + TRANSPORT_H * U / 2.0;
+    /// The control bar across the top (1.75 U tall): its buttons' centre line, and the playlist's ruler under it.
+    const TOP_BAR: f32 = TRANSPORT_H * U;
+    const BAR_Y: f32 = TOP_BAR / 2.0;
+    /// The dock strip over the keys (also 1.75 U): its centre line, where the ↘ and the empty space to tap sit.
+    const DOCK_Y: f32 = PANEL_TOP + TRANSPORT_H * U / 2.0;
     const KEYS_TOP: f32 = PANEL_TOP + TRANSPORT_H * U;
     /// E4 and F4, low on their white keys, 115/135 of the keys' height down: velocity 108 (MIDI).
     const LOW: f32 = KEYS_TOP + 115.0 / 135.0 * (540.0 - KEYS_TOP);
@@ -2934,7 +2938,7 @@ mod tests {
     const F4: Pos2 = pos2(7.0 * U, LOW);
     /// In the transport bar, between its left buttons and REC: a click there only starts the audio, held past a tap
     /// ([`Rig::click`]; a tap there toggles the panel). (The ruler is no place for it: a tap there sets the playhead.)
-    const OUTSIDE: Pos2 = pos2(300.0, BAR_Y);
+    const OUTSIDE: Pos2 = pos2(300.0, DOCK_Y);
     /// Centres of the play button and the REV button.
     const PLAY: Pos2 = pos2(585.0, BAR_Y);
     const REV: Pos2 = pos2(585.0 - 1.75 * U, BAR_Y);
@@ -2956,13 +2960,14 @@ mod tests {
             &m,
         );
         assert_eq!(m.u(1.0), U);
-        assert_eq!(r.area.bottom(), PANEL_TOP);
+        assert_eq!((r.area.top(), r.area.bottom()), (TOP_BAR, PANEL_TOP));
+        assert_eq!(r.top.center().y, BAR_Y);
         assert_eq!(
             (r.transport.top(), r.transport.center().y),
-            (PANEL_TOP, BAR_Y)
+            (PANEL_TOP, DOCK_Y)
         );
         assert_eq!((r.keyboard.top(), r.keyboard.bottom()), (KEYS_TOP, 540.0));
-        assert_eq!(PLAY, r.transport.center());
+        assert_eq!(PLAY, r.top.center());
     }
 
     fn button_event(pos: Pos2, pressed: bool) -> egui::Event {
@@ -2976,7 +2981,7 @@ mod tests {
 
     /// The header of track `index` (rows are 2 U tall below the ruler).
     fn header(index: usize) -> Pos2 {
-        pos2(0.75 * U, RULER + (index as f32 + 0.5) * 2.0 * U)
+        pos2(0.75 * U, TOP_BAR + RULER + (index as f32 + 0.5) * 2.0 * U)
     }
 
     /// `files` with an EMPTY factory in place of [`crate::content::factory`]: the real one grows (templates, presets) and
@@ -3755,11 +3760,11 @@ mod tests {
     const MIXER: Pos2 = pos2(0.75 * U, BAR_Y);
     const KEYBOARD_SETTINGS: Pos2 = pos2(2.25 * U, BAR_Y);
     const CTRL: Pos2 = pos2(585.0 + 2.0 * 1.75 * U, BAR_Y);
-    const CLOSE: Pos2 = pos2(1170.0 - 0.75 * U, BAR_Y);
+    const CLOSE: Pos2 = pos2(1170.0 - 0.75 * U, DOCK_Y);
     /// Inside the logo quarter-disc in the top-right corner, and the rack tab on the right edge (centred on the
     /// track rows, from the 1.5 U ruler to the panel).
     const LOGO: Pos2 = pos2(1150.0, 20.0);
-    const TAB_Y: f32 = (1.5 * U + PANEL_TOP) / 2.0;
+    const TAB_Y: f32 = (TOP_BAR + 1.5 * U + PANEL_TOP) / 2.0;
     const EDGE_TAB: Pos2 = pos2(1160.0, TAB_Y);
 
     /// The lane of track `index`, right of its header.

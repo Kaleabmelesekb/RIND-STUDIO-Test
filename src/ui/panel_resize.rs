@@ -43,10 +43,10 @@ pub fn collapsed(rows: u8, m: &Metrics) -> f32 {
     (m.u_px() * TRANSPORT_H * f32::from(rows)).trunc() / m.ppp()
 }
 
-/// M, the panel's greatest height on a screen `screen_h` points tall: the screen less [`VIEW_MIN`] (whole pixels), at
-/// least the collapsed `c`.
+/// M, the panel's greatest height on a screen `screen_h` points tall: the screen less the control bar (the collapsed
+/// height `c` again) and [`VIEW_MIN`] (whole pixels), at least the collapsed `c`.
 pub fn full(screen_h: f32, c: f32, m: &Metrics) -> f32 {
-    (screen_h - (VIEW_MIN * m.u_px()).ceil() / m.ppp()).max(c)
+    (screen_h - c - (VIEW_MIN * m.u_px()).ceil() / m.ppp()).max(c)
 }
 
 /// The height a resize let go at `h` settles at, after a last move of `last_dy` points, for the collapsed height `c` on

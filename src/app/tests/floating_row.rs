@@ -316,7 +316,7 @@ fn ruler_tap(rig: &mut Rig, editor: &str, tap: Pos2, one_frame: bool, (tick, x):
         rig.frame(vec![]);
     }
     assert!(!rig.painted("Copy"), "{editor}: no row");
-    let shown = rig.play_box_in(0.0..RULER);
+    let shown = rig.play_box_in(TOP_BAR..TOP_BAR + RULER);
     assert_eq!(shown, Some((r3(x), 255)), "{editor}: the play box");
 }
 
