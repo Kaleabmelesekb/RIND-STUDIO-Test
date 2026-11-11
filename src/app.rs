@@ -2400,6 +2400,17 @@ impl HoneydewApp {
                 // A tap on an editor's playhead knob plays (`AppCtx::play`): before the transport's buttons, which may
                 // stop it this frame.
                 self.main_screen.playing |= app.playing;
+                // The dock's device chain: the selected track's generator and effects, as the rack lists them.
+                self.main_screen.devices = (app.song.channels.get(*app.selected))
+                    .map(|c| {
+                        (c.rack.modules.iter())
+                            .map(|d| crate::ui::main_screen::DeviceChip {
+                                title: d.title().to_owned(),
+                                on: d.params.first().is_none_or(|&enable| enable >= 0.5),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 self.main_screen
                     .chrome(ui, &cx, input, &regions, &mut actions);
                 views::drum_editor::after_chrome(&mut self.slots.drum_editor, ui, &mut app);

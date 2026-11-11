@@ -451,9 +451,43 @@ impl Regions {
     }
 }
 
+/// One device of the selected track, as the dock's chain shows it: its card's title and whether it is on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceChip {
+    pub title: String,
+    pub on: bool,
+}
+
+/// The widest a chip is, in U; the narrowest is [`CHIP_MIN_W`].
+const CHIP_MAX_W: f32 = 7.0;
+const CHIP_MIN_W: f32 = 3.0;
+/// A chip's height and the gap between chips, in U.
+const CHIP_H: f32 = 1.25;
+const CHIP_GAP: f32 = 0.25;
+
+/// The chips' slots along the dock `strip`, from its left edge to the room the hide button leaves, one per device that
+/// fits, each as wide as its title asks (0.28 U a character plus the power dot, within [`CHIP_MIN_W`]…[`CHIP_MAX_W`]).
+fn chip_rects(strip: Rect, devices: &[DeviceChip], m: &Metrics) -> Vec<Rect> {
+    let limit = strip.right() - m.u(3.0);
+    let mut x = strip.left() + m.u(0.5);
+    let mut out = Vec::new();
+    for chip in devices {
+        let w = m.u((1.4 + 0.28 * chip.title.chars().count() as f32).clamp(CHIP_MIN_W, CHIP_MAX_W));
+        if x + w > limit {
+            break;
+        }
+        let top = strip.center().y - m.u(CHIP_H) / 2.0;
+        out.push(Rect::from_min_size(pos2(x, top), vec2(w, m.u(CHIP_H))));
+        x += w + m.u(CHIP_GAP);
+    }
+    out
+}
+
 /// Transient state of the playlist screen.
 #[derive(Default)]
 pub struct MainScreen {
+    /// The selected track's devices for the dock's chain, set by the app before each frame.
+    pub devices: Vec<DeviceChip>,
     /// Toggled by the play button; the app sends `Play` / `Stop` when it changes.
     pub playing: bool,
     /// The keyboard panel's height in points as last drawn, on its way to the preferred height ([`Self::panel_h`]);
@@ -1317,6 +1351,9 @@ impl MainScreen {
             }
             _ => Vec::new(),
         };
+        // The dock's device chips take their own taps.
+        let mut knobs = knobs;
+        knobs.extend(chip_rects(regions.transport, &self.devices, m));
         let zone = Zone {
             bar: regions.transport,
             strip: regions.strip,
@@ -1348,7 +1385,7 @@ impl MainScreen {
         keyboard::panel_backdrop(ui.painter(), panel, shown.then_some(regions.keyboard), cx);
         self.zone_and_tap(ui, cx.m, input, regions, shown, actions);
         let grabbed = std::mem::take(&mut self.grabbed);
-        self.dock(ui, regions, cx, input);
+        self.dock(ui, regions, cx, input, actions);
         let underline = (input.tracks.iter().find(|t| t.channel == input.selected))
             .map_or(cx.theme.colors.text, |t| channel_color(t.hue, cx.theme));
         let ink = underline.to_color32();
@@ -1757,7 +1794,14 @@ impl MainScreen {
 
     /// The dock strip of the keyboard panel, above the keys: the ↘ that hides the panel at its right end. Its grab
     /// and tap are [`Self::zone_and_tap`]'s.
-    fn dock(&mut self, ui: &mut egui::Ui, regions: &Regions, cx: &UiCtx, input: ScreenInput) {
+    fn dock(
+        &mut self,
+        ui: &mut egui::Ui,
+        regions: &Regions,
+        cx: &UiCtx,
+        input: ScreenInput,
+        actions: &mut ScreenActions,
+    ) {
         let rect = regions.transport;
         let top = rect.top() - regions.screen.top();
         let meters = input.settings.hardware_meters;
@@ -1766,6 +1810,71 @@ impl MainScreen {
         // It only hides the keyboard panel, in every view; the `↖` brings it back. The view and the overlays stay.
         if bar_button(ui, cx, Id::new(("transport", "hide")), slots.hide, hide).clicked() {
             self.panel_hidden = true;
+        }
+        self.device_chain(ui, regions, cx, input, actions);
+    }
+
+    /// The selected track's devices along the dock, Ableton's device chain in brief: a flat chip per device with a power
+    /// dot, lit while the device is on. A tap opens the track's rack (it stays open if it already is).
+    fn device_chain(
+        &mut self,
+        ui: &mut egui::Ui,
+        regions: &Regions,
+        cx: &UiCtx,
+        input: ScreenInput,
+        actions: &mut ScreenActions,
+    ) {
+        let (c, m) = (&cx.theme.colors, cx.m);
+        let rack_open = regions.rack.left() < regions.area.right();
+        let rects = chip_rects(regions.transport, &self.devices, m);
+        let (text, accent) = (c.text.to_color32(), c.accent.to_color32());
+        let line = egui::Stroke::new(1.0 / m.ppp(), text.gamma_multiply(0.5));
+        for (i, (chip, rect)) in self.devices.iter().zip(rects).enumerate() {
+            let response = focus::interact(ui, rect, Id::new(("device_chip", i)), Sense::click());
+            let fill = c.control_fill.to_color32();
+            let fill = if widgets::hovered(ui, &response) {
+                brighter(fill, HOVER_GAIN)
+            } else {
+                fill
+            };
+            let painter = ui.painter();
+            painter.rect_filled(rect, 0.0, fill);
+            painter.rect_stroke(rect, 0.0, line, egui::StrokeKind::Inside);
+            let dot = Rect::from_center_size(
+                pos2(rect.left() + m.u(0.5), rect.center().y),
+                Vec2::splat(m.u(0.3)),
+            );
+            painter.rect_filled(
+                dot,
+                0.0,
+                if chip.on {
+                    accent
+                } else {
+                    text.gamma_multiply(0.3)
+                },
+            );
+            let room = rect.width() - m.u(0.9) - m.u(0.3);
+            let font = m.font_id(FontSize::Pt8);
+            let fits = |t: &str| {
+                painter
+                    .layout_no_wrap(t.to_owned(), font.clone(), text)
+                    .size()
+                    .x
+                    <= room
+            };
+            // A title the chip is too narrow for loses characters, then ends in an ellipsis.
+            let mut title = chip.title.clone();
+            if !fits(&title) {
+                while title.chars().count() > 1 && !fits(&format!("{title}…")) {
+                    title.pop();
+                }
+                title.push('…');
+            }
+            let at = pos2(rect.left() + m.u(0.9), rect.center().y);
+            painter.text(at, Align2::LEFT_CENTER, title, font, text);
+            if response.clicked() && !rack_open {
+                actions.nav = Some(Nav::Open(Overlay::Rack(input.selected)));
+            }
         }
     }
 
@@ -2429,6 +2538,26 @@ mod tests {
         /// Files in the user folder, in [`frame`]: (path, bytes).
         static USER_FILES: std::cell::RefCell<Vec<(&'static str, Vec<u8>)>> =
             const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    #[test]
+    fn the_device_chips_line_up_from_the_left_and_stop_before_the_hide_button() {
+        let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
+        let strip = Rect::from_min_size(pos2(0.0, 400.0), vec2(1170.0, 56.0));
+        let chip = |i: usize| DeviceChip {
+            title: format!("Device {i}"),
+            on: true,
+        };
+        let few: Vec<_> = (0..2).map(chip).collect();
+        assert_eq!(chip_rects(strip, &few, &m).len(), 2);
+        let many: Vec<_> = (0..40).map(chip).collect();
+        let rects = chip_rects(strip, &many, &m);
+        assert!(!rects.is_empty() && rects.len() < many.len());
+        assert_eq!(rects[0].left(), m.u(0.5));
+        assert!(rects.windows(2).all(|w| w[0].right() < w[1].left()));
+        assert!(rects.last().unwrap().right() <= strip.right() - m.u(3.0));
+        assert!(rects.iter().all(|r| strip.contains_rect(*r)));
+        assert_eq!(chip_rects(strip, &[], &m), Vec::<Rect>::new());
     }
 
     #[test]
