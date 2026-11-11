@@ -331,7 +331,7 @@ fn a_ruler_tap_deselects_seeks_and_shows_the_play_box_where_it_tapped() {
     rig.frame(vec![]);
     assert!(rig.painted("Copy"), "playlist: shown");
     let left = 1.5 * U + 2.0;
-    let beat = |b: f32| pos2(left + b * 1.2 * U, 0.75 * U);
+    let beat = |b: f32| pos2(left + b * 1.2 * U, TOP_BAR + 0.75 * U);
     ruler_tap(&mut rig, "playlist", beat(5.0), false, (640, beat(5.0).x));
     // The piano roll, a beat 2 U: a tap on an empty cell adds a note, a long press selects it.
     rig.edit(2);
@@ -341,7 +341,7 @@ fn a_ruler_tap_deselects_seeks_and_shows_the_play_box_where_it_tapped() {
     long_press(&mut rig, cell + vec2(10.0, 0.0));
     rig.frame(vec![]);
     assert!(rig.painted("Copy"), "piano roll: shown");
-    let beat = |b: f32| pos2(left + b * 2.0 * U, 0.75 * U);
+    let beat = |b: f32| pos2(left + b * 2.0 * U, TOP_BAR + 0.75 * U);
     ruler_tap(&mut rig, "piano roll", beat(3.0), false, (384, beat(3.0).x));
     // Nothing selected (the note made the loop a bar), a touchpad's tap.
     let b1 = beat(1.0);
@@ -360,6 +360,9 @@ fn a_ruler_tap_deselects_seeks_and_shows_the_play_box_where_it_tapped() {
     rig.frame(vec![]);
     assert!(rig.painted("Copy"), "drum editor: shown");
     let (x0, step_w) = (rig.app.slots.drum_editor.step.time_axis()).expect("drawn");
-    let (tap, x) = (pos2(rig.step(0, 4).x, 0.75 * U), x0 + 4.0 * step_w);
+    let (tap, x) = (
+        pos2(rig.step(0, 4).x, TOP_BAR + 0.75 * U),
+        x0 + 4.0 * step_w,
+    );
     ruler_tap(&mut rig, "drum editor", tap, false, (128, x));
 }

@@ -2675,8 +2675,14 @@ mod tests {
     ) -> Frame {
         *time += 0.1;
         let size = vec2(1170.0, 540.0);
+        // The control bar takes the strip above the playlist's origin (off the screen, y < 0), so that the ruler,
+        // the tracks and the panel keep the places these tests were written for.
+        let bar = TRANSPORT_H * Metrics::from_pixels_per_point(1.0, scale).u(1.0);
         let input = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
+            screen_rect: Some(Rect::from_min_size(
+                pos2(0.0, -bar),
+                vec2(size.x, size.y + bar),
+            )),
             events,
             time: Some(*time),
             ..Default::default()
