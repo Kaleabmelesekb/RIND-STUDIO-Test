@@ -46,7 +46,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Android build tools
         run: |
-          sudo apt-get update && sudo apt-get install -y libclang-dev
+          for try in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=5 libclang-dev && break
+            echo "apt failed (try $try)"; sleep 30
+            [ "$try" = 5 ] && exit 1
+          done
           sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.0.13004108'
           cargo install cargo-ndk --version 4.1.2 --locked
       - name: Build the debug APK (no sounds)
