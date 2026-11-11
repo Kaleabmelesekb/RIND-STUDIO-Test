@@ -360,6 +360,9 @@ fn a_ruler_tap_deselects_seeks_and_shows_the_play_box_where_it_tapped() {
     rig.frame(vec![]);
     assert!(rig.painted("Copy"), "drum editor: shown");
     let (x0, step_w) = (rig.app.slots.drum_editor.step.time_axis()).expect("drawn");
-    let (tap, x) = (pos2(rig.step(0, 4).x, TOP_BAR + 0.75 * U), x0 + 4.0 * step_w);
+    let (tap, x) = (
+        pos2(rig.step(0, 4).x, TOP_BAR + 0.75 * U),
+        x0 + 4.0 * step_w,
+    );
     ruler_tap(&mut rig, "drum editor", tap, false, (128, x));
 }
