@@ -57,13 +57,13 @@ fn the_close_x_on_the_playlist_hides_the_panel_and_the_corner_button_brings_it_b
     rig.click(CLOSE);
     assert!(rig.hidden());
     rig.frame(vec![]);
-    // No transport, no keyboard; the track rows reach the bottom, and the rack tab is centred on them again.
-    assert!(!rig.painted("BPM"));
+    // No keyboard (the control bar stays); the track rows reach the bottom, and the rack tab is centred on them again.
+    assert!(rig.painted("BPM"));
     rig.take();
     rig.click(E4);
     assert_eq!(rig.take(), Vec::<String>::new());
     let tab = rig.ctx.read_response(egui::Id::new("edge_tab")).unwrap();
-    assert_eq!(tab.rect.center().y, (540.0 + 2.0 * U) / 2.0);
+    assert_eq!(tab.rect.center().y, (TOP_BAR + 540.0 + 2.0 * U) / 2.0);
     // The `↖`: a floating 1.5 U `moduleFill` disc with icon 11 in `text` over it.
     let disc = rig.show_button().expect("the ↖");
     let icon = (rig.out.shapes[disc + 1..].iter()).any(|s| match &s.shape {
@@ -103,7 +103,8 @@ fn in_the_editors_and_the_mixer_the_close_x_hides_the_panel_and_keeps_the_view()
         assert_eq!(rig.app.nav.view, view);
         assert!(rig.hidden(), "{view:?}");
         rig.frame(vec![]);
-        assert!(!rig.painted("BPM"), "{view:?}");
+        // The control bar stays over the hidden panel.
+        assert!(rig.painted("BPM"), "{view:?}");
         rig.click(SHOW_KEYS);
         assert!(!rig.hidden(), "{view:?}");
         assert_eq!(rig.app.nav.view, view);
@@ -120,7 +121,7 @@ fn the_corner_button_lies_over_the_open_rack_and_takes_its_taps() {
     rig.slide_rack();
     rig.frame(vec![]);
     // The rack is 20 U at the right of the content area, which now reaches the bottom.
-    let rack = egui::Rect::from_min_max(pos2(530.0, 0.0), CORNER);
+    let rack = egui::Rect::from_min_max(pos2(530.0, TOP_BAR), CORNER);
     let rack_fill = (rig.out.shapes.iter())
         .rposition(|s| matches!(&s.shape, Shape::Rect(r) if r.rect == rack))
         .expect("the rack's fill");
@@ -166,7 +167,7 @@ fn the_add_channel_plus_sits_under_the_last_row_on_the_screen_centre_and_the_rac
     rig.slide_rack();
     rig.frame(vec![]);
     assert_eq!(rig.ctx.read_response(plus).unwrap().rect, expected);
-    let rack = egui::Rect::from_min_max(pos2(530.0, 0.0), pos2(1170.0, PANEL_TOP));
+    let rack = egui::Rect::from_min_max(pos2(530.0, TOP_BAR), pos2(1170.0, PANEL_TOP));
     let rack_fill = (rig.out.shapes.iter())
         .position(|s| matches!(&s.shape, Shape::Rect(r) if r.rect == rack))
         .expect("the rack's fill");
@@ -183,7 +184,7 @@ fn the_logo_lies_over_the_open_rack_and_takes_its_tap_under_the_main_menu() {
     rig.slide_rack();
     rig.frame(vec![]);
     assert!(rig.ctx.read_response(egui::Id::new("edge_tab")).is_none());
-    let rack = egui::Rect::from_min_max(pos2(530.0, 0.0), pos2(1170.0, PANEL_TOP));
+    let rack = egui::Rect::from_min_max(pos2(530.0, TOP_BAR), pos2(1170.0, PANEL_TOP));
     let rack_fill = (rig.out.shapes.iter())
         .rposition(|s| matches!(&s.shape, Shape::Rect(r) if r.rect == rack))
         .expect("the rack's fill");
@@ -242,7 +243,7 @@ fn a_clip_editor_opens_under_the_playlist_and_the_ribbon_moves_it() {
     // The first frame: the playlist has half the area (to the pixel), the roll its settled size, moved down to the gap.
     assert_eq!(
         roll_grid(&rig).top(),
-        (PANEL_TOP / 2.0).round() + 4.0 + ROLL_TOP
+        ((PANEL_TOP - TOP_BAR) / 2.0).round() + 4.0 + ROLL_TOP
     );
     assert_eq!(roll_grid(&rig).height(), PANEL_TOP - ROLL_TOP);
     rig.slide_split();
@@ -255,7 +256,7 @@ fn a_clip_editor_opens_under_the_playlist_and_the_ribbon_moves_it() {
     assert_eq!(roll_grid(&rig).top(), 120.0 + 4.0 + ROLL_TOP);
     // The playlist above is live: its ruler (a beat 38.4 points from x 48) seeks.
     rig.take();
-    rig.click(pos2(48.0 + 3.1 * 38.4, 24.0));
+    rig.click(pos2(48.0 + 3.1 * 38.4, TOP_BAR + 24.0));
     assert_eq!(rig.take(), ["Seek 384"]);
 }
 
@@ -278,7 +279,7 @@ fn playlist_drawn(rig: &Rig) -> bool {
 }
 
 /// The roll's grid top with the editor at the area's top: the t colour band (2 points at U = 32), then the ruler.
-const ROLL_TOP: f32 = 2.0 + 52.0;
+const ROLL_TOP: f32 = TOP_BAR + 2.0 + 52.0;
 
 /// The close ribbon dragged `dy` points down (up when negative) in 4-point steps, so no flick, and two frames after it.
 fn drag_split(rig: &mut Rig, dy: f32) {
@@ -336,13 +337,16 @@ fn the_piano_roll_and_the_drum_editor_open_fully_expanded_and_a_switch_keeps_the
     }
     rig.app.song_edited(SongEdit::Final, 0);
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let area = egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1170.0, PANEL_TOP));
+    let area = egui::Rect::from_min_max(pos2(0.0, TOP_BAR), pos2(1170.0, PANEL_TOP));
     let x = egui::Id::new("editor_close");
     let expanded = |rig: &Rig| {
         let (playlist, editor, _) = rig.app.main_screen.split.layout(area, &m);
         assert_eq!((playlist.height(), editor.top()), (0.0, area.top() + 2.0));
         assert!(!playlist_drawn(rig));
-        assert_eq!(rig.ctx.read_response(x).map(|r| r.rect.top()), Some(2.0));
+        assert_eq!(
+            rig.ctx.read_response(x).map(|r| r.rect.top()),
+            Some(TOP_BAR + 2.0)
+        );
     };
     // The synth's piano roll: its ruler under the band at the area top.
     rig.edit(2);
@@ -390,7 +394,10 @@ fn the_ribbon_drags_the_editor_up_to_the_area_top_and_back_down() {
     }
     // The ribbon hangs from the band at the window top, and its tap still jumps the split to 1.
     let x = egui::Id::new("editor_close");
-    assert_eq!(rig.ctx.read_response(x).map(|r| r.rect.top()), Some(2.0));
+    assert_eq!(
+        rig.ctx.read_response(x).map(|r| r.rect.top()),
+        Some(TOP_BAR + 2.0)
+    );
     rig.click_id(x);
     rig.frame(vec![]);
     assert_eq!(
@@ -479,9 +486,9 @@ fn one_close_ribbon_closes_every_bottom_editor_and_keeps_its_clip() {
     let x = egui::Id::new("editor_close");
     // The touch area of a ribbon whose left edge is at `left`, under the band at the area top.
     let touch = |left: f32| {
-        egui::Rect::from_min_size(pos2(left, 2.0), vec2(1.5 * U, 1.3 * U))
+        egui::Rect::from_min_size(pos2(left, TOP_BAR + 2.0), vec2(1.5 * U, 1.3 * U))
             .expand2(vec2(0.3 * U, 0.0))
-            .with_max_y(2.0 + 1.6 * U)
+            .with_max_y(TOP_BAR + 2.0 + 1.6 * U)
     };
     // Nothing to undo: a tap that made a step would show.
     rig.app.history = History::new(&rig.app.song);
@@ -959,13 +966,13 @@ fn a_bar_drag_resizes_past_1_u_without_a_jump_and_its_release_settles_and_is_kep
     // From then on h ← h − Δy per move: 60 points up, then 2 down, laid out in the same frame (the bar's REC is there).
     rig.drag_to(at - vec2(0.0, 100.0));
     assert_eq!(rig.panel(), 5.0 * U + 60.0);
-    // REC's caption, about 0.5 U over the bottom of a bar whose top is the panel's (the bottom third's centre, lifted
-    // 0.2 U).
-    let caption = rig.text_rect("REC").center().y;
-    let bar_bottom = 540.0 - (5.0 * U + 60.0) + 1.75 * U;
+    // The panel's backdrop, whose top is the dock's, is painted where the finger has put it, in the same frame.
+    let fill = rig.app.theme.colors.control_fill.to_color32();
+    let top = 540.0 - (5.0 * U + 60.0);
     assert!(
-        (caption - (bar_bottom - 0.5 * U)).abs() < 2.0,
-        "no frame of lag: {caption}"
+        (rig.out.shapes.iter()).any(|s| matches!(&s.shape,
+            Shape::Rect(r) if r.fill == fill && r.rect.bottom() == 540.0 && (r.rect.top() - top).abs() < 2.0)),
+        "no frame of lag"
     );
     rig.drag_to(at - vec2(0.0, 98.0));
     assert_eq!(rig.panel(), 5.0 * U + 58.0);
@@ -1001,7 +1008,7 @@ fn a_bar_drag_resizes_past_1_u_without_a_jump_and_its_release_settles_and_is_kep
 fn a_throw_up_stops_under_the_ruler_and_a_track_row_and_one_down_leaves_the_bar_alone() {
     let mut rig = Rig::with_synth();
     // #57: M leaves the ruler and one 2 U track row, 540 − ceil(3.65 U) = 423 pt.
-    let full = 540.0 - (3.65 * U).ceil();
+    let full = 540.0 - TOP_BAR - (3.65 * U).ceil();
     let at = bar_gap(5.0 * U);
     // A last move of 40 points up throws it 400 points taller: past M − min, M.
     rig.press(at);
@@ -1044,7 +1051,7 @@ fn a_tap_on_the_bars_gap_collapses_the_panel_and_another_opens_it_to_the_recent_
     assert_eq!(rig.app.settings.recent_kbd_size, 7.0);
     rig.settle_panel();
     assert_eq!(rig.panel(), 7.0 * U);
-    let settings = pos2(KEYBOARD_SETTINGS.x, bar_gap(7.0 * U).y);
+    let settings = KEYBOARD_SETTINGS;
     rig.quick_tap(settings);
     assert_eq!(rig.overlays(), [Overlay::KeyboardSettings]);
     assert_eq!(rig.app.settings.preferred_kbd_size, 7.0);
@@ -1079,7 +1086,7 @@ fn the_shortcuts_toggle_snaps_like_a_release() {
     assert_eq!(at(5.0, 7.0), (1.75, None));
     // At the bar: the recent size, which stays recent; one within min of M (#57: 423 pt) goes to M.
     assert_eq!(at(1.75, 7.0), (7.0, Some(7.0)));
-    let full = (540.0 - (3.65 * U).ceil()) / U;
+    let full = (540.0 - TOP_BAR - (3.65 * U).ceil()) / U;
     assert_eq!(at(1.75, 16.0), (full, Some(full)));
     // A recent size under c + 0.75 U opens to c + 0.75 U.
     assert_eq!(at(1.75, 2.0), (2.5, Some(2.5)));

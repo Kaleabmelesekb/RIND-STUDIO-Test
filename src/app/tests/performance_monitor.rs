@@ -16,7 +16,7 @@ impl Rig {
     }
 
     /// Frames for the keyboard panel to slide to its place, where the transport bar's readout is; the centre of the
-    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, at the bar's right edge).
+    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, in the control bar left of the logo's corner).
     fn settle(&mut self) -> Pos2 {
         for _ in 0..40 {
             self.frame(vec![]);
@@ -28,7 +28,10 @@ impl Rig {
             .expect("the readout")
             .rect
             .center();
-        assert!((at.x - (1170.0 - 1.5 * 1.75 * U)).abs() < 0.01, "{at:?}");
+        assert!(
+            (at.x - (1170.0 - 3.75 * U - 1.5 * 1.75 * U)).abs() < 0.01,
+            "{at:?}"
+        );
         at
     }
 

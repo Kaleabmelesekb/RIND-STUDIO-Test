@@ -2251,7 +2251,7 @@ fn a_playlist_region_edit_rebuilds_once_and_is_one_undo_step_that_keeps_the_loop
     rig.frame(vec![]);
     rig.take();
     // Beats 2 to 6 on the ruler (a beat is 38.4 points from x 48): the clip's first two beats go.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
     rig.region(beat(2.0), beat(6.0), "Delete space");
     assert_eq!(rig.clip_spans(), [(256, 256.0)]);
     // The region's loop reached the engine; the edit clears it, and the new engine reads none.
@@ -2273,7 +2273,7 @@ fn a_play_loop_is_no_undo_step_even_when_a_final_edit_follows_it() {
     rig.frame(vec![]);
     rig.app.files.saved();
     // A loop on the playlist's ruler: a long press on beat 2 dragged to beat 6 (a beat is 38.4 points from x 48).
-    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
     rig.press(beat(2.0));
     rig.next_frame_at(rig.time + 0.31);
     rig.frame(vec![]);
@@ -2335,7 +2335,7 @@ fn a_tap_on_any_ruler_sets_the_shared_playhead_or_stops_a_playing_transport() {
     let mut rig = Rig::with_synth();
     rig.app.song.channels[1].lanes[0].add_clip(512, 8.0);
     // The playlist's ruler: beat 3 (a beat is 38.4 points from x 48).
-    let ruler = pos2(48.0 + 3.1 * 38.4, 24.0);
+    let ruler = pos2(48.0 + 3.1 * 38.4, TOP_BAR + 24.0);
     rig.click(ruler);
     assert_eq!(rig.take(), ["Seek 384"]);
     rig.rec.0.borrow_mut().tick = 384;
@@ -2371,7 +2371,7 @@ fn the_playhead_knob_takes_its_own_taps_and_the_ruler_beside_it_keeps_its_gestur
     rig.rec.0.borrow_mut().tick = 384;
     rig.frame(vec![]);
     // Stopped at beat 3; 0.6 beat to its right is on the box (a beat is 38.4 points from x 48): a tap plays.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
     rig.click(beat(3.6));
     assert_eq!(rig.take(), ["Play"]);
     rig.click(PLAY);

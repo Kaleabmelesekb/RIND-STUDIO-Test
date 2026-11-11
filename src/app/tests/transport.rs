@@ -14,7 +14,7 @@ const REC: Pos2 = pos2(585.0 - 2.0 * 1.75 * U, BAR_Y);
 /// On the playlist's ruler at `beat`: tick 0 is at the grid's left edge (1.5 U + t, t = 2 points), a beat is 1.2 U at
 /// the default zoom.
 fn ruler(beat: f32) -> Pos2 {
-    pos2(1.5 * U + 2.0 + beat * 1.2 * U, 0.75 * U)
+    pos2(1.5 * U + 2.0 + beat * 1.2 * U, TOP_BAR + 0.75 * U)
 }
 
 /// The playhead knob (the play box, its left edge on the playhead) on the ruler's middle line, on the transport at
@@ -377,7 +377,7 @@ fn the_piano_rolls_playhead_knob_drags_and_seeks_where_it_lets_go() {
     rig.take();
     // The roll's ruler: a beat is 64 points from the grid's left edge (1.5 U + t, t = 2 points). The box at beat 0,
     // pressed on the playhead and dragged 3 U right: beat 1.5.
-    let beat = |b: f32| pos2(1.5 * U + 2.0 + b * 64.0, 0.75 * U);
+    let beat = |b: f32| pos2(1.5 * U + 2.0 + b * 64.0, TOP_BAR + 0.75 * U);
     let to = beat(1.5);
     rig.press(beat(0.0));
     rig.drag_to(beat(0.75));
