@@ -348,7 +348,7 @@ fn a_folder_renamed_in_the_picker_takes_the_open_songs_file_along() {
 /// Opens the picker's ≡ menu (the left column's third button) and lets its items show.
 fn options(rig: &mut Rig) {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
     rig.click(crate::ui::modules_browser::layout(screen, 1.0, &m).button(2));
     for _ in 0..30 {
         rig.frame(vec![]);

@@ -3678,11 +3678,11 @@ fn the_view_ends_at_the_racks_left_edge_but_keeps_1_u() {
     let closed = regions(1170.0, 0.0);
     assert_eq!(closed.editor, closed.area);
     assert_eq!(closed.rack.left(), 1170.0);
-    // Open: 20 U at the right, the view up to its left edge, both the area's height.
+    // Open: 20 U at the right, the view up to its left edge, both the area's height (under the control bar).
     let open = regions(1170.0, 1.0);
     assert_eq!(
         open.rack,
-        Rect::from_min_max(pos2(530.0, 0.0), open.area.max)
+        Rect::from_min_max(pos2(530.0, open.area.top()), open.area.max)
     );
     assert_eq!(open.editor, open.area.with_max_x(530.0));
     // Halfway in, the view is already narrower.

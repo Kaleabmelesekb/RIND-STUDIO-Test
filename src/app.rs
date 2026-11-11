@@ -2925,15 +2925,17 @@ mod tests {
     /// The bottom panel at its default height ([`PANEL_H`] U): its top (the content area's bottom), the transport bar's
     /// centre line under it, and the keys' top under the 1.75 U bar (y 380, 408, 436); the keys run to the screen's
     /// bottom, 540. Checked against the layout by `the_rigs_panel_constants_are_the_layouts`.
-    const PANEL_TOP: f32 = 540.0 - PANEL_H * U;
+    const PANEL_TOP: f32 = SCREEN_H - PANEL_H * U;
     /// The control bar across the top (1.75 U tall): its buttons' centre line, and the playlist's ruler under it.
     const TOP_BAR: f32 = TRANSPORT_H * U;
+    /// The rig's screen height: the 540 points the content below the bar was written for, and the bar over them.
+    const SCREEN_H: f32 = 540.0 + TOP_BAR;
     const BAR_Y: f32 = TOP_BAR / 2.0;
     /// The dock strip over the keys (also 1.75 U): its centre line, where the ↘ and the empty space to tap sit.
     const DOCK_Y: f32 = PANEL_TOP + TRANSPORT_H * U / 2.0;
     const KEYS_TOP: f32 = PANEL_TOP + TRANSPORT_H * U;
     /// E4 and F4, low on their white keys, 115/135 of the keys' height down: velocity 108 (MIDI).
-    const LOW: f32 = KEYS_TOP + 115.0 / 135.0 * (540.0 - KEYS_TOP);
+    const LOW: f32 = KEYS_TOP + 115.0 / 135.0 * (SCREEN_H - KEYS_TOP);
     const E4: Pos2 = pos2(5.0 * U, LOW);
     const F4: Pos2 = pos2(7.0 * U, LOW);
     /// In the transport bar, between its left buttons and REC: a click there only starts the audio, held past a tap
@@ -2946,7 +2948,7 @@ mod tests {
     /// The centre of drum pad `index` in the keys area, where a current Drums channel has its pads (in their rect,
     /// 0.35 U under the keys' top).
     fn pad_centre(index: usize) -> Pos2 {
-        let band = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, 540.0));
+        let band = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, SCREEN_H));
         let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
         let area = crate::ui::keyboard_settings::pads_rect(band, &m);
         crate::ui::drums::pad_grid(area, 1170.0, U).centres[index]
@@ -2956,7 +2958,7 @@ mod tests {
     fn the_rigs_panel_constants_are_the_layouts() {
         let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
         let r = Regions::new(
-            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
+            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
             &m,
         );
         assert_eq!(m.u(1.0), U);
@@ -2966,7 +2968,10 @@ mod tests {
             (r.transport.top(), r.transport.center().y),
             (PANEL_TOP, DOCK_Y)
         );
-        assert_eq!((r.keyboard.top(), r.keyboard.bottom()), (KEYS_TOP, 540.0));
+        assert_eq!(
+            (r.keyboard.top(), r.keyboard.bottom()),
+            (KEYS_TOP, SCREEN_H)
+        );
         assert_eq!(PLAY, r.top.center());
     }
 
@@ -3074,7 +3079,10 @@ mod tests {
         fn frame(&mut self, events: Vec<egui::Event>) {
             self.time += 0.1;
             let mut input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0))),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    vec2(1170.0, SCREEN_H),
+                )),
                 events,
                 time: Some(self.time),
                 ..Default::default()
@@ -3505,7 +3513,7 @@ mod tests {
         };
         use egui::TouchPhase::{End, Move, Start};
         // G4 half way down: velocity 0.5 (MIDI 64).
-        let g4 = pos2(9.0 * U, (KEYS_TOP + 540.0) / 2.0);
+        let g4 = pos2(9.0 * U, (KEYS_TOP + SCREEN_H) / 2.0);
         rig.frame(vec![touch(1, Start, E4)]);
         rig.frame(vec![touch(2, Start, g4)]);
         // The first finger slides onto F4: E4 stops, F4 sounds at E4's velocity; G4 sounds on.
@@ -4553,7 +4561,7 @@ mod tests {
             }]
         );
         rig.frame(vec![]);
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
         let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
         rig.click(save_dialog::layout(screen, &m).save.center());
         assert_eq!(rig.overlays(), []);
@@ -4634,7 +4642,10 @@ mod tests {
         fn output(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
             self.time += 0.1;
             let input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0))),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    Pos2::ZERO,
+                    vec2(1170.0, SCREEN_H),
+                )),
                 events,
                 time: Some(self.time),
                 ..Default::default()
@@ -4658,7 +4669,7 @@ mod tests {
         /// Whether the next frame paints the whole screen in `theme`'s background first.
         fn background_is(&mut self, theme: u32) -> bool {
             let fill = theme_by_id(theme).colors.background.to_color32();
-            let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+            let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
             self.output(vec![]).shapes.iter().any(
                 |c| matches!(&c.shape, egui::Shape::Rect(r) if r.rect == screen && r.fill == fill),
             )
@@ -4941,7 +4952,7 @@ mod tests {
             [Overlay::MainMenu(_), Overlay::SaveDialog { .. }]
         ));
         rig.frame(vec![]);
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
         let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
         rig.click(save_dialog::layout(screen, &m).save.center());
         assert_eq!(rig.overlays(), [Overlay::MainMenu(MenuTab::Songs)]);
@@ -5236,7 +5247,7 @@ mod tests {
         }
         // The link is below the fold.
         let content = crate::ui::main_menu::shell_layout(
-            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
+            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
             &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
         )
         .content;
@@ -5440,7 +5451,7 @@ mod tests {
         assert!(rig.painted("Hidden") && !rig.painted("Hide"));
         // The lock button is below the fold.
         let content = crate::ui::main_menu::shell_layout(
-            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
+            egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
             &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
         )
         .content;
@@ -5780,7 +5791,7 @@ mod tests {
         let mut rig = Rig::new();
         let (boxed, text, galley) = painted_flash(&mut rig, "Render complete\nSaved to: /x/y.wav");
         assert_eq!(galley.rows.len(), 2);
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
         assert!(
             (boxed.center() - screen.center()).length() <= 1.0,
             "{boxed:?}"
@@ -5803,7 +5814,7 @@ mod tests {
         let mut rig = Rig::new();
         let text = format!("Render complete\nSaved to: {}", "mixdown ".repeat(80));
         let (boxed, _, galley) = painted_flash(&mut rig, text.trim_end());
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
         assert!(galley.rows.len() > 2, "{} rows", galley.rows.len());
         assert!(screen.contains_rect(boxed), "{boxed:?}");
         for row in &galley.rows {
@@ -5824,7 +5835,7 @@ mod tests {
         let path = format!("/home/user/My Tracks/{}/Mix.wav", "x".repeat(300));
         let (boxed, _, galley) =
             painted_flash(&mut rig, &format!("Render complete\nSaved to: {path}"));
-        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
         assert!(galley.rows.len() > 2, "{} rows", galley.rows.len());
         assert!(screen.contains_rect(boxed), "{boxed:?}");
     }
@@ -5890,7 +5901,7 @@ mod tests {
 
     /// The BPM button; in the tempo dialog (over the whole screen) the dial's centre, the screen's.
     const BPM: Pos2 = pos2(585.0 + 1.75 * U, BAR_Y);
-    const TEMPO_DIAL: Pos2 = pos2(585.0, 270.0);
+    const TEMPO_DIAL: Pos2 = pos2(585.0, SCREEN_H / 2.0);
 
     /// On the dial, 1 U out: 3, 6, 9 and 12 o'clock for `quarter` 0 to 3 (and on round), so that each next one is a
     /// quarter turn clockwise, +0.25 BPM.
@@ -5996,10 +6007,10 @@ mod tests {
         assert_eq!(rig.take(), ["ReplaceSong adopting no-resync"]);
         rig.frame(vec![]);
         assert!(rig.painted("121"), "the transport shows the new tempo");
-        // The dialog is modal: undo waits until it closes (the BPM button under it is swallowed too).
+        // The dialog is modal: undo waits until it closes (a touch on its disc is swallowed too).
         rig.frame(z(egui::Modifiers::NONE));
         assert!((rig.app.song.tempo_bpm - 121.0).abs() < 1e-9);
-        rig.click(BPM);
+        rig.click(pos2(TEMPO_DIAL.x, TEMPO_DIAL.y - 6.0 * U));
         assert_eq!(rig.overlays(), [Overlay::TempoEditor]);
         rig.frame(escape());
         assert_eq!(rig.overlays(), []);
@@ -6023,12 +6034,11 @@ mod tests {
         rig.click(BPM);
         rig.frame(vec![]);
         assert_eq!(rig.overlays(), [Overlay::TempoEditor]);
-        // On its 7.5 U disc, over the tracks and the transport, off the dial and the buttons: nothing happens, to the
-        // dialog or to what is under it.
+        // On its 7.5 U disc, over the tracks, off the dial and the buttons: nothing happens, to the dialog or to what
+        // is under it. (The control bar's BPM button is past the disc's edge now: a touch there is off it.)
         for at in [
             pos2(TEMPO_DIAL.x, TEMPO_DIAL.y - 6.0 * U),
             pos2(TEMPO_DIAL.x, TEMPO_DIAL.y + 7.0 * U),
-            BPM,
         ] {
             rig.click(at);
             assert_eq!(rig.overlays(), [Overlay::TempoEditor], "{at:?}");

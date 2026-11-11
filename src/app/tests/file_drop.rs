@@ -21,7 +21,10 @@ fn drop_at(rig: &mut Rig, at: Pos2, files: &[&str]) {
         .collect();
     rig.time += 0.1;
     let input = egui::RawInput {
-        screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0))),
+        screen_rect: Some(egui::Rect::from_min_size(
+            Pos2::ZERO,
+            vec2(1170.0, SCREEN_H),
+        )),
         events: vec![egui::Event::PointerMoved(at)],
         dropped_files,
         time: Some(rig.time),

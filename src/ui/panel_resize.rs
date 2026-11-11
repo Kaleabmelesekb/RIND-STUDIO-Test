@@ -314,9 +314,9 @@ mod tests {
             let (u, screen) = (m.u(1.0), 540.0);
             for rows in [1, 2] {
                 let c = collapsed(rows, &m);
-                // M: the screen less the ruler and a track row, ceil(3.65 U) px (#57).
+                // M: the screen less the control bar (c), the ruler and a track row, ceil(3.65 U) px (#57).
                 let full = full(screen, c, &m);
-                assert_eq!(full, screen - (3.65 * m.u_px()).ceil() / ppp);
+                assert_eq!(full, screen - c - (3.65 * m.u_px()).ceil() / ppp);
                 assert_eq!(c, (1.75 * f32::from(rows) * m.u_px()).trunc() / ppp);
                 // Still: h' = h; the last move 3 points up throws it 30 points taller.
                 assert_eq!(released(8.0 * u, 0.0, c, screen, &m), 8.0 * u);
@@ -350,29 +350,29 @@ mod tests {
         // max(recent, c + strip + 6.5 U), at most M.
         let strip = 3.0 * u;
         assert_eq!(
-            strip_opened(8.0 * u, 5.0 * u, one, strip, 540.0, false, &m),
+            strip_opened(8.0 * u, 5.0 * u, one, strip, 600.0, false, &m),
             None
         );
         let opened = Some(one + strip + 6.5 * u);
         assert_eq!(
-            strip_opened(8.0 * u, 5.0 * u, one, strip, 540.0, true, &m),
+            strip_opened(8.0 * u, 5.0 * u, one, strip, 600.0, true, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one, 5.0 * u, one, strip, 540.0, false, &m),
+            strip_opened(one, 5.0 * u, one, strip, 600.0, false, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one + strip, 5.0 * u, one, strip, 540.0, false, &m),
+            strip_opened(one + strip, 5.0 * u, one, strip, 600.0, false, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one, 12.0 * u, one, strip, 540.0, false, &m),
+            strip_opened(one, 12.0 * u, one, strip, 600.0, false, &m),
             Some(12.0 * u)
         );
         assert_eq!(
             strip_opened(one, 5.0 * u, one, strip, 300.0, false, &m),
-            Some(300.0 - (3.65 * u).ceil())
+            Some(300.0 - one - (3.65 * u).ceil())
         );
     }
 

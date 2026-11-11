@@ -410,7 +410,7 @@ fn a_tap_in_the_editor_gives_it_the_keys_over_the_playlists_selection() {
     // The clip selected in the playlist, then a tap on the roll's grid: the focus is the editor's.
     rig.click(at(2, 2.0));
     assert!(rig.app.main_screen.clips.selected.is_some());
-    rig.click(pos2(700.0, 330.0));
+    rig.click(pos2(700.0, TOP_BAR + 330.0));
     rig.frame(vec![]);
     assert!(focus::within(&rig.ctx, editor()));
     let clips = |rig: &Rig| rig.app.song.channels[2].lanes[0].clips.len();
@@ -424,7 +424,7 @@ fn a_tap_in_the_editor_gives_it_the_keys_over_the_playlists_selection() {
 #[test]
 fn the_close_x_moves_the_focus_from_the_editor_to_the_playlist() {
     let mut rig = open_rig();
-    rig.click(pos2(700.0, 330.0));
+    rig.click(pos2(700.0, TOP_BAR + 330.0));
     rig.frame(vec![]);
     assert!(focus::within(&rig.ctx, editor()));
     rig.click_id(egui::Id::new("editor_close"));

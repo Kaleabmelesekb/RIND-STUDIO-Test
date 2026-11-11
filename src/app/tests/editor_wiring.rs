@@ -24,7 +24,7 @@ fn strip(row: usize, ctl: Ctl) -> egui::Id {
 
 /// The keyboard band at the default panel height, where the drum view has its pads, and the centre of pad `index`
 /// there.
-const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, 540.0));
+const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, SCREEN_H));
 fn pad(index: usize) -> Pos2 {
     pad_in(crate::ui::keyboard_settings::PANEL_H, index)
 }
@@ -33,7 +33,7 @@ fn pad(index: usize) -> Pos2 {
 /// panel only the first row (pads 0–6) is on the screen: the grid keeps its least size and overflows below.
 pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
     let keys = Regions::sized(screen, panel_u * U, 1, &m).keyboard;
     let area = crate::ui::keyboard_settings::pads_rect(keys, &m);
     drums::pad_grid(area, 1170.0, U).centres[index]
@@ -1357,7 +1357,7 @@ fn a_new_drums_channels_default_drumset_shows_and_its_pads_play_it() {
         rig.frame(vec![]);
     }
     let pad = |i| pad_in(8.0, i);
-    assert!(pad(kit.slots.len()).y < 540.0);
+    assert!(pad(kit.slots.len()).y < SCREEN_H);
     for i in 0..kit.slots.len() {
         rig.press(pad(i));
         rig.release(pad(i));
@@ -3896,7 +3896,7 @@ fn a_keys_area_0_tall_hides_the_pads_and_a_press_there_plays_nothing() {
     rig.frame(vec![]);
     rig.app.settings.preferred_kbd_size = 4.75;
     // Pads: 6-point paths under the bar (the keyboard-settings icon's keys are 6-point paths too).
-    let under_bar = 540.0 - (4.75 - 1.75) * U;
+    let under_bar = SCREEN_H - (4.75 - 1.75) * U;
     let hexes = |rig: &Rig| {
         (rig.out.shapes.iter())
             .filter(|s| match &s.shape {
@@ -3956,7 +3956,7 @@ fn rec_armed_gives_the_step_knob_its_record_icon_and_a_tap_on_the_knob_plays() {
 #[test]
 fn the_keyboard_panel_is_control_fill_under_a_1_px_background_line_behind_the_piano_and_the_pads() {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
     let regions = Regions::sized(screen, crate::ui::keyboard_settings::PANEL_H * U, 1, &m);
     let panel = Rect::from_min_max(regions.transport.min, regions.keyboard.max);
     let on_top = |rig: &Rig, at: Pos2| {
@@ -4027,7 +4027,7 @@ fn the_keys_outside_the_span_of_the_channels_instrument_ranges_are_disabled() {
     // E4 (52) and D5 (62) are in range, low on their keys; D#4 (51) and D#5 (63), high on theirs, are not.
     assert_eq!(on_top(E4), Some(white));
     assert_eq!(on_top(pos2(17.0 * U, LOW)), Some(white));
-    let high = KEYS_TOP + 0.3 * (540.0 - KEYS_TOP);
+    let high = KEYS_TOP + 0.3 * (SCREEN_H - KEYS_TOP);
     assert_eq!(on_top(pos2(4.0 * U, high)), Some(black_off));
     assert_eq!(on_top(pos2(18.0 * U, high)), Some(black_off));
 }

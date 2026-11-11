@@ -3187,7 +3187,10 @@ mod tests {
         }
         assert!(screen.add_channel_open, "the popup closed by itself");
 
-        let play = Regions::new(crate::ui::offscreen::SCREEN, &m).top.center();
+        // The frames' screen starts one control bar above the origin ([`frame`]).
+        let bar = TRANSPORT_H * m.u(1.0);
+        let screen_rect = Rect::from_min_size(pos2(0.0, -bar), vec2(1170.0, 540.0 + bar));
+        let play = Regions::new(screen_rect, &m).top.center();
         click(&ctx, &mut screen, &mut song, &mut time, scale, play);
         assert!(!screen.add_channel_open, "the outside click did not close");
         assert!(!screen.playing, "the outside click toggled play");

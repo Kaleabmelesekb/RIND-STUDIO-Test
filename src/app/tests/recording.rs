@@ -1061,7 +1061,7 @@ fn a_drum_take_reuses_the_first_notes_lane_with_no_clip_at_its_start() {
 /// The level ring around pad `pad` (its centre, size r + 2·ceil(U/16), seen at trunc(1.5 size)/√2): its fill.
 fn glow(rig: &Rig, pad: usize) -> egui::Color32 {
     let r = crate::ui::drums::pad_grid(
-        egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, 540.0)),
+        egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, SCREEN_H)),
         1170.0,
         U,
     )

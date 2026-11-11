@@ -190,7 +190,7 @@ fn undo(rig: &mut Rig) {
 }
 
 fn screen_metrics() -> (egui::Rect, Metrics) {
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
     (
         screen,
         Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),

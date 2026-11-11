@@ -358,6 +358,15 @@ pub fn builtin_themes() -> Vec<Theme> {
             Some([0xFFFFFF, 0x000000, 0xCCCCCC, 0x7C7C7C]),
             Some([1.00, 0.6439, 1.00, 0.1303]),
         ),
+        // Ableton Live's light grey (the arrangement screenshot this layout follows): mid-grey gaps, lighter panels,
+        // near-black text and the orange accent.
+        row(
+            9,
+            "Live Light",
+            [0x8E8E8E, 0xB8B8B8, 0xC9C9C9, 0xDEDEDE, 0x1C1C1C, ORANGE],
+            Some([0xFFFFFF, 0x2A2A2A, 0xDADADA, 0x9C9C9C]),
+            Some([0.80, 0.50, 0.70, 0.55]),
+        ),
     ]
     .into_iter()
     .map(RawTheme::resolve)
@@ -472,10 +481,10 @@ mod tests {
     #[test]
     fn builtins_are_numbered_in_order_and_unknown_id_is_flat_industrial() {
         let themes = builtin_themes();
-        assert_eq!(themes.len(), 9);
+        assert_eq!(themes.len(), 10);
         assert!(themes.iter().enumerate().all(|(i, t)| t.id == i as u32));
         assert_eq!(themes[7].name, "High Contrast A");
-        assert_eq!(theme_by_id(9).id, 0);
+        assert_eq!(theme_by_id(10).id, 0);
         assert_eq!(theme_by_id(u32::MAX).name, "Flat Industrial");
         // A theme that sets its own keys and options: Deep Purple.
         let deep = &themes[1];
