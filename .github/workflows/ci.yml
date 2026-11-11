@@ -32,7 +32,13 @@ jobs:
             tools/content-build
       # libclang: bindgen in signalsmith-stretch's build script (Lemon Sampler's time stretching, C++).
       - name: System libraries
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libclang-dev
+        # The runners' package mirrors fail to resolve now and then: retry before giving up.
+        run: |
+          for try in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=5 libasound2-dev libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libclang-dev && break
+            echo "apt failed (try $try)"; sleep 30
+            [ "$try" = 5 ] && exit 1
+          done
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
