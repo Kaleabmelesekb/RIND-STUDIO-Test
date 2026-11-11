@@ -2660,7 +2660,10 @@ fn the_rack_slides_in_and_out_and_the_playlist_ends_at_its_left_edge() {
     assert_eq!(rig.overlays(), []);
     rig.frame(vec![]);
     assert_eq!(grid_right(&rig), 1170.0 - 320.0);
-    let half = Rect::from_min_max(pos2(1170.0 - 320.0, 0.0), pos2(1170.0 + 320.0, PANEL_TOP));
+    let half = Rect::from_min_max(
+        pos2(1170.0 - 320.0, TOP_BAR),
+        pos2(1170.0 + 320.0, PANEL_TOP),
+    );
     let drawn =
         |s: &egui::epaint::ClippedShape| matches!(&s.shape, egui::Shape::Rect(r) if r.rect == half);
     assert!(rig.out.shapes.iter().any(drawn), "the closing rack's fill");

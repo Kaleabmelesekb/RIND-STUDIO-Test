@@ -6226,9 +6226,9 @@ mod tests {
         ] {
             assert_eq!(rig.color_of(item), Some(dim), "{item}");
         }
-        // Standing on the CTRL button (x 669..725, on the panel's top), eight rows of 1.25 U: a disabled item (`Add
+        // Hanging from the CTRL button (x 669..725, in the control bar), eight rows of 1.25 U: a disabled item (`Add
         // automation track`, row 3) does nothing.
-        rig.click(pos2(697.0, PANEL_TOP - 4.5 * 40.0));
+        rig.click(pos2(697.0, TOP_BAR + 3.5 * 40.0));
         assert_eq!(rig.overlays(), [Overlay::CtrlMenu]);
         // A tap outside closes it and reaches nothing below.
         rig.click(E4);

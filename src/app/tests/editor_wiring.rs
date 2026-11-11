@@ -1244,7 +1244,7 @@ fn the_keys_take_no_touch_with_the_master_alone_and_key_lock_snaps_a_major_songs
     let mut rig = Rig::with_synth();
     rig.app.song.key_scale = crate::song::scales::scale_to_stored(0);
     for (x, key) in [(1.8, 48), (2.2, 50), (5.0, 52)] {
-        let at = pos2(x * U, 445.5);
+        let at = pos2(x * U, TOP_BAR + 445.5);
         rig.press(at);
         rig.release(at);
         let on = rig.take().first().cloned().unwrap_or_default();

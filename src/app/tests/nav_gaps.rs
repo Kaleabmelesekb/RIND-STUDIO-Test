@@ -236,7 +236,7 @@ fn the_keyboard_settings_cover_nothing_that_scrolls_and_the_tempo_dialog_covers_
 #[test]
 fn the_save_and_tempo_dialogs_dim_the_whole_app_screen_and_paint_only_their_box_over_it() {
     // Dialogs, through the app: the screen dimmed over everything the app drew, then the dialog: the Save dialog's
-    // 20 U × 7 U band (y 158..382) as the floating panel over a dim of α 0.6, the tempo dialog over a dim of α 0.8.
+    // 20 U × 7 U band (y 158..382, centred on the screen under the control bar) as the floating panel over a dim of α 0.6, the tempo dialog over a dim of α 0.8.
     let colors = crate::theme::theme_by_id(0).colors;
     let screen = egui::Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1170.0, SCREEN_H));
     let dialogs = [
@@ -244,7 +244,10 @@ fn the_save_and_tempo_dialogs_dim_the_whole_app_screen_and_paint_only_their_box_
             Overlay::SaveDialog {
                 name: "Song".into(),
             },
-            egui::Rect::from_x_y_ranges(265.0..=905.0, 158.0..=382.0),
+            egui::Rect::from_x_y_ranges(
+                265.0..=905.0,
+                158.0 + TOP_BAR / 2.0..=382.0 + TOP_BAR / 2.0,
+            ),
             0.6,
         ),
         (Overlay::TempoEditor, screen, 0.8),

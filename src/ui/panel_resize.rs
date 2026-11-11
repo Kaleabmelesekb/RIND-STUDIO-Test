@@ -311,7 +311,7 @@ mod tests {
      {
         for ppp in [1.0, 2.0] {
             let m = metrics(ppp);
-            let (u, screen) = (m.u(1.0), 540.0);
+            let (u, screen) = (m.u(1.0), 660.0);
             for rows in [1, 2] {
                 let c = collapsed(rows, &m);
                 // M: the screen less the control bar (c), the ruler and a track row, ceil(3.65 U) px (#57).

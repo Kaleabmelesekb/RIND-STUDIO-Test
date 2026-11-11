@@ -455,7 +455,7 @@ fn the_editing_keys_still_work_after_a_tap_puts_the_focus_in_the_editor() {
     rig.edit(1);
     rig.frame(vec![]);
     let editor = egui::Id::new(crate::ui::focus::EDITOR);
-    let at = pos2(600.0, 200.0);
+    let at = pos2(600.0, TOP_BAR + 200.0);
     // A tap on empty grid adds a note; a tap on it selects it.
     rig.click(at);
     rig.click(at);
