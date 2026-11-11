@@ -915,7 +915,7 @@ mod tests {
     #[test]
     fn out_of_range_values_load_as_defaults() {
         let s = Settings::load(&stored(
-            r#"{"theme": 9, "uiscale": 9, "soundModeAndr": 4, "mtmlevel": 1.5, "ghostnotes": false}"#,
+            r#"{"theme": 10, "uiscale": 9, "soundModeAndr": 4, "mtmlevel": 1.5, "ghostnotes": false}"#,
         ));
         assert_eq!(
             s,

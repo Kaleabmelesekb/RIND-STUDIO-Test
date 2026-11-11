@@ -890,8 +890,9 @@ fn fine_tuning(rig: &Rig) -> Option<(usize, AutomationTarget)> {
     }
 }
 
-/// The dialog's slider row on the 1170 × 540 screen (U = 32): y 259…313, its track from x 80 to 1090.
-const TUNE_Y: f32 = 286.0;
+/// The dialog's slider row on the 1170 × 540 screen under the control bar (U = 32): y 259…313 less the bar's half, its
+/// track from x 80 to 1090.
+const TUNE_Y: f32 = 286.0 + TOP_BAR / 2.0;
 fn tune_x(v: f32) -> f32 {
     112.0 + v * 946.0
 }

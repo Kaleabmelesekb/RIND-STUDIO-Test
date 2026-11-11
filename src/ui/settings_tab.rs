@@ -1470,10 +1470,11 @@ mod tests {
                 "Ground",
                 "Mint",
                 "High Contrast A",
-                "High Contrast B"
+                "High Contrast B",
+                "Live Light"
             ]
         );
-        assert_eq!(values(Choice::Theme), (0..9).collect::<Vec<_>>());
+        assert_eq!(values(Choice::Theme), (0..10).collect::<Vec<_>>());
         assert_eq!(labels(Choice::Animation), ["Full", "Reduced", "Minimal"]);
         assert_eq!(values(Choice::Animation), [0, 1, 2]);
         // The buttons show the current item.

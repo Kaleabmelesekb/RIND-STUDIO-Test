@@ -582,7 +582,7 @@ fn channel_settings_is_on_the_dialog_base_the_dim_then_the_panel() {
     let mut rig = Rig::with_drums_and_synth();
     rig.track_menu(2, SETTINGS);
     assert_eq!(rig.overlays().len(), 1, "the dialog's first frame");
-    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1170.0, SCREEN_H));
     let m = crate::metrics::Metrics::from_pixels_per_point(1.0, crate::metrics::DEFAULT_UI_SCALE);
     // 20 U × 5.75 U on an instrument channel (10 U wide on others), centred in the content area above the transport
     // bar.
@@ -1311,7 +1311,7 @@ fn channel_settings_is_a_dialog_box_over_the_screen_dimmed_at_once() {
     crate::ui::anim::enable(&rig.ctx);
     rig.track_menu(2, SETTINGS);
     let colors = rig.app.theme.colors;
-    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1170.0, SCREEN_H));
     let fills: Vec<(egui::Rect, egui::Color32)> = (rig.out.shapes.iter())
         .filter_map(|c| match &c.shape {
             egui::Shape::Rect(r) => Some((r.rect, r.fill)),
@@ -1974,7 +1974,7 @@ fn save_as_midi_writes_only_that_channel_on_midi_channel_1_into_my_midi() {
     assert!(rig.painted("FLM"));
     assert!(!rig.painted("Save as MIDI"));
     let l = crate::ui::save_dialog::layout(
-        egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1170.0, 540.0)),
+        egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1170.0, SCREEN_H)),
         &crate::metrics::Metrics::from_pixels_per_point(1.0, crate::metrics::DEFAULT_UI_SCALE),
     );
     rig.click(l.formats[3].center());

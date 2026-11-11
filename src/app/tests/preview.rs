@@ -786,8 +786,9 @@ fn the_playlist_dims_every_clip_but_the_previewed_one() {
     rig.app.navigate(Nav::Show(View::Playlist));
     rig.frame(vec![]);
     rig.frame(vec![]);
-    // Row 2 spans y 176..240; a beat is 38.4 points from x 48.
-    let row = |from: f32, to: f32| Rect::from_x_y_ranges(from..=to, 176.0..=240.0);
+    // Row 2 spans y 176..240 under the control bar; a beat is 38.4 points from x 48.
+    let row =
+        |from: f32, to: f32| Rect::from_x_y_ranges(from..=to, TOP_BAR + 176.0..=TOP_BAR + 240.0);
     let (first, second) = (row(201.6, 355.0), row(355.2, 508.0));
     let (lit, dimmed) = (note_fills(&rig, first), note_fills(&rig, second));
     assert_eq!(lit.len(), 1, "{lit:?}");

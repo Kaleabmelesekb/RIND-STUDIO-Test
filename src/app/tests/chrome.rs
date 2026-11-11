@@ -5,14 +5,14 @@ use eframe::egui::{Color32, Shape, epaint::CircleShape};
 use super::*;
 
 /// In the `↖`'s touch area on the bottom-right corner.
-const SHOW_KEYS: Pos2 = pos2(1170.0 - 0.5 * U, 540.0 - 0.5 * U);
+const SHOW_KEYS: Pos2 = pos2(1170.0 - 0.5 * U, SCREEN_H - 0.5 * U);
 /// The `↖` disc: 1.5 U, 0.6 U in from the right edge and 0.2 U up from the bottom.
 const SHOW_DISC: egui::Rect = egui::Rect::from_min_max(
-    pos2(1170.0 - 2.1 * U, 540.0 - 1.7 * U),
-    pos2(1170.0 - 0.6 * U, 540.0 - 0.2 * U),
+    pos2(1170.0 - 2.1 * U, SCREEN_H - 1.7 * U),
+    pos2(1170.0 - 0.6 * U, SCREEN_H - 0.2 * U),
 );
 /// The bottom-right corner.
-const CORNER: Pos2 = pos2(1170.0, 540.0);
+const CORNER: Pos2 = pos2(1170.0, SCREEN_H);
 
 impl Rig {
     /// The last frame's filled circles centred on `center`, with their index in the shapes.
@@ -63,7 +63,7 @@ fn the_close_x_on_the_playlist_hides_the_panel_and_the_corner_button_brings_it_b
     rig.click(E4);
     assert_eq!(rig.take(), Vec::<String>::new());
     let tab = rig.ctx.read_response(egui::Id::new("edge_tab")).unwrap();
-    assert_eq!(tab.rect.center().y, (TOP_BAR + 540.0 + 2.0 * U) / 2.0);
+    assert_eq!(tab.rect.center().y, (TOP_BAR + SCREEN_H + 2.0 * U) / 2.0);
     // The `↖`: a floating 1.5 U `moduleFill` disc with icon 11 in `text` over it.
     let disc = rig.show_button().expect("the ↖");
     let icon = (rig.out.shapes[disc + 1..].iter()).any(|s| match &s.shape {
@@ -770,7 +770,7 @@ impl Rig {
 /// The rig's regions under a keyboard panel `panel_u` U tall.
 fn regions_at(panel_u: f32) -> Regions {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
     Regions::sized(screen, panel_u * U, 1, &m)
 }
 
@@ -905,7 +905,7 @@ fn the_scale_kind_with_key_lock_lays_out_only_the_scales_tones_where_classic_kee
         let is_key = |r: &egui::epaint::RectShape| {
             r.fill == black
                 && r.rect.top() >= KEYS_TOP
-                && r.rect.height() < 0.9 * (540.0 - KEYS_TOP)
+                && r.rect.height() < 0.9 * (SCREEN_H - KEYS_TOP)
         };
         (rig.out.shapes.iter())
             .filter(|s| matches!(&s.shape, Shape::Rect(r) if is_key(r)))
@@ -931,7 +931,7 @@ fn the_scale_kind_with_key_lock_lays_out_only_the_scales_tones_where_classic_kee
 
 /// An empty part of the transport bar on a panel `h` points tall.
 fn bar_gap(h: f32) -> Pos2 {
-    pos2(OUTSIDE.x, 540.0 - h + TRANSPORT_H * U / 2.0)
+    pos2(OUTSIDE.x, SCREEN_H - h + TRANSPORT_H * U / 2.0)
 }
 
 impl Rig {
@@ -968,10 +968,10 @@ fn a_bar_drag_resizes_past_1_u_without_a_jump_and_its_release_settles_and_is_kep
     assert_eq!(rig.panel(), 5.0 * U + 60.0);
     // The panel's backdrop, whose top is the dock's, is painted where the finger has put it, in the same frame.
     let fill = rig.app.theme.colors.control_fill.to_color32();
-    let top = 540.0 - (5.0 * U + 60.0);
+    let top = SCREEN_H - (5.0 * U + 60.0);
     assert!(
         (rig.out.shapes.iter()).any(|s| matches!(&s.shape,
-            Shape::Rect(r) if r.fill == fill && r.rect.bottom() == 540.0 && (r.rect.top() - top).abs() < 2.0)),
+            Shape::Rect(r) if r.fill == fill && r.rect.bottom() == SCREEN_H && (r.rect.top() - top).abs() < 2.0)),
         "no frame of lag"
     );
     rig.drag_to(at - vec2(0.0, 98.0));
@@ -1008,7 +1008,7 @@ fn a_bar_drag_resizes_past_1_u_without_a_jump_and_its_release_settles_and_is_kep
 fn a_throw_up_stops_under_the_ruler_and_a_track_row_and_one_down_leaves_the_bar_alone() {
     let mut rig = Rig::with_synth();
     // #57: M leaves the ruler and one 2 U track row, 540 − ceil(3.65 U) = 423 pt.
-    let full = 540.0 - TOP_BAR - (3.65 * U).ceil();
+    let full = SCREEN_H - TOP_BAR - (3.65 * U).ceil();
     let at = bar_gap(5.0 * U);
     // A last move of 40 points up throws it 400 points taller: past M − min, M.
     rig.press(at);
@@ -1079,14 +1079,14 @@ fn the_shortcuts_toggle_snaps_like_a_release() {
             ..Settings::default()
         };
         let c = crate::ui::panel_resize::collapsed(1, &m);
-        let sizes = toggle_snapped(&s, c, 540.0, &m);
+        let sizes = toggle_snapped(&s, c, SCREEN_H, &m);
         (sizes.preferred / U, sizes.recent.map(|r| r / U))
     };
     // Over the bar: collapse, recent kept.
     assert_eq!(at(5.0, 7.0), (1.75, None));
     // At the bar: the recent size, which stays recent; one within min of M (#57: 423 pt) goes to M.
     assert_eq!(at(1.75, 7.0), (7.0, Some(7.0)));
-    let full = (540.0 - TOP_BAR - (3.65 * U).ceil()) / U;
+    let full = (SCREEN_H - TOP_BAR - (3.65 * U).ceil()) / U;
     assert_eq!(at(1.75, 16.0), (full, Some(full)));
     // A recent size under c + 0.75 U opens to c + 0.75 U.
     assert_eq!(at(1.75, 2.0), (2.5, Some(2.5)));
@@ -1726,7 +1726,7 @@ fn with_the_chord_editor_open_the_bar_works_and_the_strips_take_their_taps_over_
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
     let (editor, strips) = crate::ui::chord_editor::editor_rects(keys, &m);
     assert_eq!(editor.top(), keys.top());
-    assert!(editor.bottom() > 540.0 && strips.top() > editor.top());
+    assert!(editor.bottom() > SCREEN_H && strips.top() > editor.top());
     let keyb = rig.app.song.file.keyboard.clone();
     // Strip 2's cell, over the editor's `Maj7` (row 0): E min's root position plays, and the editor retargets.
     let cell = pos2(2.5 * 1170.0 / 8.0, keys.top() + 1.25 * U);
@@ -2063,7 +2063,7 @@ fn the_floating_logo_and_the_menu_header_logo_are_text() {
         .navigate(Nav::Open(Overlay::MainMenu(MenuTab::Songs)));
     rig.frame(vec![]);
     rig.frame(vec![]);
-    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1170.0, SCREEN_H));
     let m = crate::metrics::Metrics::from_pixels_per_point(1.0, crate::metrics::DEFAULT_UI_SCALE);
     let header = rig.image_tint_in(crate::ui::main_menu::shell_layout(screen, &m).header);
     assert_eq!(corner, Some(text));

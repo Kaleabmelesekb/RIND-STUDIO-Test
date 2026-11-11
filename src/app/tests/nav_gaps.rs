@@ -171,7 +171,7 @@ fn the_wheel_scrolls_no_playlist_under_the_main_menu_or_the_rack() {
     }
     rig.frame(vec![]);
     // Left of the menu panel and of the rack, over the track rows.
-    let rows = pos2(300.0, 200.0);
+    let rows = pos2(300.0, TOP_BAR + 200.0);
     rig.app
         .navigate(Nav::Open(Overlay::MainMenu(MenuTab::Settings)));
     rig.frame(vec![]);
@@ -193,7 +193,7 @@ fn the_wheel_scrolls_no_playlist_under_the_main_menu_or_the_rack() {
 fn a_pinch_or_ctrl_wheel_zooms_no_playlist_under_the_main_menu() {
     let mut rig = Rig::with_synth();
     let zoom = |rig: &mut Rig| {
-        let at = pos2(300.0, 100.0);
+        let at = pos2(300.0, TOP_BAR + 100.0);
         rig.frame(vec![egui::Event::PointerMoved(at), egui::Event::Zoom(1.5)]);
         rig.frame(vec![]);
         rig.app.main_screen.zoom
@@ -217,34 +217,37 @@ fn the_keyboard_settings_cover_nothing_that_scrolls_and_the_tempo_dialog_covers_
     // The keyboard settings sit in the transport bar: the rows above still scroll.
     rig.app.navigate(Nav::Open(Overlay::KeyboardSettings));
     rig.frame(vec![]);
-    rig.wheel(pos2(300.0, 200.0), -100.0);
+    rig.wheel(pos2(300.0, TOP_BAR + 200.0), -100.0);
     let scrolled = rig.app.main_screen.scroll_y;
     assert!(scrolled > 0.0);
     // The tempo dialog is modal over the whole screen: the wheel scrolls nothing under it, on its disc or off it.
     rig.app.navigate(Nav::Open(Overlay::TempoEditor));
     rig.frame(vec![]);
-    rig.wheel(pos2(585.0, 270.0), -100.0);
+    rig.wheel(pos2(585.0, SCREEN_H / 2.0), -100.0);
     rig.wheel(pos2(50.0, 100.0), -100.0);
     assert_eq!(rig.app.main_screen.scroll_y, scrolled);
     // Closed, the rows scroll again.
     rig.app.nav.overlays.clear();
     rig.frame(vec![]);
-    rig.wheel(pos2(300.0, 100.0), -100.0);
+    rig.wheel(pos2(300.0, TOP_BAR + 100.0), -100.0);
     assert!(rig.app.main_screen.scroll_y > scrolled);
 }
 
 #[test]
 fn the_save_and_tempo_dialogs_dim_the_whole_app_screen_and_paint_only_their_box_over_it() {
     // Dialogs, through the app: the screen dimmed over everything the app drew, then the dialog: the Save dialog's
-    // 20 U × 7 U band (y 158..382) as the floating panel over a dim of α 0.6, the tempo dialog over a dim of α 0.8.
+    // 20 U × 7 U band (y 158..382, centred on the screen under the control bar) as the floating panel over a dim of α 0.6, the tempo dialog over a dim of α 0.8.
     let colors = crate::theme::theme_by_id(0).colors;
-    let screen = egui::Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1170.0, 540.0));
+    let screen = egui::Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1170.0, SCREEN_H));
     let dialogs = [
         (
             Overlay::SaveDialog {
                 name: "Song".into(),
             },
-            egui::Rect::from_x_y_ranges(265.0..=905.0, 158.0..=382.0),
+            egui::Rect::from_x_y_ranges(
+                265.0..=905.0,
+                158.0 + TOP_BAR / 2.0..=382.0 + TOP_BAR / 2.0,
+            ),
             0.6,
         ),
         (Overlay::TempoEditor, screen, 0.8),
@@ -293,7 +296,7 @@ fn a_pinch_or_ctrl_wheel_zooms_no_playlist_under_the_tempo_dialog() {
     let mut rig = Rig::with_synth();
     let zoom = |rig: &mut Rig| {
         // Over the playlist, under the dialog.
-        let at = pos2(300.0, 100.0);
+        let at = pos2(300.0, TOP_BAR + 100.0);
         rig.frame(vec![egui::Event::PointerMoved(at), egui::Event::Zoom(1.5)]);
         rig.frame(vec![]);
         rig.app.main_screen.zoom
@@ -317,11 +320,11 @@ fn the_wheel_scrolls_no_mixer_under_the_main_menu() {
     rig.app
         .navigate(Nav::Open(Overlay::MainMenu(MenuTab::Settings)));
     rig.frame(vec![]);
-    rig.wheel(pos2(300.0, 200.0), -800.0);
+    rig.wheel(pos2(300.0, TOP_BAR + 200.0), -800.0);
     assert_eq!(rig.app.slots.mixer.scroll, 0.0);
     rig.app.nav.overlays.clear();
     rig.frame(vec![]);
-    rig.wheel(pos2(300.0, 200.0), -800.0);
+    rig.wheel(pos2(300.0, TOP_BAR + 200.0), -800.0);
     assert!(rig.app.slots.mixer.scroll > 0.0);
 }
 

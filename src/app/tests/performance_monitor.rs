@@ -68,7 +68,7 @@ impl Rig {
 /// The main menu's content area at U = 32.
 fn content() -> egui::Rect {
     crate::ui::main_menu::shell_layout(
-        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
+        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
         &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
     )
     .content

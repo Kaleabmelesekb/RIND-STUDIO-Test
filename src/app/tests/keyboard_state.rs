@@ -23,7 +23,7 @@ fn the_keyboard_starts_with_middle_c_centered_and_keeps_manual_scroll() {
             .add_bare_channel(ChannelKind::Synth(SynthKind::MiniSynth), 0);
         let draw = |rig: &mut Rig| {
             let raw = egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, 540.0))),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, SCREEN_H))),
                 ..Default::default()
             };
             rig.out = rig.ctx.run(raw, |ctx| rig.app.frame(ctx, |_, _| None));
