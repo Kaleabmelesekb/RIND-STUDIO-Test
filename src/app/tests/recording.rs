@@ -600,7 +600,8 @@ mod audio {
     #[test]
     fn an_armed_channel_shows_its_dot_with_multitrack_recording_on() {
         let mut a = AudioRig::new("dot", false);
-        let header = egui::Rect::from_min_size(pos2(0.0, RULER + 2.0 * U), vec2(1.5 * U, 2.0 * U));
+        let header =
+            egui::Rect::from_min_size(pos2(0.0, TOP_BAR + RULER + 2.0 * U), vec2(1.5 * U, 2.0 * U));
         let center = header.left_top() + vec2(0.3 * U, 0.3 * U);
         // The channel is current, so its cell is filled with its colour and the dot takes the icon's `moduleFill`.
         let ink = a.rig.app.theme.colors.module_fill.to_color32();
@@ -1468,7 +1469,10 @@ fn a_held_note_shows_live_in_the_playlist_and_the_open_piano_roll_as_the_take_th
     let drawn = |rig: &mut Rig, tick| {
         rig.at_tick(tick);
         rig.frame(vec![]);
-        let row = egui::Rect::from_x_y_ranges(50.0..=1170.0, RULER + 4.0 * U..=RULER + 6.0 * U);
+        let row = egui::Rect::from_x_y_ranges(
+            50.0..=1170.0,
+            TOP_BAR + RULER + 4.0 * U..=TOP_BAR + RULER + 6.0 * U,
+        );
         let grid = rig
             .ctx
             .read_response(egui::Id::new("piano_roll").with("grid"));

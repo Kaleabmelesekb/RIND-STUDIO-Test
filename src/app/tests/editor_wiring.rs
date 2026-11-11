@@ -42,7 +42,7 @@ pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
 /// The bottom editors' one close X (`ui::split::close_button`).
 pub(super) const EDITOR_CLOSE: &str = "editor_close";
 /// The top of a clip editor: the area's top, as it opens fully expanded (`ui::split`).
-pub(super) const EDITOR_TOP: f32 = 0.0;
+pub(super) const EDITOR_TOP: f32 = TOP_BAR;
 
 /// The gap between a drum editor's header column and its grid: t = ceil(U/16) px.
 const T: f32 = 2.0;
@@ -1541,9 +1541,9 @@ fn while_playing_the_playlists_and_the_rolls_play_boxes_fade_out_and_only_their_
 /// line (`text`, narrower than U) runs down the track area.
 fn playlist_playhead(rig: &Rig) -> (Option<(f32, u8)>, bool) {
     let text = rig.app.theme.colors.text.to_color32();
-    let tracks = egui::Rangef::new(RULER, PANEL_TOP);
+    let tracks = egui::Rangef::new(TOP_BAR + RULER, PANEL_TOP);
     let line = (rig.rects(text).iter()).any(|r| r.width() < U && r.y_range() == tracks);
-    (rig.play_box_in(0.0..RULER), line)
+    (rig.play_box_in(TOP_BAR..TOP_BAR + RULER), line)
 }
 
 #[test]

@@ -2590,7 +2590,9 @@ impl Rig {
 fn grid_right(rig: &Rig) -> f32 {
     let fill = rig.app.theme.colors.control_fill.to_color32();
     let lane = |s: &egui::epaint::ClippedShape| match &s.shape {
-        egui::Shape::Rect(r) if r.fill == fill && r.rect.min == pos2(1.5 * U + 2.0, RULER) => {
+        egui::Shape::Rect(r)
+            if r.fill == fill && r.rect.min == pos2(1.5 * U + 2.0, TOP_BAR + RULER) =>
+        {
             Some(r.rect.right())
         }
         _ => None,

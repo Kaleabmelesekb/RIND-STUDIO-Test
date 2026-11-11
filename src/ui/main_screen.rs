@@ -220,24 +220,29 @@ pub fn kind_icon(kind: ChannelKind) -> IconId {
     }
 }
 
-/// Vertical extents of the four bands, in points from the top of the screen.
+/// Vertical extents of the five bands, in points from the top of the screen.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bands {
+    /// The control bar across the top (Ableton's: transport, tempo, undo), `rows` rows tall.
+    pub bar: Rangef,
     pub ruler: Rangef,
     pub tracks: Rangef,
     pub transport: Rangef,
     pub keyboard: Rangef,
 }
 
-/// Splits a screen `screen_h` points tall into the four bands for a UI unit of `u` points and a keyboard panel (the
-/// transport bar of `rows` rows over the keys) `panel_h` points tall, at the screen's bottom (the panel's height is its
-/// preferred height, animated).
+/// Splits a screen `screen_h` points tall into the five bands for a UI unit of `u` points: the control bar of `rows`
+/// rows across the top, the ruler under it, the tracks, and at the bottom the keyboard panel `panel_h` points tall (a
+/// dock strip as tall as the control bar, which resizes it, over the keys; its height is its preferred height,
+/// animated).
 pub fn band_layout(screen_h: f32, u: f32, panel_h: f32, rows: u8) -> Bands {
     let bar = u * TRANSPORT_H * f32::from(rows);
     let transport = Rangef::new(screen_h - panel_h, screen_h - panel_h + bar);
     let keyboard = Rangef::new(transport.max, screen_h);
-    let ruler = Rangef::new(0.0, u * RULER_H);
+    let top = Rangef::new(0.0, bar);
+    let ruler = Rangef::new(top.max, top.max + u * RULER_H);
     Bands {
+        bar: top,
         ruler,
         tracks: Rangef::new(ruler.max, transport.min.max(ruler.max)),
         transport,
@@ -336,7 +341,9 @@ pub struct ScreenInput<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Regions {
     pub screen: Rect,
-    /// The content area, above the transport bar: the view and the rack share it.
+    /// The control bar across the top: transport, tempo, undo and the mixer and keyboard buttons.
+    pub top: Rect,
+    /// The content area, between the control bar and the dock: the view and the rack share it.
     pub area: Rect,
     /// The left browser panel (collapsible drawer).
     pub browser: Rect,
@@ -347,6 +354,7 @@ pub struct Regions {
     pub rack: Rect,
     /// The device rack panel at the bottom (pinned across full width).
     pub device_rack: Rect,
+    /// The keyboard panel's dock strip, above the keys: its grab resizes the panel, and it holds the hide button.
     pub transport: Rect,
     /// The keys' area (the pads', the sample row's): the keyboard band, less the settings strip while that is open
     /// ([`Self::with_strip`]).
@@ -376,8 +384,9 @@ impl Regions {
         };
         let transport = band(bands.transport);
         let keyboard = band(bands.keyboard);
+        let top = band(bands.bar);
         let area = band(Rangef::new(bands.ruler.min, bands.tracks.max));
-        let row1 = transport.with_max_y(transport.top() + m.u(TRANSPORT_H));
+        let row1 = top.with_max_y(top.top() + m.u(TRANSPORT_H));
         // The content area split by the Grid3 layout: browser drawer on the left (4 U), device rack along the bottom
         // (6 U), the view in the rest. Sizes are in U; `layout` scales them by the pixels per U.
         let grid3 = Node::grid3([
@@ -388,6 +397,7 @@ impl Regions {
         let parts = layout(&grid3, area, m.u(1.0));
         Self {
             screen,
+            top,
             area,
             browser: rect_of(&parts, 0).unwrap_or(Rect::NOTHING),
             editor: area,
@@ -423,7 +433,6 @@ impl Regions {
             transport: self.transport.translate(down),
             keyboard: self.keyboard.translate(down),
             strip: self.strip.translate(down),
-            ctrl: self.ctrl.translate(down),
             ..self
         }
     }
@@ -1123,8 +1132,8 @@ impl MainScreen {
         at
     }
 
-    /// What every view shares, drawn over it: the keyboard panel (the transport bar and the keyboard) unless it is
-    /// hidden. The corner buttons go over the rack ([`Self::corner_buttons`]).
+    /// What every view shares, drawn over it: the control bar across the top, and the keyboard panel (its dock strip and
+    /// the keyboard) unless it is hidden. The corner buttons go over the rack ([`Self::corner_buttons`]).
     pub fn chrome(
         &mut self,
         ui: &mut egui::Ui,
@@ -1133,6 +1142,7 @@ impl MainScreen {
         regions: &Regions,
         actions: &mut ScreenActions,
     ) {
+        self.control_bar(ui, cx, input, regions, actions);
         if !self.panel_hidden {
             // A focus container, for `showTransport`.
             let panel = regions.transport.union(regions.keyboard);
@@ -1323,8 +1333,8 @@ impl MainScreen {
         self.zone = Some(zone);
     }
 
-    /// The keyboard panel: the transport bar with the editors' buttons, and the keyboard (the drum view has its pads
-    /// there instead, and an audio clip its sample row).
+    /// The keyboard panel: the dock strip, and the keyboard (the drum view has its pads there instead, and an audio
+    /// clip its sample row).
     fn keyboard_panel(
         &mut self,
         ui: &mut egui::Ui,
@@ -1338,7 +1348,7 @@ impl MainScreen {
         keyboard::panel_backdrop(ui.painter(), panel, shown.then_some(regions.keyboard), cx);
         self.zone_and_tap(ui, cx.m, input, regions, shown, actions);
         let grabbed = std::mem::take(&mut self.grabbed);
-        self.transport(ui, regions, cx, input, actions);
+        self.dock(ui, regions, cx, input);
         let underline = (input.tracks.iter().find(|t| t.channel == input.selected))
             .map_or(cx.theme.colors.text, |t| channel_color(t.hue, cx.theme));
         let ink = underline.to_color32();
@@ -1745,25 +1755,50 @@ impl MainScreen {
         result.selected.map(|kind| (at, kind))
     }
 
-    /// The transport bar, its buttons in the slots of [`transport_slots`]. Sets REWIND's click, the navigation its
-    /// buttons ask for (the transport's before any other), the `Undo` / `Redo` step and the SOLO CLIP click, and a tap
-    /// on the CPU/RAM readout ([`ScreenActions::performance`]).
-    fn transport(
+    /// The dock strip of the keyboard panel, above the keys: the ↘ that hides the panel at its right end. Its grab
+    /// and tap are [`Self::zone_and_tap`]'s.
+    fn dock(&mut self, ui: &mut egui::Ui, regions: &Regions, cx: &UiCtx, input: ScreenInput) {
+        let rect = regions.transport;
+        let top = rect.top() - regions.screen.top();
+        let meters = input.settings.hardware_meters;
+        let slots = transport_slots(rect, top, meters, false, cx.m);
+        let hide = BarButton::icon(IconId::Hide);
+        // It only hides the keyboard panel, in every view; the `↖` brings it back. The view and the overlays stay.
+        if bar_button(ui, cx, Id::new(("transport", "hide")), slots.hide, hide).clicked() {
+            self.panel_hidden = true;
+        }
+    }
+
+    /// The control bar across the top, Ableton's: the mixer and keyboard settings, REC, REWIND, play, tempo, CONTROL,
+    /// SOLO CLIP, undo and redo and the meters, in the slots of [`transport_slots`]. It is there with the keyboard panel
+    /// hidden too. Sets REWIND's click, the navigation its buttons ask for (the transport's before any other), the
+    /// `Undo` / `Redo` step and the SOLO CLIP click, and a tap on the CPU/RAM readout
+    /// ([`ScreenActions::performance`]).
+    fn control_bar(
         &mut self,
         ui: &mut egui::Ui,
-        regions: &Regions,
         cx: &UiCtx,
         input: ScreenInput,
+        regions: &Regions,
         actions: &mut ScreenActions,
     ) {
-        let rect = regions.transport;
+        let rect = regions.top;
         let (c, m) = (&cx.theme.colors, cx.m);
-        // Its `controlFill` is the keyboard panel's backdrop ([`keyboard::panel_backdrop`]).
         let text = c.text.to_color32();
+        // Its `controlFill`, and a 1 px `background` line under it.
+        let painter = ui.painter();
+        painter.rect_filled(rect, 0.0, c.control_fill.to_color32());
+        let line = rect.with_min_y(rect.bottom() - 1.0 / m.ppp());
+        painter.rect_filled(line, 0.0, c.background.to_color32());
         let top = rect.top() - regions.screen.top();
         let meters = input.settings.hardware_meters;
         let slots = transport_slots(rect, top, meters, input.can_preview, m);
-        for &divider in &slots.dividers {
+        // The last vertical divider is the one left of ↘, which sits in the dock.
+        let hide_divider = (slots.dividers.iter()).rposition(|d| d.height() > d.width());
+        for (i, &divider) in slots.dividers.iter().enumerate() {
+            if Some(i) == hide_divider {
+                continue;
+            }
             let vertical = divider.height() > divider.width();
             let alpha = if vertical {
                 VERTICAL_DIVIDER_ALPHA
@@ -1884,12 +1919,10 @@ impl MainScreen {
                 nav = Some(Nav::Open(Overlay::MainMenu(MenuTab::Project)));
             }
         }
-        // It only hides the keyboard panel, in every view; the `↖` brings it back. The view and the overlays stay.
-        if button(ui, "hide", slots.hide, BarButton::icon(IconId::Hide)).clicked() {
-            self.panel_hidden = true;
-        }
         actions.nav = nav.or(actions.nav.take());
-        transport_tips(ui, &slots, input.can_preview, self.playing);
+        let dock = transport_slots(regions.transport, regions.transport.top(), meters, false, m);
+        let hide = (!self.panel_hidden).then_some(dock.hide);
+        transport_tips(ui, &slots, hide, input.can_preview, self.playing);
     }
 }
 
@@ -1902,8 +1935,14 @@ fn add_channel_popup_bounds(anchor: Pos2, screen: Rect, m: Metrics) -> Rect {
 }
 
 /// The transport's tooltips ([`crate::ui::tooltip::tip`]): each slot's control while it shows, with its keymap action.
-/// `solo`: SOLO CLIP shows.
-fn transport_tips(ui: &egui::Ui, slots: &TransportSlots, solo: bool, playing: bool) {
+/// `hide`: the dock's ↘ while the panel shows; `solo`: SOLO CLIP shows.
+fn transport_tips(
+    ui: &egui::Ui,
+    slots: &TransportSlots,
+    hide: Option<Rect>,
+    solo: bool,
+    playing: bool,
+) {
     let play = if playing { "Stop" } else { "Play" };
     let tips = [
         (Some(slots.mixer), "Main mixer", Some("showMainMixer")),
@@ -1916,11 +1955,7 @@ fn transport_tips(ui: &egui::Ui, slots: &TransportSlots, solo: bool, playing: bo
         (solo.then_some(slots.solo), "Solo clip", None),
         (Some(slots.undo), "Undo", Some("undo")),
         (Some(slots.redo), "Redo", Some("redo")),
-        (
-            Some(slots.hide),
-            "Hide keyboard panel",
-            Some("showTransport"),
-        ),
+        (hide, "Hide keyboard panel", Some("showTransport")),
     ];
     for (slot, label, action) in tips {
         if let Some(slot) = slot {
@@ -2483,10 +2518,14 @@ mod tests {
     }
 
     #[test]
-    fn bands_stack_ruler_tracks_transport_keyboard() {
-        // A 5 U panel (160 points at U = 32): the transport bar 1.75 U, the keys the rest.
+    fn bands_stack_control_bar_ruler_tracks_dock_keyboard() {
+        // A 5 U panel (160 points at U = 32): the dock 1.75 U, the keys the rest; the control bar 1.75 U on top.
         let b = band_layout(540.0, 32.0, 160.0, 1);
-        assert_eq!(b.ruler, Rangef::new(0.0, timeline::RULER_H * 32.0));
+        assert_eq!(b.bar, Rangef::new(0.0, 1.75 * 32.0));
+        assert_eq!(
+            b.ruler,
+            Rangef::new(b.bar.max, b.bar.max + timeline::RULER_H * 32.0)
+        );
         assert_eq!(b.transport, Rangef::new(380.0, 380.0 + 1.75 * 32.0));
         assert_eq!(b.keyboard, Rangef::new(436.0, 540.0));
         assert_eq!(b.tracks, Rangef::new(b.ruler.max, b.transport.min));
@@ -2507,6 +2546,8 @@ mod tests {
                 (r.transport.bottom(), 540.0)
             );
             assert_eq!(r.area.bottom(), r.transport.top());
+            assert_eq!((r.top.top(), r.top.height()), (0.0, 1.75 * u));
+            assert_eq!(r.area.top(), r.top.bottom());
             // Sized: any height, the screen's at most.
             let tall = Regions::sized(crate::ui::offscreen::SCREEN, 8.0 * u, 1, &m);
             assert_eq!(tall.transport.top(), 540.0 - 8.0 * u);
@@ -2978,12 +3019,12 @@ mod tests {
             crate::ui::offscreen::SCREEN,
             &crate::ui::offscreen::metrics(),
         );
-        let bar = regions.transport;
+        let bar = regions.top;
         let mut screen = MainScreen::default();
         let armed = std::cell::Cell::new(false);
         let mut paint = |ui: &mut egui::Ui, cx: &UiCtx| {
             let mut actions = ScreenActions::default();
-            screen.transport(ui, &regions, cx, input, &mut actions);
+            screen.control_bar(ui, cx, input, &regions, &mut actions);
             assert!(!actions.rewind && actions.nav.is_none());
             armed.set(screen.armed);
         };
@@ -3085,7 +3126,7 @@ mod tests {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     let regions = Regions::new(crate::ui::offscreen::SCREEN, &m);
                     let mut actions = ScreenActions::default();
-                    screen.transport(ui, &regions, &cx, input, &mut actions);
+                    screen.control_bar(ui, &cx, input, &regions, &mut actions);
                 });
             });
             let update = output
@@ -3140,8 +3181,7 @@ mod tests {
         }
         assert!(screen.add_channel_open, "the popup closed by itself");
 
-        let transport = Regions::new(crate::ui::offscreen::SCREEN, &m).transport;
-        let play = transport.center();
+        let play = Regions::new(crate::ui::offscreen::SCREEN, &m).top.center();
         click(&ctx, &mut screen, &mut song, &mut time, scale, play);
         assert!(!screen.add_channel_open, "the outside click did not close");
         assert!(!screen.playing, "the outside click toggled play");

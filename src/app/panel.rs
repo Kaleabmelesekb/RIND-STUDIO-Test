@@ -29,8 +29,8 @@ pub(super) fn panel_layout(
     m: &Metrics,
 ) -> (Regions, f32) {
     let (u, screen_h) = (m.u(1.0), screen.height());
-    // The rows by the panel's last height: the right group moves in under a high panel top.
-    let top = screen_h - ms.panel.unwrap_or(0.0);
+    // The control bar is at the screen's top: the right group leaves room for the logo corner.
+    let top = 0.0;
     let rows = bar_rows(screen.width(), top, s.hardware_meters, m);
     let c = collapsed(rows, m);
     if ms.rows != 0 && ms.rows != rows {
