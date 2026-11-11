@@ -27,15 +27,18 @@ const GAIN: AutomationTarget = AutomationTarget {
 };
 
 impl Rig {
-    /// Where the last frame painted `text`, above the keyboard panel (the dock's device chips repeat the modules'
-    /// titles under it).
+    /// Where the last frame painted `text`: above the keyboard panel if it is there (the dock's device chips repeat the
+    /// modules' titles under it), else wherever it is.
     pub(super) fn text_rect(&self, text: &str) -> Rect {
-        (self.out.shapes.iter())
+        let found: Vec<Rect> = (self.out.shapes.iter())
             .filter_map(|s| match &s.shape {
                 Shape::Text(t) if t.galley.text() == text => Some(t.visual_bounding_rect()),
                 _ => None,
             })
-            .find(|r| r.top() < PANEL_TOP)
+            .collect();
+        (found.iter().find(|r| r.top() < PANEL_TOP))
+            .or(found.first())
+            .copied()
             .unwrap_or_else(|| panic!("{text:?} not painted"))
     }
 
