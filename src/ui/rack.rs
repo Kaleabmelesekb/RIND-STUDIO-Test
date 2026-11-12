@@ -37,8 +37,8 @@
 use std::collections::HashMap;
 
 use eframe::egui::{
-    Align2, Area, Color32, CornerRadius, Event, FontId, Id, Mesh, Order, Painter, Pos2, Rangef,
-    Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
+    Align2, Area, Color32, CornerRadius, Event, FontId, Id, Order, Painter, Pos2, Rangef, Rect,
+    Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
 use honeydew_audio::MeterSnapshot;
 use honeydew_audio::device::{AudioCommand, ModuleKey, ModuleMeter};
@@ -96,8 +96,6 @@ const COLLAPSE_RING_PX: f32 = 2.0;
 /// The collapse tab's icon size factor.
 const COLLAPSE_ICON: f32 = 0.6;
 /// The side rack's shadow over the view on its left, and its alpha at the rack's edge.
-const SHADOW: f32 = 0.75;
-const SHADOW_ALPHA: f32 = 0.28;
 /// `Add Module`, the SENDS header, a send row and `Add Send`.
 const ROW: f32 = 1.75;
 /// Above the SENDS header.
@@ -2770,30 +2768,11 @@ impl RackPanel {
             draw_icon(&painter, x, IconId::Close, contrast, HEADER_BUTTON_ICON, m);
             close |= response.clicked();
         }
-        // A side rack: a shadow over the view on its left and a t-wide channel-colour line at its edge, and the
-        // collapse tab.
+        // A side rack: a t-wide channel-colour line at its edge (no shadow: the look is flat), and the collapse tab.
         if let Some(tab) = c.collapse.map(px) {
             let (left, t) = (rack.left() / ppp, m.t());
             let line = Rect::from_x_y_ranges(left - t..=left, rect_y(rack, ppp));
             painter.rect_filled(line, 0.0, ink);
-            let shadow =
-                Rect::from_x_y_ranges(line.left() - m.u(SHADOW)..=line.left(), line.y_range());
-            let dark = Color32::from_black_alpha((SHADOW_ALPHA * 255.0) as u8);
-            let mut mesh = Mesh::default();
-            let corners = [
-                (shadow.left_top(), Color32::TRANSPARENT),
-                (shadow.right_top(), dark),
-                (shadow.right_bottom(), dark),
-                (shadow.left_bottom(), Color32::TRANSPARENT),
-            ];
-            for (at, color) in corners {
-                mesh.colored_vertex(at, color);
-            }
-            mesh.add_triangle(0, 1, 2);
-            mesh.add_triangle(0, 2, 3);
-            painter
-                .with_clip_rect(ui.ctx().content_rect())
-                .add(Shape::mesh(mesh));
             let response = ui.interact(tab, ui.id().with("rack collapse"), Sense::click());
             let grown = if widgets::hovered(ui, &response) {
                 1.05

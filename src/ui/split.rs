@@ -19,12 +19,11 @@
 //! The close ribbon on the band serves every bottom editor ([`ribbon`]): a tap closes the editor, a vertical drag
 //! resizes the split.
 
-use eframe::egui::{Color32, CornerRadius, Id, Painter, Rect, Sense, Ui, pos2, vec2};
+use eframe::egui::{Color32, CornerRadius, Id, Painter, Rect, Sense, Stroke, Ui, pos2, vec2};
 
 use crate::icons::{IconId, draw_icon};
 use crate::metrics::Metrics;
 use crate::theme::Rgba;
-use crate::ui::buttons::gradient;
 use crate::ui::timeline::ruler_h;
 use crate::ui::{UiCtx, widgets};
 
@@ -44,10 +43,6 @@ const RIBBON_EDGE: f32 = 1.8;
 const PLAYLIST_MIN_U: f32 = 2.5;
 const RUBBER: f32 = 0.1;
 const FLICK_U: f32 = 0.25;
-/// The shadow over the playlist's bottom edge: its height in U and its alpha at the edge.
-const SHADOW_U: f32 = 0.5;
-const SHADOW_ALPHA: f32 = 0.18;
-
 /// The split fraction `f` and its `target`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Split {
@@ -97,17 +92,17 @@ pub fn band(painter: &Painter, view: Rect, editor_top: f32, color: Color32, m: &
     painter.rect_filled(band, 0.0, color);
 }
 
-/// The shadow over the bottom edge of the `playlist` while an editor shows: black from α 0 to 0.18 down its last 0.5 U,
-/// clipped to the playlist.
+/// The 1 px line along the bottom edge of the `playlist` while an editor shows, clipped to the playlist: the flat look's
+/// edge between the two, in place of a shadow.
 pub fn shadow(painter: &Painter, playlist: Rect, m: &Metrics) {
     if playlist.height() <= 0.0 {
         return;
     }
-    let top = (playlist.bottom() - m.u(SHADOW_U)).max(playlist.top());
-    let rect = Rect::from_x_y_ranges(playlist.x_range(), top..=playlist.bottom());
-    let edge = Color32::from_black_alpha((SHADOW_ALPHA * 255.0).round() as u8);
+    let px = 1.0 / m.ppp();
+    let y = playlist.bottom() - px / 2.0;
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(playlist));
-    gradient(&painter, rect, Color32::TRANSPARENT, edge);
+    let line = Stroke::new(px, Color32::from_black_alpha(90));
+    painter.line_segment([pos2(playlist.left(), y), pos2(playlist.right(), y)], line);
 }
 
 /// Where the close ribbon's touch area starts, its reach left of the ribbon ([`ribbon`]), in an editor area whose right

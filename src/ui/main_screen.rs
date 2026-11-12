@@ -18,7 +18,7 @@ use crate::song::{ChannelKind, LaneKind, PPQ, Song, TimeSig};
 use crate::theme::{RECORD_COLOR, channel_color};
 use crate::ui::add_channel_menu::{AddChannelPick, add_channel_menu};
 use crate::ui::automation::value::time_items;
-use crate::ui::buttons::{filled_circle_button, floating_button, gradient};
+use crate::ui::buttons::{filled_circle_button, floating_button};
 use crate::ui::clips::{Clips, LiveTake, TimeAxis, grid_ticks, song_end_beats};
 use crate::ui::ctrl_menu::Touch;
 use crate::ui::drum_grid::edit::{MARK_GAP, grid_lines};
@@ -94,8 +94,6 @@ const CAPTION_INSET: f32 = 0.2;
 /// third's centre) is centred on the slot's centre.
 const CAPTION_LIFT: f32 = 0.2;
 /// The shadow over the content above the keyboard panel: its height in U, and its alpha at the panel (×255).
-const SHADOW_H: f32 = 0.3;
-const SHADOW_ALPHA: u8 = 26;
 /// The armed multitrack channel's dot in its header: its radius, and its centre's offset from the header's top-left
 /// corner on both axes.
 const ARMED_DOT_R: f32 = 0.1;
@@ -1205,15 +1203,15 @@ impl MainScreen {
         if !self.panel_hidden {
             // A focus container, for `showTransport`.
             let panel = regions.transport.union(regions.keyboard);
-            // A 0.3 U shadow above it: transparent down to black at α 0.1.
-            let shadow = panel
-                .with_max_y(panel.top())
-                .with_min_y(panel.top() - cx.m.u(SHADOW_H));
-            gradient(
-                ui.painter(),
-                shadow,
-                Color32::TRANSPARENT,
-                Color32::from_black_alpha(SHADOW_ALPHA),
+            // A 1 px line above it, in place of a shadow.
+            let px = 1.0 / cx.m.ppp();
+            let line = egui::Stroke::new(px, cx.theme.colors.text.to_color32().gamma_multiply(0.3));
+            ui.painter().line_segment(
+                [
+                    pos2(panel.left(), panel.top() - px / 2.0),
+                    pos2(panel.right(), panel.top() - px / 2.0),
+                ],
+                line,
             );
             focus::container(ui, Id::new(focus::TRANSPORT), panel, |ui| {
                 self.keyboard_panel(ui, cx, input, regions, actions)
