@@ -19,7 +19,6 @@ use super::{AppCtx, Nav, Overlay, modules_browser as picks, preset_picker, rack}
 use crate::metrics::{FontSize, Metrics};
 use crate::project_files::Replace;
 use crate::song::{LaneKind, ModuleInstance};
-use crate::ui::main_menu::SongLibrary;
 use crate::ui::main_menu::library::SongEntry;
 use crate::ui::modules_browser::{
     BrowserAction, Entry, InsertAt, ModuleOrdering, Row, Takes, rows,
@@ -481,9 +480,7 @@ impl Docks {
 
         match click? {
             Click::Pick(action) => {
-                if app.song.channels.get(selected).is_none() {
-                    return None;
-                }
+                app.song.channels.get(selected)?;
                 picks::add_pick(picker, app, selected, action);
                 // The new card is the last one: the strip shows it.
                 if let Some(ch) = app.song.channels.get(selected) {
