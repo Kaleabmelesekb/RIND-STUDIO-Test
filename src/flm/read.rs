@@ -404,6 +404,10 @@ impl Reader {
                     self.charge(2 * size_of::<Chunk>() + chunk.path.len(), &chunk.path)?;
                     chnls.push(chunk);
                 }
+                b"RGRP" => match crate::song::group::decode(chunk.payload) {
+                    Some(groups) => song.groups = groups,
+                    None => self.unknown(&chunk, &mut song.file.unknown_chunks)?,
+                },
                 b"HDVb" => {
                     self.charge(chunk.payload.len(), &chunk.path)?;
                     let versions = std::sync::Arc::make_mut(&mut song.file.versions);

@@ -71,6 +71,9 @@ const PRESSED_GROWTH: f32 = 1.05;
 const METER_INSET: f32 = 0.5;
 const METER_BOTTOM: f32 = 0.25;
 const METER_SHARE: f32 = 1.0 / 8.0;
+/// A track group's bracket down the header's left edge, and its fold button's side, in U.
+const GROUP_BAR: f32 = 0.2;
+const FOLD: f32 = 0.9;
 
 /// What a header row is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -213,9 +216,16 @@ pub fn show(
             }
         } else {
             let cell = rect.with_max_x(rect.left() + m.u(CELL_W));
-            let icon_ink = if is_current {
-                let grown = vec2(cell.width(), cell.height() * col.press);
-                painter.rect_filled(Rect::from_center_size(cell.center(), grown), 0.0, ink);
+            // A folded group's head cell is filled in the group's colour, as the current channel's is in its own.
+            let folded = row.group.filter(|g| g.collapsed);
+            let icon_ink = if is_current || folded.is_some() {
+                let fill = match folded {
+                    Some(g) => channel_color(g.hue, cx.theme).to_color32(),
+                    None => ink,
+                };
+                let press = if is_current { col.press } else { 1.0 };
+                let grown = vec2(cell.width(), cell.height() * press);
+                painter.rect_filled(Rect::from_center_size(cell.center(), grown), 0.0, fill);
                 c.module_fill.to_color32()
             } else {
                 ink
@@ -235,12 +245,22 @@ pub fn show(
                 }
             }
         }
+        if let Some(g) = row.group {
+            group_bracket(&painter, cx, rect, g, is_current, m);
+        }
         if !col.expanded {
             continue;
         }
         let ch = &song.channels[row.channel];
-        let name = match kind {
-            RowKind::Sub => ch.lanes[row.lane].label.as_str(),
+        let owned: String;
+        let name = match (kind, row.group) {
+            (RowKind::Sub, _) => ch.lanes[row.lane].label.as_str(),
+            // A folded group's head row is the group: its name and how many channels it holds.
+            (_, Some(g)) if g.collapsed => {
+                let group = song.group(g.id).map_or("Group", |g| g.name.as_str());
+                owned = format!("{group} ({})", g.count);
+                owned.as_str()
+            }
             _ => display_name(&ch.name, ch.kind),
         };
         let label = rect.shrink2(vec2(m.u(LABEL_INSET), m.t()));
@@ -286,6 +306,58 @@ pub fn show(
         out.changes.extend(cleared.map(|c| (c, target, 0.0)));
     }
     out
+}
+
+/// The fold button of a track group's first row, at the bottom left of its header `header`.
+pub fn fold_button(header: Rect, m: &Metrics) -> Rect {
+    let side = m.u(FOLD);
+    Rect::from_min_size(
+        pos2(header.left() + m.u(GROUP_BAR), header.bottom() - side),
+        vec2(side, side),
+    )
+}
+
+/// A track group's bracket on the header row `rect`: a bar in the group's colour down its left edge (through the gap
+/// to the next row of the group) and, on its first row, the fold button's triangle: down while open, right when
+/// folded.
+fn group_bracket(
+    painter: &eframe::egui::Painter,
+    cx: &UiCtx,
+    rect: Rect,
+    g: crate::ui::main_screen::GroupMark,
+    on_ink: bool,
+    m: &Metrics,
+) {
+    let ink = channel_color(g.hue, cx.theme).to_color32();
+    let gap = if g.last { 0.0 } else { 1.0 / m.ppp() };
+    let bar = Rect::from_x_y_ranges(
+        rect.left()..=rect.left() + m.u(GROUP_BAR),
+        rect.top()..=rect.bottom() + gap,
+    );
+    painter.rect_filled(bar, 0.0, ink);
+    if !g.first {
+        return;
+    }
+    let fold = fold_button(rect, m);
+    let (c, d) = (fold.center(), fold.width() * 0.28);
+    let points = match g.collapsed {
+        true => vec![
+            pos2(c.x - d, c.y - d),
+            pos2(c.x + d, c.y),
+            pos2(c.x - d, c.y + d),
+        ],
+        false => vec![
+            pos2(c.x - d, c.y - 0.7 * d),
+            pos2(c.x + d, c.y - 0.7 * d),
+            pos2(c.x, c.y + 0.7 * d),
+        ],
+    };
+    let tone = if on_ink || g.collapsed {
+        cx.theme.colors.module_fill.to_color32()
+    } else {
+        ink
+    };
+    painter.add(Shape::convex_polygon(points, tone, Stroke::NONE));
 }
 
 /// The row's name at c = 1: the channel's name, or its kind's default (`MASTER`, `AUX` for a send, else `CHANNEL`).

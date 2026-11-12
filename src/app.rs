@@ -2632,6 +2632,9 @@ impl HoneydewApp {
         if let Some((channel, lane, op)) = actions.track {
             self.track_op(channel, lane, op, tick);
         }
+        if let Some(id) = actions.group_fold {
+            self.toggle_group_fold(id, tick);
+        }
         // A track header's drop: the screen showed its drag live.
         if let Some(order) = actions.reorder {
             self.set_playlist(&order, tick);

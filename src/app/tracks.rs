@@ -287,6 +287,26 @@ impl HoneydewApp {
                 // The audio never reads it: an undo step with no rebuild.
                 self.song_edited(SongEdit::Param, tick);
             }
+            // In a group, the channel leaves it; else it groups with the channel above (joining that one's group). A
+            // regrouped channel moves next to its group, which the audio takes over by channel id.
+            TrackOp::ToggleGroup => {
+                let (id, ids) = (ch.id, channel_ids(&self.song));
+                let changed = match self.song.group_of(id).is_some() {
+                    true => self.song.leave_group(channel),
+                    false => self.song.group_with_above(channel),
+                };
+                if changed {
+                    let moved = channel_ids(&self.song) != ids;
+                    let edit = if moved {
+                        SongEdit::Final
+                    } else {
+                        SongEdit::Param
+                    };
+                    self.song_edited(edit, tick);
+                } else {
+                    self.files.flash("No track above to group with");
+                }
+            }
             TrackOp::ChannelSettings => {
                 let name = ch.name.clone();
                 self.navigate(Nav::Open(Overlay::ChannelSettings { channel, name }));
@@ -685,6 +705,17 @@ impl HoneydewApp {
         ch.lanes.remove(lane);
         self.rekey(&[LaneShift::new(channel, lane, false)]);
         self.song_edited(SongEdit::Final, tick);
+    }
+
+    /// Folds the track group `id`, or unfolds it: the playlist shows its head row alone while folded. A view state the
+    /// song keeps, one undo step, with nothing to rebuild in the audio.
+    pub(super) fn toggle_group_fold(&mut self, id: i32, tick: u64) {
+        let Some(collapsed) = self.song.group(id).map(|g| g.collapsed) else {
+            return;
+        };
+        if self.song.set_group_collapsed(id, !collapsed) {
+            self.song_edited(SongEdit::Param, tick);
+        }
     }
 
     /// Puts the channels in playlist order `order` (a track header's drop, [`Song::set_playlist`]), one undo step: what
