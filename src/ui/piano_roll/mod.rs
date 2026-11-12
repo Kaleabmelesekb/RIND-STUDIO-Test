@@ -169,6 +169,16 @@ pub(crate) const GHOST_ALPHA: f32 = 0.35;
 const LIT_ALPHA: f32 = 0.1;
 /// The graph lane: its guides' and its (and the grid's) past-the-end overlay's black alpha (0.2 and 0.15).
 const GUIDE_ALPHA: u8 = 51;
+/// A note's corner radius, in points.
+const NOTE_RADIUS: f32 = 2.0;
+/// The darkest a soft note gets (velocity 0), as black's alpha share.
+const VELOCITY_SHADE: f32 = 0.5;
+const NOTE_EDGE_ALPHA: u8 = 70;
+const NOTE_GRIP_ALPHA: u8 = 90;
+/// The black keys' rows and every other bar, black at this alpha, under the notes.
+const BLACK_ROW_ALPHA: u8 = 26;
+const BAR_BAND_ALPHA: u8 = 14;
+const BAND_BARS_MAX: i64 = 600;
 const PAST_END_LANE_ALPHA: u8 = 38;
 /// Room to scroll past the loop end or the last note, in bars.
 const TAIL_BARS: f64 = 2.0;
@@ -367,6 +377,10 @@ enum Menu {
     More(Pos2),
     /// The note menu in slice mode, at the same place (`Slice...`, #62).
     Slice(Pos2),
+    /// The chord stamps, at the same place (`Chords...`).
+    Chords(Pos2),
+    /// The channel's Swing amounts, at the same place (`Swing...`).
+    Swing(Pos2),
     /// The note menu in transpose mode, at the same place: the offset so far, and where this drag started.
     Transpose {
         at: Pos2,
@@ -412,6 +426,21 @@ enum MoreOp {
     Slice(Slice),
     TransposeBy,
     SelectAll,
+    Reverse,
+    Flip,
+    /// Strum the chords from the lowest key up (`true`) or from the highest down.
+    Strum(bool),
+    /// Scale the notes in time by 2 (`true`) or by 1/2.
+    Stretch(bool),
+    RandomVelocity,
+    /// Ramp the velocities up (`true`) or down.
+    Fade(bool),
+    /// `Chords...` opens the stamps; a stamp (an index of [`CHORDS`]) adds that chord over each selected note.
+    ChordsBy,
+    Chord(u8),
+    /// `Swing...` opens the amounts; one (a percent) is the channel's Swing.
+    SwingBy,
+    Swing(u8),
 }
 
 /// The floating buttons over a selection.
@@ -675,6 +704,14 @@ impl PianoRoll {
         let sig = (song.time_sig, self.snap.size);
         paint_grid(&grid_painter, grid, &g, &rows, color, sig, cx);
         let view = g.tick(grid.left())..g.tick(grid.right());
+        paint_bands(
+            &grid_painter,
+            grid,
+            &g,
+            f64::from(bpb) * BEAT,
+            view.clone(),
+            cx,
+        );
         let px = g.tick(grid.left() + 1.0 / m.ppp()) - view.start;
         let end = g.x(loop_ticks).max(grid.left());
         let past = (end < grid.right()).then(|| grid.with_min_x(end));
@@ -688,6 +725,7 @@ impl PianoRoll {
             color,
             cx,
         );
+        paint_note_depth(&grid_painter, &g, events, &self.selected, cx);
         // The playhead line's slot: over the notes, under their handles, the marquee and the floating row.
         let line_slot = grid_painter.add(egui::Shape::Noop);
         self.paint_selection(&grid_painter, &g, events, cx);
@@ -1996,9 +2034,18 @@ impl PianoRoll {
                     ctx.request_repaint();
                 }
             }
-            Some(menu @ (Menu::More(at) | Menu::Slice(at))) => {
+            Some(
+                menu @ (Menu::More(at) | Menu::Slice(at) | Menu::Chords(at) | Menu::Swing(at)),
+            ) => {
                 let (name, items) = match menu {
                     Menu::Slice(_) => ("slice_menu", slice_items()),
+                    Menu::Chords(_) => ("chord_menu", chord_items()),
+                    Menu::Swing(_) => {
+                        let swing = (song.channels.get(self.channel))
+                            .and_then(|c| c.lanes.get(self.lane))
+                            .map_or(0.0, |lane| lane.swing);
+                        ("swing_menu", swing_items(swing))
+                    }
                     _ => ("note_menu", more_items()),
                 };
                 let result = popup::show(ctx, id.with(name), at, bounds, &items, cx);
@@ -2107,6 +2154,28 @@ impl PianoRoll {
                 self.menu = Some(Menu::Slice(at));
                 return;
             }
+            MoreOp::ChordsBy => {
+                self.menu = Some(Menu::Chords(at));
+                return;
+            }
+            MoreOp::SwingBy => {
+                self.menu = Some(Menu::Swing(at));
+                return;
+            }
+            // The channel's Swing (notes on the odd sixteenths play late), not an edit of the notes: the audio is
+            // rebuilt from the song, whose lane keeps it.
+            MoreOp::Swing(pct) => {
+                let lane =
+                    (song.channels.get_mut(self.channel)).and_then(|c| c.lanes.get_mut(self.lane));
+                if let Some(lane) = lane {
+                    let swing = f64::from(pct.min(100)) / 100.0;
+                    if lane.swing != swing {
+                        lane.swing = swing;
+                        actions.push(PianoRollAction::Resync);
+                    }
+                }
+                return;
+            }
             MoreOp::GuessScale => {
                 self.menu = Some(Menu::Guess {
                     more: false,
@@ -2134,6 +2203,26 @@ impl PianoRoll {
             MoreOp::DoubleDown => double_selected(&mut clip.events, sel, -12),
             MoreOp::Length(ticks) => set_length_selected(&mut clip.events, sel, f64::from(ticks)),
             MoreOp::Slice(by) => slice_selected(&mut clip.events, sel, by),
+            MoreOp::Chord(i) => {
+                if let Some((_, offsets)) = CHORDS.get(usize::from(i)) {
+                    chord_selected(&mut clip.events, sel, offsets);
+                }
+            }
+            MoreOp::Reverse => {
+                reverse_notes(&mut clip.events, &which);
+                sort(&mut clip.events, sel);
+            }
+            MoreOp::Flip => flip_notes(&mut clip.events, &which),
+            MoreOp::Strum(up) => {
+                strum_notes(&mut clip.events, &which, up);
+                sort(&mut clip.events, sel);
+            }
+            MoreOp::Stretch(double) => {
+                stretch_by(&mut clip.events, &which, if double { 2.0 } else { 0.5 });
+                sort(&mut clip.events, sel);
+            }
+            MoreOp::RandomVelocity => randomize_velocity(&mut clip.events, &which, seed),
+            MoreOp::Fade(rising) => fade_velocity(&mut clip.events, &which, rising),
             MoreOp::SelectAll => {
                 for (s, e) in sel.iter_mut().zip(&clip.events) {
                     *s = note(e).is_some();
@@ -2151,7 +2240,13 @@ impl PianoRoll {
                 }
             }
             // The dialogs opened above.
-            MoreOp::GuessScale | MoreOp::TransposeBy | MoreOp::Humanize | MoreOp::SliceBy => {}
+            MoreOp::GuessScale
+            | MoreOp::TransposeBy
+            | MoreOp::Humanize
+            | MoreOp::SliceBy
+            | MoreOp::ChordsBy
+            | MoreOp::SwingBy
+            | MoreOp::Swing(_) => {}
         }
         let changed = clip.events != before;
         if changed {
@@ -2420,6 +2515,8 @@ fn more_items() -> Vec<PopupItem<MoreOp>> {
         (DoubleUp, "Double Up", true),
         (DoubleDown, "Double Down", true),
         (ToggleSlide, "Toggle Slide", true),
+        (ChordsBy, "Chords...", true),
+        (SwingBy, "Swing...", true),
     ];
     let col1 = [
         (Length(32), "Set length 1/16", true),
@@ -2431,7 +2528,18 @@ fn more_items() -> Vec<PopupItem<MoreOp>> {
         (TransposeBy, "Transpose by...", true),
         (SelectAll, "Select All", true),
     ];
-    [&col0[..], &col1[..]]
+    let col2 = [
+        (Reverse, "Reverse", true),
+        (Flip, "Flip", true),
+        (Strum(true), "Strum Up", true),
+        (Strum(false), "Strum Down", true),
+        (Stretch(true), "Stretch x2", true),
+        (Stretch(false), "Stretch /2", true),
+        (RandomVelocity, "Random Velocity", true),
+        (Fade(true), "Fade In", true),
+        (Fade(false), "Fade Out", true),
+    ];
+    [&col0[..], &col1[..], &col2[..]]
         .into_iter()
         .enumerate()
         .flat_map(|(col, items)| {
@@ -2474,6 +2582,34 @@ fn slice_items() -> Vec<PopupItem<MoreOp>> {
         PopupItem::header(2, 0, "Into"),
     ];
     heads.into_iter().chain(sizes).chain(parts).collect()
+}
+
+/// `Chords...`'s choices in place of the note menu: one stamp per cell.
+fn chord_items() -> Vec<PopupItem<MoreOp>> {
+    let stamps = (CHORDS.iter().enumerate())
+        .map(|(i, (name, _))| PopupItem::new(MoreOp::Chord(i as u8), i / 4, i % 4 + 1, *name));
+    let head = PopupItem::header(0, 0, "Chord over each note");
+    std::iter::once(head).chain(stamps).collect()
+}
+
+/// `Swing...`'s choices: the amounts in percent, the channel's current one marked.
+fn swing_items(current: f64) -> Vec<PopupItem<MoreOp>> {
+    let amounts = [0u8, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+    let current = (current.clamp(0.0, 1.0) * 100.0).round() as u8;
+    let cells = amounts.iter().enumerate().map(|(i, &pct)| {
+        let label = if pct == 0 {
+            "Off".to_owned()
+        } else {
+            format!("{pct} %")
+        };
+        let item = PopupItem::new(MoreOp::Swing(pct), i / 6, i % 6 + 1, label);
+        PopupItem {
+            current: current.abs_diff(pct) < 5 && (pct != 0 || current == 0),
+            ..item
+        }
+    });
+    let head = PopupItem::header(0, 0, "Swing on 1/16");
+    std::iter::once(head).chain(cells).collect()
 }
 
 /// `a` moved `t` of the way toward `b`.
@@ -2606,7 +2742,92 @@ fn paint_notes(
             } else {
                 normal
             };
-            painter.rect_filled(cell(r), 0.0, fill);
+            painter.rect_filled(cell(r), NOTE_RADIUS, fill);
+        }
+    }
+}
+
+/// Depth over the notes (after [`paint_notes`], over its fills): a note played softer is darker, every note has a lit top
+/// edge and start grip, so velocity and note starts read at a glance. Selected notes keep their clear tint.
+fn paint_note_depth(
+    painter: &egui::Painter,
+    g: &Geom,
+    events: &[Event],
+    selected: &[bool],
+    cx: &UiCtx,
+) {
+    let px = 1.0 / cx.m.ppp();
+    for (i, e) in events.iter().enumerate() {
+        let (Some(r), Event::Note { velocity, .. }) = (g.note_rect(e), e) else {
+            continue;
+        };
+        if r.width() < 3.0 * px || r.height() < 3.0 * px {
+            continue;
+        }
+        let r = Rect::from_min_max(
+            r.min,
+            pos2((r.right() - px).max(r.left() + px), r.bottom() - px),
+        );
+        if selected.get(i) != Some(&true) {
+            let soft = (255 - *velocity) as f32 / 255.0;
+            let dark = (soft * VELOCITY_SHADE * 255.0) as u8;
+            if dark > 0 {
+                painter.rect_filled(r, NOTE_RADIUS, Color32::from_black_alpha(dark));
+            }
+        }
+        let edge = r.with_max_y(r.top() + px).shrink2(vec2(NOTE_RADIUS, 0.0));
+        if edge.width() > 0.0 {
+            painter.rect_filled(edge, 0.0, Color32::from_white_alpha(NOTE_EDGE_ALPHA));
+        }
+        if r.width() > 6.0 * px {
+            let grip = r
+                .with_max_x(r.left() + 2.0 * px)
+                .shrink2(vec2(0.0, 2.0 * px));
+            if grip.height() > 0.0 {
+                painter.rect_filled(grip, 0.0, Color32::from_white_alpha(NOTE_GRIP_ALPHA));
+            }
+        }
+    }
+}
+
+/// The grid's depth under the notes (after [`paint_grid`]): every other bar and the black keys' rows a touch darker, so
+/// bars and octaves read at a glance. Black at low alpha, so it suits every theme.
+fn paint_bands(
+    painter: &egui::Painter,
+    grid: Rect,
+    g: &Geom,
+    bar_ticks: f64,
+    view: std::ops::Range<f64>,
+    _cx: &UiCtx,
+) {
+    let keys = Rangef::new(g.y(TOP_KEY), g.y(0) + g.row_h);
+    let area = Rect::from_x_y_ranges(Rangef::new(g.x(0.0).max(grid.left()), grid.right()), keys)
+        .intersect(grid);
+    if area.width() <= 0.0 || area.height() <= 0.0 {
+        return;
+    }
+    let shown = (g.key(grid.bottom()).unwrap_or(0)..=g.key(grid.top()).unwrap_or(TOP_KEY)).rev();
+    let black = Color32::from_black_alpha(BLACK_ROW_ALPHA);
+    for key in shown.filter(|k| matches!(k % 12, 1 | 3 | 6 | 8 | 10)) {
+        let row = Rect::from_x_y_ranges(area.x_range(), g.y(key)..=g.y(key) + g.row_h);
+        painter.rect_filled(row.intersect(area), 0.0, black);
+    }
+    if bar_ticks > 0.0 && bar_ticks.is_finite() {
+        let first = (view.start.max(0.0) / bar_ticks).floor() as i64;
+        let last = (view.end / bar_ticks).ceil() as i64;
+        // Zoomed out beyond this many bars the bands would be a flicker, not a guide.
+        if last - first <= BAND_BARS_MAX {
+            let band = Color32::from_black_alpha(BAR_BAND_ALPHA);
+            for bar in (first..=last).filter(|b| b % 2 == 1) {
+                let (x0, x1) = (
+                    g.x(bar as f64 * bar_ticks),
+                    g.x((bar + 1) as f64 * bar_ticks),
+                );
+                let rect = Rect::from_x_y_ranges(x0..=x1, area.y_range()).intersect(area);
+                if rect.width() > 0.0 {
+                    painter.rect_filled(rect, 0.0, band);
+                }
+            }
         }
     }
 }

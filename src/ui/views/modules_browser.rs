@@ -136,3 +136,44 @@ pub fn show(
     }
     Some(Nav::Close)
 }
+
+/// A pick from the Browser dock's list ([`super::docks`]): adds the instrument, effect or plugin `action` names at the
+/// end of `channel`'s rack (a note effect among the note effects, as `Add Module` does) and reports it as one final
+/// song edit, an undo step: the rebuilt engine plays it. A DW Sampler loads Close Grand. A plugin that does not start
+/// flashes why and changes nothing. Any other action is not a pick and does nothing.
+pub fn add_pick(
+    picker: &mut preset_picker::State,
+    app: &mut AppCtx,
+    channel: usize,
+    action: BrowserAction,
+) {
+    let Some(ch) = app.song.channels.get_mut(channel) else {
+        return;
+    };
+    let added = match action {
+        BrowserAction::Pick(type_id) => {
+            let id = add_module(&mut ch.rack, type_id, InsertAt::End);
+            preset_picker::load_close_grand(picker, app.files, ch.id, id, type_id);
+            true
+        }
+        BrowserAction::Plugin(uid) => match add_plugin(&mut ch.rack, ch.id, uid, InsertAt::End) {
+            Ok(id) => {
+                // Its own editor opens at once if it has one; a failure shows on its card.
+                if let Some(plugins::State::Live(info)) = plugins::state(ch.id, id)
+                    && info.has_editor
+                {
+                    let _ = plugins::show_editor(ch.id, id, true);
+                }
+                true
+            }
+            Err(why) => {
+                app.files.flash(why);
+                false
+            }
+        },
+        _ => false,
+    };
+    if added {
+        app.song_edited(true);
+    }
+}

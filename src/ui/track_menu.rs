@@ -37,14 +37,16 @@ pub enum TrackOp {
     SyncAllSamples,
     /// `Hide track` / `Show track` (Honeydew's own): this track hidden ([`crate::song::Lane::hidden`]) or shown again.
     ToggleHidden,
+    /// `Group With Above`, or `Remove From Group` for a channel in a group ([`crate::song::group`]).
+    ToggleGroup,
 }
 
 /// The menu for track `lane` of channel `channel`. The primary track is the channel's lane 0.
 /// - Column 0: `Show Tracks` while the sub-tracks are hidden, else `Hide tracks`, enabled with more than one track;
 ///   `Channel Settings`; `Clone Channel` and `Insert Channel` (not on the master); `Delete Track`, enabled when the
 ///   channel has more than one track of the primary's kind or this track's kind differs from it; Honeydew's
-///   `Hide track`, `Show track` on a hidden track (which shows with Settings `Show hidden tracks`); then
-///   `Delete Channel` (not on the master), last (#68). The master's menu is items 1, 2, 5 and
+///   `Hide track`, `Show track` on a hidden track (which shows with Settings `Show hidden tracks`); `Group With
+///   Above` (`Remove From Group` in a group; not on the master); then `Delete Channel` (not on the master), last (#68). The master's menu is items 1, 2, 5 and
 ///   `Hide track`.
 /// - Column 1, generator channels only (not the master, not a send), by the primary track's kind: notes
 ///   `Import MIDI Tracks`, `Save as MIDI`, `Burn Notes to Track`, `Add Track`; audio `Add Track`, `Sync All Samples`; drums `Load Drumset`,
@@ -82,6 +84,10 @@ pub fn track_menu(song: &Song, channel: usize, lane: usize) -> Vec<PopupItem<Tra
         Some(match this.hidden {
             true => (ToggleHidden, "Show track", true),
             false => (ToggleHidden, "Hide track", true),
+        }),
+        (!master).then_some(match song.group_of(ch.id) {
+            Some(_) => (ToggleGroup, "Remove From Group", true),
+            None => (ToggleGroup, "Group With Above", true),
         }),
         (!master).then_some((DeleteChannel, "Delete Channel", true)),
     ];
@@ -170,13 +176,14 @@ mod tests {
         song
     }
 
-    const CHANNEL: [(usize, &str, bool); 7] = [
+    const CHANNEL: [(usize, &str, bool); 8] = [
         (0, "Hide tracks", false),
         (0, "Channel Settings", true),
         (0, "Clone Channel", true),
         (0, "Insert Channel", true),
         (0, "Delete Track", false),
         (0, "Hide track", true),
+        (0, "Group With Above", true),
         (0, "Delete Channel", true),
     ];
 
@@ -313,6 +320,7 @@ mod tests {
                 InsertChannel,
                 DeleteTrack,
                 ToggleHidden,
+                ToggleGroup,
                 DeleteChannel,
                 LoadDrumset,
                 SaveDrumset,

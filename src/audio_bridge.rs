@@ -6,7 +6,9 @@ use honeydew_audio::automation::{
 };
 use honeydew_audio::mixer::send_param;
 use honeydew_audio::playback::{AudioPlayback, AutomationChange, PlaybackError, StereoBlock};
-use honeydew_audio::sequencer::{InputNoteEvent, sort_note_events};
+use honeydew_audio::sequencer::{
+    InputNoteEvent, NOTE_SWING_MAX_DELAY, note_swing_delay, sort_note_events,
+};
 use honeydew_audio::{AudioEffect, EffectError, ProcessContext, effect_info};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,7 +302,15 @@ impl SongAudioBridge {
                 let visible = clip.visible_ticks() / f64::from(PPQ);
                 let clip_end = f64::from(clip.start_tick) / f64::from(PPQ) + visible;
                 let back = max_length.min(visible);
-                let from = ((start_beat - back).max(0.0) * f64::from(PPQ)).floor() as u64;
+                // A swung note plays up to NOTE_SWING_MAX_DELAY after its place, so look that much further back.
+                let from = ((start_beat - back - NOTE_SWING_MAX_DELAY).max(0.0) * f64::from(PPQ))
+                    .floor() as u64;
+                // The channel's Swing (a Notes lane's `swing`) holds the notes on odd sixteenths back, the length kept.
+                let swing = if lane.swing.is_finite() {
+                    lane.swing.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 let to = (end_beat * f64::from(PPQ)).ceil() as u64;
                 for (tick, event) in clip.events_in_song_range(from, to) {
                     // A slide note sends no note-on or note-off: slide events instead. Nor does a note of length ≤ 0 (a
@@ -317,7 +327,8 @@ impl SongAudioBridge {
                         && *len_beats > 0.0
                         && len_beats.is_finite()
                     {
-                        let on = tick as f64 / f64::from(PPQ);
+                        let placed = tick as f64 / f64::from(PPQ);
+                        let on = placed + note_swing_delay(placed, swing);
                         let off = (on + len_beats).min(clip_end);
                         // A fractional offset or loop can round a play kept inside the clip onto its end: its clamped
                         // off then falls on its on, and the note is skipped.

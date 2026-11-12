@@ -61,6 +61,15 @@ pub fn write(song: &Song) -> Result<Vec<u8>, FlmError> {
             write_channel(writer, channel, rows[*index])
         })?;
     }
+    // The track groups, only while there is one: a song without any is written as it always was.
+    let groups = crate::song::group::encode(&song.groups, |id| {
+        song.channels
+            .iter()
+            .any(|c| c.id == id && c.kind != ChannelKind::Master)
+    });
+    if !groups.is_empty() {
+        writer.chunk(*b"RGRP", |writer| writer.raw(&groups))?;
+    }
     write_raw(&mut writer, &song.file.unknown_chunks)?;
     crate::versions::write(&mut writer, &song.file.versions)?;
     Ok(writer.into_bytes())

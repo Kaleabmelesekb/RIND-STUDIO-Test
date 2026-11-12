@@ -6,6 +6,7 @@ mod channel;
 pub mod chords;
 mod drum_kit;
 mod file;
+pub mod group;
 mod lane;
 pub mod plugin;
 pub mod points;
@@ -20,6 +21,7 @@ pub use file::{
     LaneFileState, MetaState, MidiSend, Modulation, ModuleFileState, Raw, RawChunk, SET_DEFAULT,
     SET_EDITED, SET_LOADED, SendState, SlotFileState, SongFileState,
 };
+pub use group::TrackGroup;
 pub use lane::MAX_PLAYS_A_PIXEL;
 pub use lane::{AutomationTarget, Clip, DrumGrid, Event, Lane, LaneKind};
 pub use rack::{CommonParams, ModuleInstance, Rack};
@@ -232,6 +234,8 @@ pub struct Song {
     /// The master's place in the playlist ([`Self::playlist`]): right below the channel with this id; first when `None`
     /// or when no channel has it. A file has it in the master's row (`CHHD` @1028).
     pub master_below: Option<i32>,
+    /// The track groups ([`group`]): the playlist folds a group into its head row. Kept in the `RGRP` chunk.
+    pub groups: Vec<TrackGroup>,
 }
 
 impl Default for Song {
@@ -246,6 +250,7 @@ impl Default for Song {
             play_loop: None,
             file: SongFileState::default(),
             master_below: None,
+            groups: Vec::new(),
         }
     }
 }
@@ -352,6 +357,11 @@ impl Song {
             return;
         }
         let gone = self.channels.remove(index);
+        // A group left with fewer than two channels is dissolved.
+        for g in &mut self.groups {
+            g.members.retain(|&m| m != gone.id);
+        }
+        self.groups.retain(|g| g.members.len() >= 2);
         // The master keeps its place, below the channel that was above the deleted one.
         if self.master_below == Some(gone.id) {
             self.master_below = (index > 1).then(|| self.channels[index - 1].id);

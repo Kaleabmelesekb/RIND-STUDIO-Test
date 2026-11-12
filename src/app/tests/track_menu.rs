@@ -21,7 +21,7 @@ const SETTINGS: (usize, usize) = (0, 1);
 const CLONE: (usize, usize) = (0, 2);
 const INSERT: (usize, usize) = (0, 3);
 const DELETE_TRACK: (usize, usize) = (0, 4);
-const DELETE_CHANNEL: (usize, usize) = (0, 6);
+const DELETE_CHANNEL: (usize, usize) = (0, 7);
 /// `Add Track` of an instrument, `Add StepSeq Track` and `Add Notes Track` of a drums channel.
 const ADD_TRACK: (usize, usize) = (1, 3);
 const ADD_STEP_SEQ: (usize, usize) = (1, 2);

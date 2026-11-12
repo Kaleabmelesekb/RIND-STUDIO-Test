@@ -520,7 +520,7 @@ pub enum BrowserAction {
 
 impl Entry {
     /// What a click on the entry does.
-    fn action(self) -> BrowserAction {
+    pub fn action(self) -> BrowserAction {
         match self {
             Self::Paste => BrowserAction::Paste,
             Self::RackPreset => BrowserAction::RackPreset,

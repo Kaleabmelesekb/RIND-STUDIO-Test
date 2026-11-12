@@ -2223,6 +2223,16 @@ impl HoneydewApp {
                 if open > 0.0 && open < 1.0 {
                     ui.ctx().request_repaint();
                 }
+                // The docks: the Browser down the left and the Device Rack under the arrangement, before the side rack
+                // (which takes the rack's place while it is open) is laid over the view.
+                if self.slots.docks.enabled {
+                    let portrait = crate::metrics::is_portrait(screen);
+                    let (browser, bottom) =
+                        self.slots
+                            .docks
+                            .insets(regions.area, portrait, racked, &metrics);
+                    regions = regions.with_docks(browser, bottom, &metrics);
+                }
                 regions = regions.with_rack(open, &metrics);
                 // The keyboard settings strip takes its height off the top of the keys.
                 regions = regions.with_strip(strip, &metrics);
@@ -2411,8 +2421,18 @@ impl HoneydewApp {
                             .collect()
                     })
                     .unwrap_or_default();
+                self.main_screen.docks_on = self.slots.docks.enabled;
                 self.main_screen
                     .chrome(ui, &cx, input, &regions, &mut actions);
+                // A device chip's tap shows that card in the Device Rack, opening it if it was collapsed.
+                if let Some(chip) = self.main_screen.chip_tap.take() {
+                    self.slots.docks.reveal = Some(chip);
+                    self.slots.docks.rack_open = true;
+                }
+                // The docks, over the view and the keyboard panel's chrome and under every overlay.
+                let windowed =
+                    (self.nav.overlays.iter()).any(|o| matches!(o, Overlay::DeviceEditor { .. }));
+                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed)));
                 views::drum_editor::after_chrome(&mut self.slots.drum_editor, ui, &mut app);
                 // The corner buttons go over the rack and under the other overlays.
                 let hue = app.song.channels.get(input.selected).map_or(0.0, |c| c.hue);
@@ -2613,6 +2633,9 @@ impl HoneydewApp {
         }
         if let Some((channel, lane, op)) = actions.track {
             self.track_op(channel, lane, op, tick);
+        }
+        if let Some(id) = actions.group_fold {
+            self.toggle_group_fold(id, tick);
         }
         // A track header's drop: the screen showed its drag live.
         if let Some(order) = actions.reorder {

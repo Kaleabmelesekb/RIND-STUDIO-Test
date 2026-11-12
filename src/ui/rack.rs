@@ -37,8 +37,8 @@
 use std::collections::HashMap;
 
 use eframe::egui::{
-    Align2, Area, Color32, CornerRadius, Event, FontId, Id, Mesh, Order, Painter, Pos2, Rangef,
-    Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
+    Align2, Area, Color32, CornerRadius, Event, FontId, Id, Order, Painter, Pos2, Rangef, Rect,
+    Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
 use honeydew_audio::MeterSnapshot;
 use honeydew_audio::device::{AudioCommand, ModuleKey, ModuleMeter};
@@ -63,7 +63,7 @@ use crate::ui::gesture;
 use crate::ui::layout::{self, Node, Size};
 use crate::ui::modules_browser::{InsertAt, Takes, add_module, paste_module};
 use crate::ui::popup::{self, PopupItem};
-use crate::ui::scroller::{self, Axis, Scroller, Y, Zones};
+use crate::ui::scroller::{self, Axis, Scroller, X, Y, Zones};
 use crate::ui::widgets::{self, Button, Control, ParamMenu};
 use crate::ui::{UiCtx, focus_lost};
 
@@ -96,8 +96,6 @@ const COLLAPSE_RING_PX: f32 = 2.0;
 /// The collapse tab's icon size factor.
 const COLLAPSE_ICON: f32 = 0.6;
 /// The side rack's shadow over the view on its left, and its alpha at the rack's edge.
-const SHADOW: f32 = 0.75;
-const SHADOW_ALPHA: f32 = 0.28;
 /// `Add Module`, the SENDS header, a send row and `Add Send`.
 const ROW: f32 = 1.75;
 /// Above the SENDS header.
@@ -334,6 +332,8 @@ pub fn flow_sends(
 
 /// The rack's width, in U, capped at the area's.
 const RACK_W: f32 = 20.0;
+/// The device strip's `Add Module` cell, in U wide.
+const ADD_W: f32 = 9.0;
 
 /// The rack over the content `area` (the screen above the keyboard panel), slid in by `open` (0 closed … 1 open): R =
 /// trunc(min(20 U, W)) wide, or W in a `portrait` window ([`is_portrait`](crate::metrics::is_portrait)), and the
@@ -1220,6 +1220,15 @@ pub struct RackActions {
     pub builder: Option<i32>,
     /// Issue #68: a Lemon card's full screen button: show the editor of the module with this instance id full screen.
     pub lemon_full: Option<i32>,
+    /// A device strip card's pop-out button: show the module with this instance id in its own window on the screen.
+    pub device_window: Option<i32>,
+}
+
+/// The width in pixels of a card in the Device Rack's strip and in a device window: the side rack's column.
+fn strip_card_width(u: f32) -> f32 {
+    let whole = Rect::from_min_size(Pos2::ZERO, vec2(RACK_W * u, u));
+    let margin = Chrome::new(whole, u).margin;
+    (whole.right() - margin).floor() - (whole.left() + margin).floor()
 }
 
 /// A card's panel state, and its module's `CSTM` blob as the state last matched it: a card is seeded from the blob
@@ -1259,6 +1268,8 @@ struct CardEdits {
     double_tap: bool,
     /// Issue #68: a Lemon card's full screen button was clicked.
     full: bool,
+    /// A strip card's pop-out button was clicked.
+    window: bool,
 }
 
 /// A card held to reorder it.
@@ -1283,6 +1294,12 @@ pub struct RackPanel {
     /// How far the content is scrolled up, in points: past either end while a finger pulls it there, a card is held,
     /// or it springs back.
     scroll: f32,
+    /// The device strip's offset along x, in points ([`Self::show_strip`]).
+    scroll_x: f32,
+    /// The cards are drawn in the Device Rack's strip, which gives each a pop-out button ([`Self::show_strip`]).
+    strip: bool,
+    /// Only the card of this module is drawn, in a window of its own ([`Self::show_window`]), without the pop-out.
+    only: Option<i32>,
     /// Its scroll controller: the touch, the fling, the spring.
     scroller: Scroller,
     /// Each card's panel state (its settings and tab page), by channel index, instance id and module type, so a
@@ -1439,6 +1456,36 @@ impl RackPanel {
         }
     }
 
+    /// Points the panel at channel `index`: another channel's rack starts afresh ([`Self::channel`]), and the panel states
+    /// of modules that are gone, or reused by another type, go.
+    fn adopt(&mut self, index: usize, channel: &Channel, actions: &mut RackActions) {
+        if self.channel != index {
+            // Another channel's rack: a key-learn ends on the channel it was on.
+            if let Some((id, _)) = self.learning {
+                actions.setting_changes.push(learn(self.channel, id, false));
+            }
+            // What the host set for this frame stays, and so does a pending note-effect rebuild: a keyboard switch of
+            // the current channel mid-drag still builds the edit in once the pointer is up.
+            let panels = std::mem::take(&mut self.panels);
+            *self = Self {
+                channel: index,
+                panels,
+                note_edit: self.note_edit,
+                meters: std::mem::take(&mut self.meters),
+                soundfonts: std::mem::take(&mut self.soundfonts),
+                targets: std::mem::take(&mut self.targets),
+                covered: self.covered,
+                multitrack: self.multitrack,
+                input_peaks: self.input_peaks,
+                middle_c_is_c4: self.middle_c_is_c4,
+                ..Self::default()
+            };
+        }
+        self.panels.retain(|&(ch, id, ty), _| {
+            ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
+        });
+    }
+
     /// Draws the rack of `channel` (the song's channel `index`) in `rect` and returns what the app must do. Edits go
     /// to the channel directly.
     pub fn show(
@@ -1465,31 +1512,8 @@ impl RackPanel {
         // The links of the channel's `CCLK`: its bound controls' `Unlink from MIDI CC`.
         panels::set_cc_links(ui.ctx(), links::links(&channel.file.cc_links));
         ui.painter().rect_filled(rect, 0.0, contrast);
-        if self.channel != index {
-            // Another channel's rack: a key-learn ends on the channel it was on.
-            if let Some((id, _)) = self.learning {
-                actions.setting_changes.push(learn(self.channel, id, false));
-            }
-            // What the host set for this frame stays, and so does a pending note-effect rebuild: a keyboard switch of
-            // the current channel mid-drag still builds the edit in once the pointer is up.
-            let panels = std::mem::take(&mut self.panels);
-            *self = Self {
-                channel: index,
-                panels,
-                note_edit: self.note_edit,
-                meters: std::mem::take(&mut self.meters),
-                soundfonts: std::mem::take(&mut self.soundfonts),
-                targets: std::mem::take(&mut self.targets),
-                covered: self.covered,
-                multitrack: self.multitrack,
-                input_peaks: self.input_peaks,
-                middle_c_is_c4: self.middle_c_is_c4,
-                ..Self::default()
-            };
-        }
-        self.panels.retain(|&(ch, id, ty), _| {
-            ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
-        });
+        (self.strip, self.only) = (false, None);
+        self.adopt(index, channel, &mut actions);
 
         // Scrolling first: the content is placed from the new offset, by the editors' law: the controls get the touch
         // first, as they are on top.
@@ -1689,6 +1713,202 @@ impl RackPanel {
             ui.ctx().request_repaint();
         }
         actions
+    }
+
+    /// Draws `channel`'s devices as the bottom Device Rack's body: the rack's own cards ([`Self::card`], so every
+    /// control, menu and dialog is the rack's) side by side from the left of `rect`, a card [`RACK_W`] U wide as in the
+    /// side rack, scrolling along x, and along y for a card taller than `rect`, with `Add Module` after the last. `reveal`
+    /// scrolls that card (an index into the chain) into view. No header, sends or input row and no held-card reorder:
+    /// the side rack has them. Returns what the app must do, as [`Self::show`].
+    pub fn show_strip(
+        &mut self,
+        ui: &mut Ui,
+        cx: &UiCtx,
+        rect: Rect,
+        index: usize,
+        channel: &mut Channel,
+        reveal: Option<usize>,
+    ) -> RackActions {
+        let (m, colors) = (cx.m, &cx.theme.colors);
+        let (ppp, u) = (m.ppp(), m.u_px());
+        let ink = channel_color(channel.hue, cx.theme).to_color32();
+        let px = rect * ppp;
+        let strip = Rect::from_min_max(px.min.round(), px.max.round());
+        let rect = strip / ppp;
+        let mut actions = RackActions::default();
+        self.channel_id = channel.id;
+        panels::set_cc_links(ui.ctx(), links::links(&channel.file.cc_links));
+        ui.painter()
+            .rect_filled(rect, 0.0, colors.background.to_color32());
+        self.adopt(index, channel, &mut actions);
+
+        // The cards' width is the side rack's column.
+        let gap = card_gap(u);
+        let pad = (gap / 2.0).floor().max(1.0);
+        let width = strip_card_width(u);
+        self.column = (width, u);
+        let input = channel.kind == ChannelKind::AudioRecord;
+        // The cards drawn: every module's, or the one the window shows.
+        let only = self.only;
+        let shown: Vec<usize> = (0..channel.rack.modules.len())
+            .filter(|&i| only.is_none_or(|id| channel.rack.modules[i].instance_id == id))
+            .collect();
+        self.strip = true;
+        let heights: Vec<f32> = (shown.iter())
+            .map(|&i| self.card_height(&channel.rack.modules[i]))
+            .collect();
+        let n = shown.len();
+        // Content positions in px from the strip's left and top, unscrolled.
+        let left_of = |i: usize| gap + i as f32 * (width + gap);
+        let add_w = if only.is_some() {
+            0.0
+        } else {
+            (ADD_W * u).min(width)
+        };
+        let content_w = left_of(n) + add_w + if only.is_some() { 0.0 } else { gap };
+        let tallest = heights.iter().copied().fold(ROW, f32::max) * u + 2.0 * pad;
+
+        if let Some(slot) = reveal.and_then(|i| shown.iter().position(|&s| s == i)) {
+            self.scroll_x = (left_of(slot) - gap) / ppp;
+        }
+        let axes = |sx: f32, sy: f32| {
+            let x = Axis {
+                pos: f64::from(sx),
+                zoom: 1.0,
+                range: [0.0, f64::from(content_w / ppp)],
+                zoom_range: [1.0; 2],
+                view: rect.x_range(),
+            };
+            let y = Axis {
+                pos: f64::from(sy),
+                zoom: 1.0,
+                range: [0.0, f64::from(tallest / ppp)],
+                zoom_range: [1.0; 2],
+                view: rect.y_range(),
+            };
+            [x, y]
+        };
+        let scroll_id = ui.id().with("device strip");
+        let lemon_wheel = std::mem::take(&mut self.lemon_wheel);
+        {
+            let zones = Zones {
+                touch: [rect, rect],
+                wheel_scroll: Rect::NOTHING,
+                ..Zones::NONE
+            };
+            let opts = scroller::Options {
+                covered: self.covered || !ui.is_enabled(),
+                follow: false,
+            };
+            let mut axes = axes(self.scroll_x, self.scroll);
+            (self.scroller).update(ui, scroll_id, m.u(1.0), &zones, &mut axes, opts);
+            // The wheel: along y over a card taller than the strip (unless Shift is down), else along x. A Lemon
+            // card's editor keeps its own.
+            if !lemon_wheel && !self.covered && ui.rect_contains_pointer(rect) {
+                let (d, shift) = ui.input(|i| (i.smooth_scroll_delta, i.modifiers.shift));
+                let (dx, dy) = if tallest > strip.height() && !shift {
+                    (d.x, d.y)
+                } else {
+                    (d.x + d.y, 0.0)
+                };
+                for (axis, delta) in [(X, dx), (Y, dy)] {
+                    let a = &mut axes[axis];
+                    a.pos = (a.pos - f64::from(delta)).clamp(a.range[0], a.max());
+                }
+            }
+            self.scroll_x = axes[X].pos as f32;
+            self.scroll = axes[Y].pos as f32;
+        }
+        ui.interact(rect, ui.id().with("device strip clicks"), Sense::click());
+        let (sx, sy) = ((self.scroll_x * ppp).round(), (self.scroll * ppp).round());
+
+        let outer = ui.clip_rect();
+        ui.set_clip_rect(outer.intersect(rect));
+        for (slot, &i) in shown.iter().enumerate() {
+            let module = &mut channel.rack.modules[i];
+            let at = pos2(strip.left() + left_of(slot) - sx, strip.top() + pad - sy);
+            let card = Rect::from_min_size(at, vec2(width, heights[slot] * u)) / ppp;
+            if !ui.clip_rect().intersects(card) {
+                continue;
+            }
+            let edits = self.card(ui, cx, card, module, false, ink, if input { 1 } else { 2 });
+            if edits.double_tap {
+                module.minimized ^= true;
+                actions.minimized = true;
+            }
+            self.absorb(&mut actions, index, module, edits);
+        }
+        let at = pos2(strip.left() + left_of(n) - sx, strip.top() + pad - sy);
+        let add = Rect::from_min_size(at, vec2(add_w, ROW * u)) / ppp;
+        if only.is_none() && ui.clip_rect().intersects(add) {
+            add_row(
+                ui,
+                cx,
+                add,
+                "Add Module",
+                ink,
+                Some(colors.background.to_color32()),
+            );
+            if ui
+                .interact(add, ui.id().with("strip add module"), Sense::click())
+                .clicked()
+            {
+                actions.open_browser = Some(InsertAt::End);
+            }
+        }
+        ui.set_clip_rect(outer);
+
+        self.popups(ui, cx, index, channel, &mut actions);
+        // A control that took the drag, or a popup open over the strip, has the touch: no scroll comes of it.
+        let taken = ui.ctx().dragged_id().is_some_and(|id| id != scroll_id);
+        if taken || self.popup_open() {
+            self.scroller.yield_touch();
+        }
+        self.learn(index, channel, &mut actions);
+        self.settle(ui, &mut actions);
+        actions
+    }
+
+    /// A card's menu or dialog is open: it takes the touch and the close key before the panel around it.
+    pub fn popup_open(&self) -> bool {
+        self.card_menu.is_some()
+            || self.rack_menu.is_some()
+            || self.dialog.is_some()
+            || self.send_menu.is_some()
+            || self.midi_menu.is_some()
+            || self.key_menu.is_some()
+            || self.input_menu.is_some()
+    }
+
+    /// Draws the one card of module `module` of `channel` in `rect`, a window's content: as [`Self::show_strip`], with
+    /// that card alone and no pop-out button on it.
+    pub fn show_window(
+        &mut self,
+        ui: &mut Ui,
+        cx: &UiCtx,
+        rect: Rect,
+        index: usize,
+        channel: &mut Channel,
+        module: i32,
+    ) -> RackActions {
+        self.only = Some(module);
+        let actions = self.show_strip(ui, cx, rect, index, channel, None);
+        self.only = None;
+        actions
+    }
+
+    /// The size in points of `module`'s card in a window, with the strip's gap around it: a side rack column wide, as tall
+    /// as its panel.
+    pub fn card_size(&mut self, cx: &UiCtx, module: &ModuleInstance) -> Vec2 {
+        let (ppp, u) = (cx.m.ppp(), cx.m.u_px());
+        let width = strip_card_width(u);
+        self.column = (width, u);
+        let gap = card_gap(u);
+        let pad = (gap / 2.0).floor().max(1.0);
+        vec2(
+            (width + 2.0 * gap) / ppp,
+            (self.card_height(module) * u + 2.0 * pad) / ppp,
+        )
     }
 
     /// The held card's step rule. Nothing runs until the finger first moves more than 0.5 U vertically from where it
@@ -2169,6 +2389,9 @@ impl RackPanel {
         if edits.full {
             actions.lemon_full = Some(id);
         }
+        if edits.window {
+            actions.device_window = Some(id);
+        }
         let ccs = edits.ccs.into_iter().map(|(param, value)| ParamChange {
             channel: index,
             instance_id: 0,
@@ -2259,7 +2482,14 @@ impl RackPanel {
         };
         // Issue #68: a Lemon card showing its editor has the full screen button in that cell.
         let full = lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some();
-        let has_popout = window.is_some() || full;
+        // The Device Rack's strip gives every other card with a panel a pop-out too: the module in a window of its own.
+        let own_window = self.strip
+            && self.only.is_none()
+            && window.is_none()
+            && !full
+            && lemon.is_none()
+            && ui_height(module.type_id).is_some();
+        let has_popout = window.is_some() || full || own_window;
         let preset = module.file.preset_name.clone();
         let preset_w = preset_width(text_width(ui, &preset, m.font_id(FontSize::Pt10)), m.u(1.0));
         let [toggle, icon, name, preset_rect, menu, popout] =
@@ -2371,6 +2601,11 @@ impl RackPanel {
                 let _ = crate::plugins::show_editor(self.channel_id, id, true);
             }
             crate::ui::tooltip::tip(ui, popout, "Open editor", None);
+        }
+        if own_window {
+            let b = icon_button(base.with("window"), popout, IconId::Expand);
+            edits.window = widgets::button(ui, cx, &b, true).clicked();
+            crate::ui::tooltip::tip(ui, popout, "Open in a window", None);
         }
         if full {
             let b = icon_button(base.with("full screen"), popout, IconId::Expand);
@@ -2608,30 +2843,11 @@ impl RackPanel {
             draw_icon(&painter, x, IconId::Close, contrast, HEADER_BUTTON_ICON, m);
             close |= response.clicked();
         }
-        // A side rack: a shadow over the view on its left and a t-wide channel-colour line at its edge, and the
-        // collapse tab.
+        // A side rack: a t-wide channel-colour line at its edge (no shadow: the look is flat), and the collapse tab.
         if let Some(tab) = c.collapse.map(px) {
             let (left, t) = (rack.left() / ppp, m.t());
             let line = Rect::from_x_y_ranges(left - t..=left, rect_y(rack, ppp));
             painter.rect_filled(line, 0.0, ink);
-            let shadow =
-                Rect::from_x_y_ranges(line.left() - m.u(SHADOW)..=line.left(), line.y_range());
-            let dark = Color32::from_black_alpha((SHADOW_ALPHA * 255.0) as u8);
-            let mut mesh = Mesh::default();
-            let corners = [
-                (shadow.left_top(), Color32::TRANSPARENT),
-                (shadow.right_top(), dark),
-                (shadow.right_bottom(), dark),
-                (shadow.left_bottom(), Color32::TRANSPARENT),
-            ];
-            for (at, color) in corners {
-                mesh.colored_vertex(at, color);
-            }
-            mesh.add_triangle(0, 1, 2);
-            mesh.add_triangle(0, 2, 3);
-            painter
-                .with_clip_rect(ui.ctx().content_rect())
-                .add(Shape::mesh(mesh));
             let response = ui.interact(tab, ui.id().with("rack collapse"), Sense::click());
             let grown = if widgets::hovered(ui, &response) {
                 1.05

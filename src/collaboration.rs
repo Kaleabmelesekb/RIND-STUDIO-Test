@@ -75,7 +75,7 @@ fn lane_matches(old: &[Lane], new: &[Lane]) -> Vec<Option<usize>> {
 fn views(song: &mut Song, local: Option<&Song>) {
     let default = Song::default();
     let from = local.unwrap_or(&default);
-    local_fields!(Song, song, from; play_loop;
+    local_fields!(Song, song, from; play_loop, groups;
         title, tempo_bpm, time_sig, channels, key_root, key_scale, file, master_below);
     let to = &mut song.file;
     let from = &from.file;
@@ -185,7 +185,7 @@ pub fn merge(base: &Song, current: &Song, edited: &Song) -> Result<Song, Conflic
     let (b, c, e) = (shared(base), shared(current), shared(edited));
     let mut out = c.clone();
     fields!(Song, b, c, e, out, "song";
-        title, tempo_bpm, time_sig, key_root, key_scale, play_loop, master_below; channels, file);
+        title, tempo_bpm, time_sig, key_root, key_scale, play_loop, master_below; channels, file, groups);
     out.file = merge_file(&b.file, &c.file, &e.file)?;
     let bar = out.time_sig.bar_beats();
     out.channels = keyed(

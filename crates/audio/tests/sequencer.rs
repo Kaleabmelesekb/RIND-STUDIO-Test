@@ -766,3 +766,25 @@ fn note_events_sort_as_the_stable_sort_by_beat_with_offs_first() {
     sort_note_events(&mut events);
     assert_eq!(events, want);
 }
+
+#[test]
+fn note_swing_holds_back_only_the_odd_sixteenths_by_up_to_an_eighth_of_a_beat() {
+    // Even sixteenths and the beat stay; the odd ones are late by amount × 1/8 beat.
+    for beat in [0.0, 0.5, 1.0, 7.5] {
+        assert_eq!(note_swing_delay(beat, 1.0), 0.0, "{beat}");
+    }
+    for beat in [0.25, 0.75, 1.25, 3.75] {
+        assert_eq!(note_swing_delay(beat, 1.0), NOTE_SWING_MAX_DELAY, "{beat}");
+        assert_eq!(note_swing_delay(beat, 0.5), NOTE_SWING_MAX_DELAY / 2.0);
+    }
+    // A note close to an odd sixteenth is swung with it; one between the sixteenths is not.
+    assert_eq!(note_swing_delay(0.26, 1.0), NOTE_SWING_MAX_DELAY);
+    assert_eq!(note_swing_delay(0.375, 1.0), 0.0);
+    // No swing, a bad amount or a bad beat: straight.
+    assert_eq!(note_swing_delay(0.25, 0.0), 0.0);
+    assert_eq!(note_swing_delay(0.25, -1.0), 0.0);
+    assert_eq!(note_swing_delay(0.25, f64::NAN), 0.0);
+    assert_eq!(note_swing_delay(f64::INFINITY, 1.0), 0.0);
+    // More than full is full.
+    assert_eq!(note_swing_delay(0.25, 3.0), NOTE_SWING_MAX_DELAY);
+}

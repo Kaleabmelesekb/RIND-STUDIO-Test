@@ -2909,7 +2909,7 @@ mod component {
     #[test]
     fn every_note_menu_item_is_enabled() {
         let items = crate::ui::piano_roll::more_items();
-        assert_eq!(items.len(), 15);
+        assert_eq!(items.len(), 26);
         assert!(items.iter().all(|i| !i.disabled));
     }
 
@@ -4305,4 +4305,133 @@ mod grid {
             [40, 57, 127]
         );
     }
+}
+
+// ---- the roll's note tools: reverse, flip, strum, stretch, velocity, chords ----
+
+#[test]
+fn reverse_mirrors_the_selected_notes_inside_their_own_span() {
+    let mut events = vec![n(0, 64.0, 60), n(64, 32.0, 62), n(200, 56.0, 64)];
+    reverse_notes(&mut events, &[true, true, true]);
+    // The span is 0..256: each note's end becomes the other end's start.
+    assert_eq!(
+        spans(&events),
+        [(192, 64.0, 60), (160, 32.0, 62), (0, 56.0, 64)]
+    );
+    // Only the flagged notes move, inside their own span.
+    let mut events = vec![n(0, 64.0, 60), n(64, 64.0, 62), n(512, 64.0, 64)];
+    reverse_notes(&mut events, &[true, true, false]);
+    assert_eq!(
+        spans(&events),
+        [(64, 64.0, 60), (0, 64.0, 62), (512, 64.0, 64)]
+    );
+}
+
+#[test]
+fn flip_turns_the_selected_notes_over_around_their_own_range() {
+    let mut events = vec![n(0, 32.0, 60), n(32, 32.0, 64), n(64, 32.0, 72)];
+    flip_notes(&mut events, &[true, true, true]);
+    assert_eq!(
+        spans(&events),
+        [(0, 32.0, 72), (32, 32.0, 68), (64, 32.0, 60)]
+    );
+}
+
+#[test]
+fn strum_staggers_a_chord_up_or_down_keeping_every_end() {
+    let chord = || vec![n(0, 128.0, 60), n(0, 128.0, 64), n(0, 128.0, 67)];
+    let mut up = chord();
+    strum_notes(&mut up, &[true; 3], true);
+    assert_eq!(
+        spans(&up),
+        [(0, 128.0, 60), (16, 112.0, 64), (32, 96.0, 67)]
+    );
+    let mut down = chord();
+    strum_notes(&mut down, &[true; 3], false);
+    assert_eq!(
+        spans(&down),
+        [(32, 96.0, 60), (16, 112.0, 64), (0, 128.0, 67)]
+    );
+    // A note too short to be held back that far starts as late as it can and stays at least a tick long.
+    let mut short = vec![n(0, 8.0, 60), n(0, 8.0, 64)];
+    strum_notes(&mut short, &[true; 2], true);
+    assert_eq!(spans(&short), [(0, 8.0, 60), (7, 1.0, 64)]);
+}
+
+#[test]
+fn stretch_scales_starts_and_lengths_about_the_first_start() {
+    let mut events = vec![n(64, 32.0, 60), n(128, 64.0, 62)];
+    stretch_by(&mut events, &[true, true], 2.0);
+    assert_eq!(spans(&events), [(64, 64.0, 60), (192, 128.0, 62)]);
+    stretch_by(&mut events, &[true, true], 0.5);
+    assert_eq!(spans(&events), [(64, 32.0, 60), (128, 64.0, 62)]);
+}
+
+fn velocities(events: &[Event]) -> Vec<u8> {
+    events
+        .iter()
+        .filter_map(|e| match *e {
+            Event::Note { velocity, .. } => Some(velocity),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn random_velocity_is_repeatable_stays_in_range_and_leaves_the_unselected_alone() {
+    let base = || vec![n(0, 32.0, 60), n(32, 32.0, 62), n(64, 32.0, 64)];
+    let (mut a, mut b) = (base(), base());
+    randomize_velocity(&mut a, &[true, true, false], 7);
+    randomize_velocity(&mut b, &[true, true, false], 7);
+    assert_eq!(a, b, "the same seed, the same result");
+    let v = velocities(&a);
+    let own = f64::from(Event::DEFAULT_VELOCITY);
+    for &x in &v[..2] {
+        assert!(
+            (own * 0.65 - 1.0..=own * 1.35 + 1.0).contains(&f64::from(x)),
+            "{x}"
+        );
+    }
+    assert_eq!(v[2], Event::DEFAULT_VELOCITY);
+    let mut c = base();
+    randomize_velocity(&mut c, &[true; 3], 8);
+    assert_ne!(velocities(&c), velocities(&a), "another seed, another take");
+}
+
+#[test]
+fn fades_ramp_the_velocity_across_the_selected_notes_by_their_starts() {
+    let mut events: Vec<Event> = (0..5).map(|i| n(i * 100, 32.0, 60)).collect();
+    fade_velocity(&mut events, &[true; 5], true);
+    let up = velocities(&events);
+    assert!(up.windows(2).all(|w| w[0] < w[1]), "{up:?}");
+    assert_eq!(up[4], Event::DEFAULT_VELOCITY, "the last keeps its own");
+    let mut events: Vec<Event> = (0..5).map(|i| n(i * 100, 32.0, 60)).collect();
+    fade_velocity(&mut events, &[true; 5], false);
+    let down = velocities(&events);
+    assert!(down.windows(2).all(|w| w[0] > w[1]), "{down:?}");
+    assert_eq!(down[0], Event::DEFAULT_VELOCITY, "the first keeps its own");
+}
+
+#[test]
+fn a_chord_stamp_adds_the_notes_over_each_selected_note_inside_the_key_range() {
+    let mut events = vec![n(0, 64.0, 60), n(64, 64.0, 125)];
+    let mut sel = vec![true, true];
+    let (_, major_seventh) = CHORDS[5];
+    chord_selected(&mut events, &mut sel, major_seventh);
+    // 60 + 4, 7, 11 and 125 + 4 (129, out), 7 (132, out), 11 (out): only the first note's chord fits.
+    assert_eq!(
+        spans(&events),
+        [
+            (0, 64.0, 60),
+            (0, 64.0, 64),
+            (0, 64.0, 67),
+            (0, 64.0, 71),
+            (64, 64.0, 125)
+        ]
+    );
+    assert_eq!(
+        sel,
+        [true, false, false, false, true],
+        "the copies start unselected"
+    );
 }

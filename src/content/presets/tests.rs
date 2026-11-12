@@ -122,7 +122,7 @@ fn each_preset_reads_back_through_the_preset_loader_and_fits_its_module() {
             read += 1;
         }
     }
-    assert_eq!(read, 12 + 11 + 8 + 14 + 10);
+    assert_eq!(read, 12 + 11 + 8 + 14 + 10 + 75);
 }
 
 /// Each module folder lists its categories, or (Transistor Bass) its presets, as the picker's root shows them after
@@ -233,5 +233,36 @@ fn three_osc_presets_play_fixed_shapes_only() {
             assert!((v * 6.0).round() < 6.0, "{} osc {shape}: {v}", preset.name);
         }
         assert!(preset.settings.is_empty() && module.file.custom_data.is_none());
+    }
+}
+
+#[test]
+fn every_effect_has_a_bank_of_flat_presets_that_change_something() {
+    // Param EQ, Distortion, Graphic EQ, Compressor, Filter, Chorus, Flanger, Phaser, Stereorizer, Tape Delay.
+    let planned = [
+        (3, 8),
+        (6, 8),
+        (7, 8),
+        (8, 9),
+        (9, 8),
+        (11, 7),
+        (13, 7),
+        (14, 6),
+        (15, 6),
+        (18, 8),
+    ];
+    for (t, count) in planned {
+        let bank = bank(t);
+        assert_eq!(bank.len(), count, "type {t}");
+        let default = crate::song::ModuleInstance::new(t, 0);
+        for preset in bank {
+            assert_eq!(preset.category, "", "type {t}: a flat bank");
+            let made = module(t, preset);
+            let spec = module_spec(t).unwrap();
+            let changed = (1..spec.params.len() as i32).any(|i| made.param(i) != default.param(i));
+            assert!(changed, "{} leaves every param at its default", preset.name);
+            // The effect stays on.
+            assert_eq!(made.param(0), default.param(0), "{}", preset.name);
+        }
     }
 }

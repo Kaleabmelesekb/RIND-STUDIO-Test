@@ -79,6 +79,25 @@ pub fn arp_swing_delay(beat: f64, interval: f64, amount: f64, rate: SwingRate) -
     }
 }
 
+/// The longest a note is held back by [`note_swing_delay`], in beats.
+pub const NOTE_SWING_MAX_DELAY: f64 = 0.125;
+
+/// How late, in beats, a melodic note starting at `beat` plays under a channel's Swing `amount` (0 ..= 1, 0 = straight).
+/// The grid is the sixteenth: a note on an odd sixteenth (within a quarter of a sixteenth of it) is held back by
+/// `amount` × a half sixteenth, so 1 is the dotted feel of the drum editor's Swing (3 : 1) and 0.5 a light shuffle;
+/// notes on the even sixteenths, and anywhere between, play where they are. Not finite or ≤ 0 is no swing.
+pub fn note_swing_delay(beat: f64, amount: f64) -> f64 {
+    const STEP: f64 = 0.25;
+    if !beat.is_finite() || !amount.is_finite() || amount <= 0.0 {
+        return 0.0;
+    }
+    let n = (beat / STEP).round();
+    if (beat - n * STEP).abs() > STEP / 4.0 || (n as i64).rem_euclid(2) != 1 {
+        return 0.0;
+    }
+    NOTE_SWING_MAX_DELAY * amount.min(1.0)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoteKind {
     On,
