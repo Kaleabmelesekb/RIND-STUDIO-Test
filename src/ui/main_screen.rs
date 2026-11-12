@@ -437,6 +437,26 @@ impl Regions {
         }
     }
 
+    /// The regions with the docks laid out: the Browser `browser_w` points wide down the left of the area, the Device
+    /// Rack `rack_h` points tall along the bottom of what is left, and the view (`area`, `editor`) in the rest, so it
+    /// resizes as either grows, shrinks or collapses. With both 0 the regions are as they were. Before
+    /// [`Self::with_rack`], which slides the side rack over the view's area.
+    pub fn with_docks(self, browser_w: f32, rack_h: f32, m: &Metrics) -> Self {
+        let browser = self.area.with_max_x(self.area.left() + browser_w);
+        let rest = self.area.with_min_x(browser.right());
+        let device_rack = rest.with_min_y((rest.bottom() - rack_h).max(rest.top()));
+        let area = rest.with_max_y(device_rack.top());
+        let portrait = crate::metrics::is_portrait(self.screen);
+        Self {
+            area,
+            editor: area,
+            browser,
+            device_rack,
+            rack: crate::ui::rack::rack_rect(area, 0.0, portrait, m),
+            ..self
+        }
+    }
+
     /// The regions with the rack slid in by `open` (0 closed … 1 open): the view's width is max(rack left − area left,
     /// 1 U), so the rack only overlaps it below 1 U.
     pub fn with_rack(self, open: f32, m: &Metrics) -> Self {
@@ -488,6 +508,11 @@ fn chip_rects(strip: Rect, devices: &[DeviceChip], m: &Metrics) -> Vec<Rect> {
 pub struct MainScreen {
     /// The selected track's devices for the dock's chain, set by the app before each frame.
     pub devices: Vec<DeviceChip>,
+    /// The docks are on (the app sets it each frame): a chip's tap shows its card in the Device Rack instead of opening
+    /// the side rack.
+    pub docks_on: bool,
+    /// A chip's tap with the docks on: the device's index, for the app to give the Device Rack.
+    pub chip_tap: Option<usize>,
     /// Toggled by the play button; the app sends `Play` / `Stop` when it changes.
     pub playing: bool,
     /// The keyboard panel's height in points as last drawn, on its way to the preferred height ([`Self::panel_h`]);
@@ -1872,8 +1897,12 @@ impl MainScreen {
             }
             let at = pos2(rect.left() + m.u(0.9), rect.center().y);
             painter.text(at, Align2::LEFT_CENTER, title, font, text);
-            if response.clicked() && !rack_open {
-                actions.nav = Some(Nav::Open(Overlay::Rack(input.selected)));
+            if response.clicked() {
+                if self.docks_on {
+                    self.chip_tap = Some(i);
+                } else if !rack_open {
+                    actions.nav = Some(Nav::Open(Overlay::Rack(input.selected)));
+                }
             }
         }
     }

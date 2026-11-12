@@ -320,7 +320,7 @@ pub fn show(
 }
 
 /// Replaces the song with `what` now, or after the frame (a picked file, a question answered).
-fn replace(app: &mut AppCtx, what: Replace) {
+pub(super) fn replace(app: &mut AppCtx, what: Replace) {
     if let Some(song) = app.files.replace(what) {
         *app.song = song;
         app.song_replaced();

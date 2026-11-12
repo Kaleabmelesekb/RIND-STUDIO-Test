@@ -2,7 +2,7 @@
 //! playable; the view is laid out left of it. It slides in and out ([`State::slide`]). It draws in the background
 //! layer, below the Modules browser's `Order::Middle` backdrop.
 
-use eframe::egui::{self, UiBuilder};
+use eframe::egui::{self, Rect, UiBuilder};
 
 use super::{AppCtx, Nav, Overlay};
 use crate::audio_engine::slicer::write_auto_clip;
@@ -151,20 +151,68 @@ pub fn show(
     clipboard: &mut Vec<ModuleInstance>,
     held: Option<(usize, u32)>,
 ) -> Option<Nav> {
+    run(state, ui, app, channel, clipboard, held, Place::Side)
+}
+
+/// Where the rack's cards are drawn.
+#[derive(Clone, Copy)]
+enum Place {
+    /// The side rack ([`show`]).
+    Side,
+    /// The bottom Device Rack's strip, in `app.regions.device_rack` below its header, with this card scrolled into view.
+    Strip(Rect, Option<usize>),
+}
+
+/// Draws the bottom Device Rack's body: `channel`'s cards side by side in `rect` ([`RackPanel::show_strip`]), what they
+/// edit and ask for as [`show`]'s, which shares this state (the side rack and the strip are never drawn together). A
+/// channel that is gone draws nothing. `reveal`: the card to scroll into view.
+#[allow(clippy::too_many_arguments)]
+pub fn show_strip(
+    state: &mut State,
+    ui: &mut egui::Ui,
+    app: &mut AppCtx,
+    rect: Rect,
+    channel: usize,
+    clipboard: &mut Vec<ModuleInstance>,
+    held: Option<(usize, u32)>,
+    reveal: Option<usize>,
+) -> Option<Nav> {
+    let place = Place::Strip(rect, reveal);
+    run(state, ui, app, channel, clipboard, held, place)
+}
+
+fn run(
+    state: &mut State,
+    ui: &mut egui::Ui,
+    app: &mut AppCtx,
+    channel: usize,
+    clipboard: &mut Vec<ModuleInstance>,
+    held: Option<(usize, u32)>,
+    place: Place,
+) -> Option<Nav> {
     state.panel.targets = send_targets(app.song, channel);
     (state.panel.recent, state.panel.modulations) =
         (state.recent, modulation_names(app.song, channel));
     let Some(ch) = app.song.channels.get_mut(channel) else {
-        return Some(Nav::Close);
+        // A gone channel closes the side rack; the strip has nothing to close.
+        return matches!(place, Place::Side).then_some(Nav::Close);
     };
     state.last = Some(channel);
     if std::mem::take(&mut state.stop_drag) {
         ui.ctx().stop_dragging();
     }
-    let rect = app.regions.rack;
+    let rect = match place {
+        Place::Side => app.regions.rack,
+        Place::Strip(rect, _) => rect,
+    };
     // A fixed id scope per channel: the rack's widget ids do not depend on what the frame drew before it, and the
     // temp data egui keys by them (drags, menu positions) is not shared with another channel's same instance id.
-    let mut ui = ui.new_child(UiBuilder::new().id(("rack", channel)).max_rect(rect));
+    let builder = UiBuilder::new().max_rect(rect);
+    let builder = match place {
+        Place::Side => builder.id(("rack", channel)),
+        Place::Strip(..) => builder.id(("rack strip", channel)),
+    };
+    let mut ui = ui.new_child(builder);
     state.panel.covered = app.covered;
     state.panel.middle_c_is_c4 = app.middle_c_is_c4;
     state.panel.lemon_full = state.full;
@@ -195,7 +243,12 @@ pub fn show(
     }
     let rate = app.audio.sample_rate().map_or(0.0, |r| r as f32);
     crate::panels::set_text_env(ui.ctx(), app.song.tempo_bpm, rate);
-    let actions = state.panel.show(&mut ui, &app.cx, rect, channel, ch);
+    let actions = match place {
+        Place::Side => state.panel.show(&mut ui, &app.cx, rect, channel, ch),
+        Place::Strip(_, reveal) => {
+            (state.panel).show_strip(&mut ui, &app.cx, rect, channel, ch, reveal)
+        }
+    };
     state.touch = actions.touch.map(|t| (channel, t)).or(state.touch);
     state.ask_delete = actions
         .ask_delete

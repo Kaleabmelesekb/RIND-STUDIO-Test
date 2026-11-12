@@ -63,7 +63,7 @@ use crate::ui::gesture;
 use crate::ui::layout::{self, Node, Size};
 use crate::ui::modules_browser::{InsertAt, Takes, add_module, paste_module};
 use crate::ui::popup::{self, PopupItem};
-use crate::ui::scroller::{self, Axis, Scroller, Y, Zones};
+use crate::ui::scroller::{self, Axis, Scroller, X, Y, Zones};
 use crate::ui::widgets::{self, Button, Control, ParamMenu};
 use crate::ui::{UiCtx, focus_lost};
 
@@ -334,6 +334,8 @@ pub fn flow_sends(
 
 /// The rack's width, in U, capped at the area's.
 const RACK_W: f32 = 20.0;
+/// The device strip's `Add Module` cell, in U wide.
+const ADD_W: f32 = 9.0;
 
 /// The rack over the content `area` (the screen above the keyboard panel), slid in by `open` (0 closed … 1 open): R =
 /// trunc(min(20 U, W)) wide, or W in a `portrait` window ([`is_portrait`](crate::metrics::is_portrait)), and the
@@ -1283,6 +1285,8 @@ pub struct RackPanel {
     /// How far the content is scrolled up, in points: past either end while a finger pulls it there, a card is held,
     /// or it springs back.
     scroll: f32,
+    /// The device strip's offset along x, in points ([`Self::show_strip`]).
+    scroll_x: f32,
     /// Its scroll controller: the touch, the fling, the spring.
     scroller: Scroller,
     /// Each card's panel state (its settings and tab page), by channel index, instance id and module type, so a
@@ -1439,6 +1443,36 @@ impl RackPanel {
         }
     }
 
+    /// Points the panel at channel `index`: another channel's rack starts afresh ([`Self::channel`]), and the panel states
+    /// of modules that are gone, or reused by another type, go.
+    fn adopt(&mut self, index: usize, channel: &Channel, actions: &mut RackActions) {
+        if self.channel != index {
+            // Another channel's rack: a key-learn ends on the channel it was on.
+            if let Some((id, _)) = self.learning {
+                actions.setting_changes.push(learn(self.channel, id, false));
+            }
+            // What the host set for this frame stays, and so does a pending note-effect rebuild: a keyboard switch of
+            // the current channel mid-drag still builds the edit in once the pointer is up.
+            let panels = std::mem::take(&mut self.panels);
+            *self = Self {
+                channel: index,
+                panels,
+                note_edit: self.note_edit,
+                meters: std::mem::take(&mut self.meters),
+                soundfonts: std::mem::take(&mut self.soundfonts),
+                targets: std::mem::take(&mut self.targets),
+                covered: self.covered,
+                multitrack: self.multitrack,
+                input_peaks: self.input_peaks,
+                middle_c_is_c4: self.middle_c_is_c4,
+                ..Self::default()
+            };
+        }
+        self.panels.retain(|&(ch, id, ty), _| {
+            ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
+        });
+    }
+
     /// Draws the rack of `channel` (the song's channel `index`) in `rect` and returns what the app must do. Edits go
     /// to the channel directly.
     pub fn show(
@@ -1465,31 +1499,7 @@ impl RackPanel {
         // The links of the channel's `CCLK`: its bound controls' `Unlink from MIDI CC`.
         panels::set_cc_links(ui.ctx(), links::links(&channel.file.cc_links));
         ui.painter().rect_filled(rect, 0.0, contrast);
-        if self.channel != index {
-            // Another channel's rack: a key-learn ends on the channel it was on.
-            if let Some((id, _)) = self.learning {
-                actions.setting_changes.push(learn(self.channel, id, false));
-            }
-            // What the host set for this frame stays, and so does a pending note-effect rebuild: a keyboard switch of
-            // the current channel mid-drag still builds the edit in once the pointer is up.
-            let panels = std::mem::take(&mut self.panels);
-            *self = Self {
-                channel: index,
-                panels,
-                note_edit: self.note_edit,
-                meters: std::mem::take(&mut self.meters),
-                soundfonts: std::mem::take(&mut self.soundfonts),
-                targets: std::mem::take(&mut self.targets),
-                covered: self.covered,
-                multitrack: self.multitrack,
-                input_peaks: self.input_peaks,
-                middle_c_is_c4: self.middle_c_is_c4,
-                ..Self::default()
-            };
-        }
-        self.panels.retain(|&(ch, id, ty), _| {
-            ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
-        });
+        self.adopt(index, channel, &mut actions);
 
         // Scrolling first: the content is placed from the new offset, by the editors' law: the controls get the touch
         // first, as they are on top.
@@ -1688,6 +1698,158 @@ impl RackPanel {
         if !self.slides.is_empty() {
             ui.ctx().request_repaint();
         }
+        actions
+    }
+
+    /// Draws `channel`'s devices as the bottom Device Rack's body: the rack's own cards ([`Self::card`], so every
+    /// control, menu and dialog is the rack's) side by side from the left of `rect`, a card [`RACK_W`] U wide as in the
+    /// side rack, scrolling along x, and along y for a card taller than `rect`, with `Add Module` after the last. `reveal`
+    /// scrolls that card (an index into the chain) into view. No header, sends or input row and no held-card reorder:
+    /// the side rack has them. Returns what the app must do, as [`Self::show`].
+    pub fn show_strip(
+        &mut self,
+        ui: &mut Ui,
+        cx: &UiCtx,
+        rect: Rect,
+        index: usize,
+        channel: &mut Channel,
+        reveal: Option<usize>,
+    ) -> RackActions {
+        let (m, colors) = (cx.m, &cx.theme.colors);
+        let (ppp, u) = (m.ppp(), m.u_px());
+        let ink = channel_color(channel.hue, cx.theme).to_color32();
+        let px = rect * ppp;
+        let strip = Rect::from_min_max(px.min.round(), px.max.round());
+        let rect = strip / ppp;
+        let mut actions = RackActions::default();
+        self.channel_id = channel.id;
+        panels::set_cc_links(ui.ctx(), links::links(&channel.file.cc_links));
+        ui.painter()
+            .rect_filled(rect, 0.0, colors.background.to_color32());
+        self.adopt(index, channel, &mut actions);
+
+        // The cards' width is the side rack's column.
+        let gap = card_gap(u);
+        let pad = (gap / 2.0).floor().max(1.0);
+        let whole = Rect::from_min_size(Pos2::ZERO, vec2(RACK_W * u, u));
+        let margin = Chrome::new(whole, u).margin;
+        let width = (whole.right() - margin).floor() - (whole.left() + margin).floor();
+        self.column = (width, u);
+        let input = channel.kind == ChannelKind::AudioRecord;
+        let heights: Vec<f32> = (channel.rack.modules.iter())
+            .map(|m| self.card_height(m))
+            .collect();
+        let n = heights.len();
+        // Content positions in px from the strip's left and top, unscrolled.
+        let left_of = |i: usize| gap + i as f32 * (width + gap);
+        let add_w = (ADD_W * u).min(width);
+        let content_w = left_of(n) + add_w + gap;
+        let tallest = heights.iter().copied().fold(ROW, f32::max) * u + 2.0 * pad;
+
+        if let Some(i) = reveal.filter(|&i| i < n) {
+            self.scroll_x = (left_of(i) - gap) / ppp;
+        }
+        let axes = |sx: f32, sy: f32| {
+            let x = Axis {
+                pos: f64::from(sx),
+                zoom: 1.0,
+                range: [0.0, f64::from(content_w / ppp)],
+                zoom_range: [1.0; 2],
+                view: rect.x_range(),
+            };
+            let y = Axis {
+                pos: f64::from(sy),
+                zoom: 1.0,
+                range: [0.0, f64::from(tallest / ppp)],
+                zoom_range: [1.0; 2],
+                view: rect.y_range(),
+            };
+            [x, y]
+        };
+        let scroll_id = ui.id().with("device strip");
+        let lemon_wheel = std::mem::take(&mut self.lemon_wheel);
+        {
+            let zones = Zones {
+                touch: [rect, rect],
+                wheel_scroll: Rect::NOTHING,
+                ..Zones::NONE
+            };
+            let opts = scroller::Options {
+                covered: self.covered || !ui.is_enabled(),
+                follow: false,
+            };
+            let mut axes = axes(self.scroll_x, self.scroll);
+            (self.scroller).update(ui, scroll_id, m.u(1.0), &zones, &mut axes, opts);
+            // The wheel: along y over a card taller than the strip (unless Shift is down), else along x. A Lemon
+            // card's editor keeps its own.
+            if !lemon_wheel && !self.covered && ui.rect_contains_pointer(rect) {
+                let (d, shift) = ui.input(|i| (i.smooth_scroll_delta, i.modifiers.shift));
+                let (dx, dy) = if tallest > strip.height() && !shift {
+                    (d.x, d.y)
+                } else {
+                    (d.x + d.y, 0.0)
+                };
+                for (axis, delta) in [(X, dx), (Y, dy)] {
+                    let a = &mut axes[axis];
+                    a.pos = (a.pos - f64::from(delta)).clamp(a.range[0], a.max());
+                }
+            }
+            self.scroll_x = axes[X].pos as f32;
+            self.scroll = axes[Y].pos as f32;
+        }
+        ui.interact(rect, ui.id().with("device strip clicks"), Sense::click());
+        let (sx, sy) = ((self.scroll_x * ppp).round(), (self.scroll * ppp).round());
+
+        let outer = ui.clip_rect();
+        ui.set_clip_rect(outer.intersect(rect));
+        for (i, module) in channel.rack.modules.iter_mut().enumerate() {
+            let at = pos2(strip.left() + left_of(i) - sx, strip.top() + pad - sy);
+            let card = Rect::from_min_size(at, vec2(width, heights[i] * u)) / ppp;
+            if !ui.clip_rect().intersects(card) {
+                continue;
+            }
+            let edits = self.card(ui, cx, card, module, false, ink, if input { 1 } else { 2 });
+            if edits.double_tap {
+                module.minimized ^= true;
+                actions.minimized = true;
+            }
+            self.absorb(&mut actions, index, module, edits);
+        }
+        let at = pos2(strip.left() + left_of(n) - sx, strip.top() + pad - sy);
+        let add = Rect::from_min_size(at, vec2(add_w, ROW * u)) / ppp;
+        if ui.clip_rect().intersects(add) {
+            add_row(
+                ui,
+                cx,
+                add,
+                "Add Module",
+                ink,
+                Some(colors.background.to_color32()),
+            );
+            if ui
+                .interact(add, ui.id().with("strip add module"), Sense::click())
+                .clicked()
+            {
+                actions.open_browser = Some(InsertAt::End);
+            }
+        }
+        ui.set_clip_rect(outer);
+
+        self.popups(ui, cx, index, channel, &mut actions);
+        // A control that took the drag, or a popup open over the strip, has the touch: no scroll comes of it.
+        let taken = ui.ctx().dragged_id().is_some_and(|id| id != scroll_id);
+        let popup = self.card_menu.is_some()
+            || self.rack_menu.is_some()
+            || self.dialog.is_some()
+            || self.send_menu.is_some()
+            || self.midi_menu.is_some()
+            || self.key_menu.is_some()
+            || self.input_menu.is_some();
+        if taken || popup {
+            self.scroller.yield_touch();
+        }
+        self.learn(index, channel, &mut actions);
+        self.settle(ui, &mut actions);
         actions
     }
 

@@ -31,6 +31,7 @@ pub mod audio_editor;
 pub mod automation_editor;
 pub mod channel_settings;
 pub mod ctrl_menu;
+pub mod docks;
 pub mod drum_editor;
 pub mod keyboard_settings;
 pub mod main_menu;
@@ -538,6 +539,8 @@ pub struct Slots {
     pub keyboard_settings: keyboard_settings::State,
     pub ctrl_menu: ctrl_menu::State,
     pub rack: rack::State,
+    /// The Browser and Device Rack docks around the arrangement.
+    pub docks: docks::Docks,
     pub modules_browser: modules_browser::State,
     pub tempo_editor: tempo_editor::State,
     pub preset_picker: preset_picker::State,
@@ -633,6 +636,22 @@ impl Slots {
                 audio_editor::show(&mut self.audio_editor, ui, app, channel)
             }
         }
+    }
+
+    /// Draws the docks over the view and under the overlays: the Browser down the left and, unless the side rack is
+    /// `racked` (it shows the same devices), the Device Rack under the arrangement. What they ask for is returned.
+    pub fn docks(&mut self, ui: &mut egui::Ui, app: &mut AppCtx, racked: bool) -> Vec<Nav> {
+        let mut navs = Vec::new();
+        if !self.docks.enabled {
+            return navs;
+        }
+        navs.extend(self.docks.browser(ui, app, &mut self.preset_picker));
+        if !racked {
+            let held = self.roll_clip(*app.selected);
+            let (state, clipboard) = (&mut self.rack, &mut self.clipboard);
+            navs.extend(self.docks.device_rack(ui, app, state, clipboard, held));
+        }
+        navs
     }
 
     /// Draws `overlays` bottom to top, over the view and the transport, and `corner` (the playlist screen's corner
