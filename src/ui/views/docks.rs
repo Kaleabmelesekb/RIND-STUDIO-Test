@@ -34,10 +34,9 @@ const RAIL_W: f32 = 1.25;
 const HEADER_H: f32 = 1.5;
 const TAB_H: f32 = 1.5;
 const ROW_H: f32 = 1.5;
-/// The Device Rack's open height: this share of the content area, between these limits in U.
-const RACK_SHARE: f32 = 0.45;
-const RACK_MIN_H: f32 = 5.5;
-const RACK_MAX_H: f32 = 13.5;
+/// The Device Rack's body when open: a fixed height in U, however the window is sized (only a window too short for it
+/// gives it less, [`MAX_SHARE`]).
+const RACK_BODY_H: f32 = 7.5;
 /// The most of the content area either dock takes.
 const MAX_SHARE: f32 = 0.7;
 /// A row's left padding, in U.
@@ -154,8 +153,9 @@ impl Docks {
         let rack = if racked {
             0.0
         } else if self.rack_open {
-            let open = (area.height() * RACK_SHARE).clamp(m.u(RACK_MIN_H), m.u(RACK_MAX_H));
-            open.min(area.height() * MAX_SHARE).max(header)
+            (m.u(HEADER_H + RACK_BODY_H))
+                .min(area.height() * MAX_SHARE)
+                .max(header)
         } else {
             header
         };
@@ -534,6 +534,7 @@ impl Docks {
         state: &mut rack::State,
         clipboard: &mut Vec<ModuleInstance>,
         held: Option<(usize, u32)>,
+        draw_strip: bool,
     ) -> Option<Nav> {
         let rect = app.regions.device_rack;
         if rect.width() < 1.0 || rect.height() < 1.0 {
@@ -633,7 +634,7 @@ impl Docks {
         rule(&painter, header.left_bottom(), header.right_bottom(), &look);
 
         let body = rect.with_min_y(header.bottom());
-        if !self.rack_open || body.height() < 1.0 || name.is_none() {
+        if !draw_strip || !self.rack_open || body.height() < 1.0 || name.is_none() {
             return nav;
         }
         let reveal = self.reveal.take();

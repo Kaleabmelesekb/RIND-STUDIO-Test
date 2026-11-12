@@ -1220,6 +1220,15 @@ pub struct RackActions {
     pub builder: Option<i32>,
     /// Issue #68: a Lemon card's full screen button: show the editor of the module with this instance id full screen.
     pub lemon_full: Option<i32>,
+    /// A device strip card's pop-out button: show the module with this instance id in its own window on the screen.
+    pub device_window: Option<i32>,
+}
+
+/// The width in pixels of a card in the Device Rack's strip and in a device window: the side rack's column.
+fn strip_card_width(u: f32) -> f32 {
+    let whole = Rect::from_min_size(Pos2::ZERO, vec2(RACK_W * u, u));
+    let margin = Chrome::new(whole, u).margin;
+    (whole.right() - margin).floor() - (whole.left() + margin).floor()
 }
 
 /// A card's panel state, and its module's `CSTM` blob as the state last matched it: a card is seeded from the blob
@@ -1259,6 +1268,8 @@ struct CardEdits {
     double_tap: bool,
     /// Issue #68: a Lemon card's full screen button was clicked.
     full: bool,
+    /// A strip card's pop-out button was clicked.
+    window: bool,
 }
 
 /// A card held to reorder it.
@@ -1285,6 +1296,10 @@ pub struct RackPanel {
     scroll: f32,
     /// The device strip's offset along x, in points ([`Self::show_strip`]).
     scroll_x: f32,
+    /// The cards are drawn in the Device Rack's strip, which gives each a pop-out button ([`Self::show_strip`]).
+    strip: bool,
+    /// Only the card of this module is drawn, in a window of its own ([`Self::show_window`]), without the pop-out.
+    only: Option<i32>,
     /// Its scroll controller: the touch, the fling, the spring.
     scroller: Scroller,
     /// Each card's panel state (its settings and tab page), by channel index, instance id and module type, so a
@@ -1497,6 +1512,7 @@ impl RackPanel {
         // The links of the channel's `CCLK`: its bound controls' `Unlink from MIDI CC`.
         panels::set_cc_links(ui.ctx(), links::links(&channel.file.cc_links));
         ui.painter().rect_filled(rect, 0.0, contrast);
+        (self.strip, self.only) = (false, None);
         self.adopt(index, channel, &mut actions);
 
         // Scrolling first: the content is placed from the new offset, by the editors' law: the controls get the touch
@@ -1729,23 +1745,31 @@ impl RackPanel {
         // The cards' width is the side rack's column.
         let gap = card_gap(u);
         let pad = (gap / 2.0).floor().max(1.0);
-        let whole = Rect::from_min_size(Pos2::ZERO, vec2(RACK_W * u, u));
-        let margin = Chrome::new(whole, u).margin;
-        let width = (whole.right() - margin).floor() - (whole.left() + margin).floor();
+        let width = strip_card_width(u);
         self.column = (width, u);
         let input = channel.kind == ChannelKind::AudioRecord;
-        let heights: Vec<f32> = (channel.rack.modules.iter())
-            .map(|m| self.card_height(m))
+        // The cards drawn: every module's, or the one the window shows.
+        let only = self.only;
+        let shown: Vec<usize> = (0..channel.rack.modules.len())
+            .filter(|&i| only.is_none_or(|id| channel.rack.modules[i].instance_id == id))
             .collect();
-        let n = heights.len();
+        self.strip = true;
+        let heights: Vec<f32> = (shown.iter())
+            .map(|&i| self.card_height(&channel.rack.modules[i]))
+            .collect();
+        let n = shown.len();
         // Content positions in px from the strip's left and top, unscrolled.
         let left_of = |i: usize| gap + i as f32 * (width + gap);
-        let add_w = (ADD_W * u).min(width);
-        let content_w = left_of(n) + add_w + gap;
+        let add_w = if only.is_some() {
+            0.0
+        } else {
+            (ADD_W * u).min(width)
+        };
+        let content_w = left_of(n) + add_w + if only.is_some() { 0.0 } else { gap };
         let tallest = heights.iter().copied().fold(ROW, f32::max) * u + 2.0 * pad;
 
-        if let Some(i) = reveal.filter(|&i| i < n) {
-            self.scroll_x = (left_of(i) - gap) / ppp;
+        if let Some(slot) = reveal.and_then(|i| shown.iter().position(|&s| s == i)) {
+            self.scroll_x = (left_of(slot) - gap) / ppp;
         }
         let axes = |sx: f32, sy: f32| {
             let x = Axis {
@@ -1800,9 +1824,10 @@ impl RackPanel {
 
         let outer = ui.clip_rect();
         ui.set_clip_rect(outer.intersect(rect));
-        for (i, module) in channel.rack.modules.iter_mut().enumerate() {
-            let at = pos2(strip.left() + left_of(i) - sx, strip.top() + pad - sy);
-            let card = Rect::from_min_size(at, vec2(width, heights[i] * u)) / ppp;
+        for (slot, &i) in shown.iter().enumerate() {
+            let module = &mut channel.rack.modules[i];
+            let at = pos2(strip.left() + left_of(slot) - sx, strip.top() + pad - sy);
+            let card = Rect::from_min_size(at, vec2(width, heights[slot] * u)) / ppp;
             if !ui.clip_rect().intersects(card) {
                 continue;
             }
@@ -1815,7 +1840,7 @@ impl RackPanel {
         }
         let at = pos2(strip.left() + left_of(n) - sx, strip.top() + pad - sy);
         let add = Rect::from_min_size(at, vec2(add_w, ROW * u)) / ppp;
-        if ui.clip_rect().intersects(add) {
+        if only.is_none() && ui.clip_rect().intersects(add) {
             add_row(
                 ui,
                 cx,
@@ -1836,19 +1861,54 @@ impl RackPanel {
         self.popups(ui, cx, index, channel, &mut actions);
         // A control that took the drag, or a popup open over the strip, has the touch: no scroll comes of it.
         let taken = ui.ctx().dragged_id().is_some_and(|id| id != scroll_id);
-        let popup = self.card_menu.is_some()
-            || self.rack_menu.is_some()
-            || self.dialog.is_some()
-            || self.send_menu.is_some()
-            || self.midi_menu.is_some()
-            || self.key_menu.is_some()
-            || self.input_menu.is_some();
-        if taken || popup {
+        if taken || self.popup_open() {
             self.scroller.yield_touch();
         }
         self.learn(index, channel, &mut actions);
         self.settle(ui, &mut actions);
         actions
+    }
+
+    /// A card's menu or dialog is open: it takes the touch and the close key before the panel around it.
+    pub fn popup_open(&self) -> bool {
+        self.card_menu.is_some()
+            || self.rack_menu.is_some()
+            || self.dialog.is_some()
+            || self.send_menu.is_some()
+            || self.midi_menu.is_some()
+            || self.key_menu.is_some()
+            || self.input_menu.is_some()
+    }
+
+    /// Draws the one card of module `module` of `channel` in `rect`, a window's content: as [`Self::show_strip`], with
+    /// that card alone and no pop-out button on it.
+    pub fn show_window(
+        &mut self,
+        ui: &mut Ui,
+        cx: &UiCtx,
+        rect: Rect,
+        index: usize,
+        channel: &mut Channel,
+        module: i32,
+    ) -> RackActions {
+        self.only = Some(module);
+        let actions = self.show_strip(ui, cx, rect, index, channel, None);
+        self.only = None;
+        actions
+    }
+
+    /// The size in points of `module`'s card in a window, with the strip's gap around it: a side rack column wide, as tall
+    /// as its panel.
+    pub fn card_size(&mut self, cx: &UiCtx, module: &ModuleInstance) -> Vec2 {
+        let (ppp, u) = (cx.m.ppp(), cx.m.u_px());
+        let width = strip_card_width(u);
+        self.column = (width, u);
+        let gap = card_gap(u);
+        let pad = (gap / 2.0).floor().max(1.0);
+        vec2(
+            (width + 2.0 * gap) / ppp,
+            (self.card_height(module) * u + 2.0 * pad) / ppp,
+        )
     }
 
     /// The held card's step rule. Nothing runs until the finger first moves more than 0.5 U vertically from where it
@@ -2329,6 +2389,9 @@ impl RackPanel {
         if edits.full {
             actions.lemon_full = Some(id);
         }
+        if edits.window {
+            actions.device_window = Some(id);
+        }
         let ccs = edits.ccs.into_iter().map(|(param, value)| ParamChange {
             channel: index,
             instance_id: 0,
@@ -2419,7 +2482,14 @@ impl RackPanel {
         };
         // Issue #68: a Lemon card showing its editor has the full screen button in that cell.
         let full = lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some();
-        let has_popout = window.is_some() || full;
+        // The Device Rack's strip gives every other card with a panel a pop-out too: the module in a window of its own.
+        let own_window = self.strip
+            && self.only.is_none()
+            && window.is_none()
+            && !full
+            && lemon.is_none()
+            && ui_height(module.type_id).is_some();
+        let has_popout = window.is_some() || full || own_window;
         let preset = module.file.preset_name.clone();
         let preset_w = preset_width(text_width(ui, &preset, m.font_id(FontSize::Pt10)), m.u(1.0));
         let [toggle, icon, name, preset_rect, menu, popout] =
@@ -2531,6 +2601,11 @@ impl RackPanel {
                 let _ = crate::plugins::show_editor(self.channel_id, id, true);
             }
             crate::ui::tooltip::tip(ui, popout, "Open editor", None);
+        }
+        if own_window {
+            let b = icon_button(base.with("window"), popout, IconId::Expand);
+            edits.window = widgets::button(ui, cx, &b, true).clicked();
+            crate::ui::tooltip::tip(ui, popout, "Open in a window", None);
         }
         if full {
             let b = icon_button(base.with("full screen"), popout, IconId::Expand);

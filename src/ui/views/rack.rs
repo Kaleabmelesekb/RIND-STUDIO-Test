@@ -161,6 +161,8 @@ enum Place {
     Side,
     /// The bottom Device Rack's strip, in `app.regions.device_rack` below its header, with this card scrolled into view.
     Strip(Rect, Option<usize>),
+    /// A device window's content ([`show_window`]): the card of this module instance alone, in this rect.
+    Window(Rect, i32),
 }
 
 /// Draws the bottom Device Rack's body: `channel`'s cards side by side in `rect` ([`RackPanel::show_strip`]), what they
@@ -181,6 +183,42 @@ pub fn show_strip(
     run(state, ui, app, channel, clipboard, held, place)
 }
 
+/// Draws the card of module `module` of `channel` alone in `rect`, the content of its device window
+/// ([`Overlay::DeviceEditor`]); what it edits and asks for is [`show`]'s. `Nav::Close` once the channel is gone.
+#[allow(clippy::too_many_arguments)]
+pub fn show_window(
+    state: &mut State,
+    ui: &mut egui::Ui,
+    app: &mut AppCtx,
+    rect: Rect,
+    channel: usize,
+    module: i32,
+    clipboard: &mut Vec<ModuleInstance>,
+    held: Option<(usize, u32)>,
+) -> Option<Nav> {
+    run(
+        state,
+        ui,
+        app,
+        channel,
+        clipboard,
+        held,
+        Place::Window(rect, module),
+    )
+}
+
+/// The size in points of module `module`'s card on `channel`, for the window around it; `None` for a module that is
+/// gone.
+pub fn window_size(
+    state: &mut State,
+    app: &AppCtx,
+    channel: usize,
+    module: i32,
+) -> Option<egui::Vec2> {
+    let module = app.song.channels.get(channel)?.rack.get(module)?;
+    Some(state.panel.card_size(&app.cx, module))
+}
+
 fn run(
     state: &mut State,
     ui: &mut egui::Ui,
@@ -194,8 +232,8 @@ fn run(
     (state.panel.recent, state.panel.modulations) =
         (state.recent, modulation_names(app.song, channel));
     let Some(ch) = app.song.channels.get_mut(channel) else {
-        // A gone channel closes the side rack; the strip has nothing to close.
-        return matches!(place, Place::Side).then_some(Nav::Close);
+        // A gone channel closes the side rack and the window; the strip has nothing to close.
+        return (!matches!(place, Place::Strip(..))).then_some(Nav::Close);
     };
     state.last = Some(channel);
     if std::mem::take(&mut state.stop_drag) {
@@ -203,7 +241,7 @@ fn run(
     }
     let rect = match place {
         Place::Side => app.regions.rack,
-        Place::Strip(rect, _) => rect,
+        Place::Strip(rect, _) | Place::Window(rect, _) => rect,
     };
     // A fixed id scope per channel: the rack's widget ids do not depend on what the frame drew before it, and the
     // temp data egui keys by them (drags, menu positions) is not shared with another channel's same instance id.
@@ -211,6 +249,7 @@ fn run(
     let builder = match place {
         Place::Side => builder.id(("rack", channel)),
         Place::Strip(..) => builder.id(("rack strip", channel)),
+        Place::Window(..) => builder.id(("rack window", channel)),
     };
     let mut ui = ui.new_child(builder);
     state.panel.covered = app.covered;
@@ -247,6 +286,9 @@ fn run(
         Place::Side => state.panel.show(&mut ui, &app.cx, rect, channel, ch),
         Place::Strip(_, reveal) => {
             (state.panel).show_strip(&mut ui, &app.cx, rect, channel, ch, reveal)
+        }
+        Place::Window(_, module) => {
+            (state.panel).show_window(&mut ui, &app.cx, rect, channel, ch, module)
         }
     };
     state.touch = actions.touch.map(|t| (channel, t)).or(state.touch);
@@ -336,6 +378,9 @@ fn run(
     if let Some(at) = actions.open_browser {
         return Some(Nav::Open(Overlay::ModulesBrowser { channel, at }));
     }
+    if let Some(module) = actions.device_window {
+        return Some(Nav::Open(Overlay::DeviceEditor { channel, module }));
+    }
     if let Some(module) = actions.lemon_full {
         return Some(Nav::Open(Overlay::LemonEditor { channel, module }));
     }
@@ -360,4 +405,9 @@ pub fn show_closing(
     // Without the disabled look.
     ui.set_opacity(opacity);
     show(state, &mut ui, app, channel, clipboard, None);
+}
+
+/// A card's menu or dialog is open over the strip or a window: it takes the close key first.
+pub fn popup_open(state: &State) -> bool {
+    state.panel.popup_open()
 }
