@@ -560,3 +560,46 @@ fn a_notes_off_is_clamped_to_its_clip_end() {
         assert_eq!(events.len(), 1, "{len_beats}");
     }
 }
+
+#[test]
+fn a_channels_swing_holds_odd_sixteenth_notes_back_across_block_edges() {
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::Instrument);
+    song.channels[1].lanes[0].swing = 1.0;
+    let clip = song.channels[1].lanes[0].add_clip(0, 1.0);
+    clip.visible_len_beats = 2.0;
+    // A note on the beat and one on the odd sixteenth at 0.75.
+    for (pos, key) in [(0, 60), (96, 62)] {
+        clip.events.push(Event::Note {
+            pos,
+            len_beats: 0.125,
+            key,
+            velocity: 204,
+            pan: 127,
+            slide: false,
+        });
+    }
+    let pan = 127.0 / 255.0;
+    // The first block ends before the swung note-on (0.875): the straight note plays, the swung one is not there yet.
+    let early = SongAudioBridge::note_events_in_block(&song, 1, 0.0, 0.8).unwrap();
+    assert_eq!(
+        early,
+        [
+            InputNoteEvent::on(0.0, 60, 204).with_pan(pan),
+            InputNoteEvent::off(0.125, 60)
+        ]
+    );
+    // The next block starts after the note's own place (0.75) and still finds it, a beat's eighth late, length kept.
+    let late = SongAudioBridge::note_events_in_block(&song, 1, 0.8, 1.5).unwrap();
+    assert_eq!(
+        late,
+        [
+            InputNoteEvent::on(0.875, 62, 204).with_pan(pan),
+            InputNoteEvent::off(1.0, 62)
+        ]
+    );
+    // Straight again with the Swing off.
+    song.channels[1].lanes[0].swing = 0.0;
+    let straight = SongAudioBridge::note_events_in_block(&song, 1, 0.5, 1.0).unwrap();
+    assert_eq!(straight[0], InputNoteEvent::on(0.75, 62, 204).with_pan(pan));
+}

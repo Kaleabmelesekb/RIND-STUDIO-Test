@@ -89,7 +89,8 @@ pub struct Lane {
     pub last_clip_id: u32,
     /// `DESc` +12: the drum editor's last Swing amount in [0, 1] (0 = none; files hold 0.18…0.45), kept for the
     /// editor's swing control. Swing already moved the clip's hits when it was set, so
-    /// playback must not apply it again. 0 on other lanes.
+    /// playback must not apply it again. On a Notes lane it is the channel's Swing instead, which playback does apply
+    /// (`audio_bridge`): notes on the odd sixteenths play late and the clip's notes stay where they are. 0 on other lanes.
     pub swing: f64,
     /// A drum lane's grid (`DESc` @1). `Steps` on other lanes, whose @1 byte is `file.flag`.
     pub grid: DrumGrid,
