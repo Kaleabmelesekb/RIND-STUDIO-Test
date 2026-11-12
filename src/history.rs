@@ -102,6 +102,7 @@ impl Snapshot {
             play_loop,
             file,
             master_below,
+            groups,
         } = song;
         let head = Song {
             title: title.clone(),
@@ -113,6 +114,7 @@ impl Snapshot {
             play_loop: *play_loop,
             file: file.clone(),
             master_below: *master_below,
+            groups: groups.clone(),
         };
         // The same index first, so that identical channels keep their own.
         let channels = channels

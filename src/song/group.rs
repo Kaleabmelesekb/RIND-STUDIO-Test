@@ -205,7 +205,7 @@ pub fn encode(groups: &[TrackGroup], exists: impl Fn(i32) -> bool) -> Vec<u8> {
 
 /// The groups an `RGRP` payload holds; `None` for a version this reader does not know or a payload cut short.
 pub fn decode(bytes: &[u8]) -> Option<Vec<TrackGroup>> {
-    let mut at = 0;
+    let mut at: usize = 0;
     let mut take = |n: usize| {
         let part = bytes.get(at..at.checked_add(n)?)?;
         at += n;
