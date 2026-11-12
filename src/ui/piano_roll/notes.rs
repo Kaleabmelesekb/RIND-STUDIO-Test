@@ -969,3 +969,141 @@ pub fn ghost_notes(
     }
     ghosts
 }
+
+/// The ticks a strum staggers each note of a chord by.
+pub const STRUM_TICKS: f64 = 16.0;
+
+/// The chord stamps, `Chords...`: a name and the keys above each selected note.
+pub const CHORDS: [(&str, &[i32]); 7] = [
+    ("Major", &[4, 7]),
+    ("Minor", &[3, 7]),
+    ("Sus 4", &[5, 7]),
+    ("Dim", &[3, 6]),
+    ("Dom 7", &[4, 7, 10]),
+    ("Maj 7", &[4, 7, 11]),
+    ("Min 7", &[3, 7, 10]),
+];
+
+/// The first start and the last end of the flagged notes, in ticks.
+fn span(events: &[Event], which: &[bool]) -> Option<(f64, f64)> {
+    let first = flagged(events, which)
+        .map(|(pos, _, _)| pos)
+        .reduce(f64::min)?;
+    let last = flagged(events, which)
+        .map(|(pos, len, _)| pos + len)
+        .reduce(f64::max)?;
+    Some((first, last))
+}
+
+/// Mirrors the flagged notes in time inside their own span: the one that started first ends last. Not re-sorted.
+pub fn reverse_notes(events: &mut [Event], which: &[bool]) {
+    let Some((first, last)) = span(events, which) else {
+        return;
+    };
+    let new = map_notes(events, which, |pos, len, key| {
+        (first + last - pos - len, len, key)
+    });
+    events.copy_from_slice(&new);
+}
+
+/// Turns the flagged notes upside down around the middle of their own range: the lowest becomes the highest.
+pub fn flip_notes(events: &mut [Event], which: &[bool]) {
+    let keys: Vec<u8> = flagged(events, which).map(|(_, _, key)| key).collect();
+    let (Some(&low), Some(&high)) = (keys.iter().min(), keys.iter().max()) else {
+        return;
+    };
+    let new = map_notes(events, which, |pos, len, key| (pos, len, low + high - key));
+    events.copy_from_slice(&new);
+}
+
+/// Staggers each chord (flagged notes that start together) by [`STRUM_TICKS`] a note, from its lowest key up (`up`) or
+/// its highest down; every note keeps its end. Not re-sorted.
+pub fn strum_notes(events: &mut [Event], which: &[bool], up: bool) {
+    let notes: Vec<(f64, f64, u8)> = flagged(events, which).collect();
+    let new = map_notes(events, which, |pos, len, key| {
+        let mut chord: Vec<u8> = (notes.iter()).filter(|n| n.0 == pos).map(|n| n.2).collect();
+        chord.sort_unstable();
+        chord.dedup();
+        let rank = chord.iter().position(|&k| k == key).unwrap_or(0);
+        let rank = if up { rank } else { chord.len() - 1 - rank };
+        let delay = (rank as f64 * STRUM_TICKS).min(len - 1.0).max(0.0);
+        (pos + delay, len - delay, key)
+    });
+    events.copy_from_slice(&new);
+}
+
+/// Scales the flagged notes in time by `k` about their first start: starts and lengths. Not re-sorted.
+pub fn stretch_by(events: &mut [Event], which: &[bool], k: f64) {
+    let Some((first, _)) = span(events, which) else {
+        return;
+    };
+    let new = map_notes(events, which, |pos, len, key| {
+        (first + (pos - first) * k, (len * k).max(1.0), key)
+    });
+    events.copy_from_slice(&new);
+}
+
+/// Gives each flagged note a velocity of 65 to 135 % of its own, from `seed` (the same seed, the same result).
+pub fn randomize_velocity(events: &mut [Event], which: &[bool], seed: u64) {
+    let mut state = seed;
+    let mut next = move || {
+        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        ((z ^ (z >> 31)) >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for (e, &on) in events.iter_mut().zip(which) {
+        if on
+            && note(e).is_some()
+            && let Event::Note { velocity, .. } = e
+        {
+            let scaled = f64::from(*velocity) * (0.65 + 0.7 * next());
+            *velocity = scaled.round().clamp(1.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Ramps the flagged notes' velocities across their span: from a quarter of their own up to all of it (`rising`), or
+/// from all of it down to a quarter, by each note's start.
+pub fn fade_velocity(events: &mut [Event], which: &[bool], rising: bool) {
+    let starts = || flagged(events, which).map(|(pos, _, _)| pos);
+    let (Some(first), Some(last)) = (starts().reduce(f64::min), starts().reduce(f64::max)) else {
+        return;
+    };
+    let width = (last - first).max(1.0);
+    for (e, &on) in events.iter_mut().zip(which) {
+        let Some((pos, _, _)) = note(e).filter(|_| on) else {
+            continue;
+        };
+        let t = (pos - first) / width;
+        let gain = if rising {
+            0.25 + 0.75 * t
+        } else {
+            1.0 - 0.75 * t
+        };
+        if let Event::Note { velocity, .. } = e {
+            *velocity = (f64::from(*velocity) * gain).round().clamp(1.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Adds, over each selected note, the notes `offsets` keys above it (those inside the key range), as one chord; the
+/// copies start unselected.
+pub fn chord_selected(events: &mut Vec<Event>, sel: &mut Vec<bool>, offsets: &[i32]) {
+    let copies: Vec<Event> = (events.iter().zip(sel.iter()))
+        .filter(|(_, s)| **s)
+        .flat_map(|(e, _)| {
+            offsets.iter().filter_map(move |&dk| {
+                let (pos, len, key) = note(e)?;
+                let key = u8::try_from(i32::from(key) + dk)
+                    .ok()
+                    .filter(|&k| k <= TOP_KEY)?;
+                Some(with(*e, pos, len, key))
+            })
+        })
+        .collect();
+    sel.extend(copies.iter().map(|_| false));
+    events.extend(copies);
+    sort(events, sel);
+}
