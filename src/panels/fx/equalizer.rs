@@ -849,12 +849,12 @@ mod tests {
         let mut rig = rig();
         let before = rig.module.params.clone();
         let rest = radius(&metrics(1.0), 0.0);
-        // Band 2 is unselected: lerp(menuFill (45, 45, 45), text (208, 208, 208), 0.3·p). Band 1 is selected:
+        // Band 2 is unselected: lerp(menuFill (72, 72, 72), text (224, 224, 224), 0.3·p). Band 1 is selected:
         // lerp(channel (255, 0, 0), text, 0.3·p).
         let cases = [
-            (0.0, [45, 45, 45], [255, 0, 0]),
-            (0.5, [69, 69, 69], [248, 31, 31]),
-            (1.0, [94, 94, 94], [241, 62, 62]),
+            (0.0, [72, 72, 72], [255, 0, 0]),
+            (0.5, [95, 95, 95], [250, 34, 34]),
+            (1.0, [118, 118, 118], [246, 67, 67]),
         ];
         for (p, unselected, selected) in cases {
             for (k, [r, g, b]) in [(1, unselected), (0, selected)] {
