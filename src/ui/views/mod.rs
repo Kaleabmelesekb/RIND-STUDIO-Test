@@ -660,7 +660,7 @@ impl Slots {
         // A Browser row dropped on a track row or the Device Rack.
         if let Some((channel, action)) = self.docks.drag(ui, app, rows) {
             self.docks
-                .drop(app, &mut self.preset_picker, channel, action);
+                .add_dropped(app, &mut self.preset_picker, channel, action);
         }
         if !racked {
             let held = self.roll_clip(*app.selected);
