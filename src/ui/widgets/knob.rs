@@ -1,8 +1,10 @@
 //! The ring knob and the graph knob.
 
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use eframe::egui::{Align2, Pos2, Rect, Response, Ui, Vec2, vec2};
+use eframe::egui;
+use eframe::egui::{Align2, Color32, Pos2, Rect, Response, Shape, Stroke, Ui, Vec2, vec2};
 
 use super::arc::{FOCUS_GROWTH, pulse};
 use super::curve::{curve_plot, env};
@@ -14,6 +16,21 @@ use crate::ui::UiCtx;
 pub(super) const WASH: f32 = 0.05;
 /// Line width of the graph knob's curve, in device pixels.
 const GRAPH_LINE_PX: f32 = 4.0;
+
+/// Whether knobs are drawn the Lemon Studio way (a dark disc in a track ring with the value as a lemon arc, see
+/// [`lemon_dial`]) rather than as the FL ring and dot. On in the app, off in the tests, which pin the ring's geometry.
+static LEMON_KNOBS: AtomicBool = AtomicBool::new(!cfg!(test));
+
+/// Turns the Lemon Studio knob look on or off for every knob.
+pub fn set_lemon_knobs(on: bool) {
+    LEMON_KNOBS.store(on, Ordering::Relaxed);
+}
+
+/// Lemon's brand colour (its `MAIN`): the value arc.
+const LEMON: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x66);
+/// The unlit track ring, and the pointer.
+const LEMON_TRACK: Color32 = Color32::from_rgb(0x1D, 0x1D, 0x1D);
+const LEMON_POINTER: Color32 = Color32::from_rgb(0xE6, 0xE6, 0xE6);
 
 /// The drawn parts of a ring knob of diameter `d` (the body's shorter side). The arc slider has the same radii.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -67,6 +84,10 @@ fn dial(ui: &Ui, cx: &UiCtx, c: &Control, response: &Response, v: f32) -> (Pos2,
     let lit = touched || hovered(ui, response);
     let swell = pulse(ui, c.id, touched, c.rect.height() * m.ppp());
     let center = body.center();
+    if LEMON_KNOBS.load(Ordering::Relaxed) {
+        let r = lemon_dial(painter, center, diameter(body) * swell, v, c.bipolar, lit);
+        return (center, r);
+    }
     let r = ring(center, diameter(body) * swell, v, c.bipolar, m.t());
     painter.circle_filled(center, r.outer, c.channel);
     painter.circle_filled(center, r.inner, module_fill);
@@ -79,6 +100,80 @@ fn dial(ui: &Ui, cx: &UiCtx, c: &Control, response: &Response, v: f32) -> (Pos2,
     painter.circle_filled(r.dot, grow * r.halo_r, module_fill);
     painter.circle_filled(r.dot, grow * r.dot_r, c.channel);
     (center, r)
+}
+
+/// The points of an arc of `radius` round `center` from angle `from` to `to` (radians, clockwise on screen from 3 o'clock).
+fn arc_points(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
+    let steps = ((to - from).abs() / TAU * 72.0).ceil().max(2.0) as usize;
+    (0..=steps)
+        .map(|i| {
+            let a = from + (to - from) * i as f32 / steps as f32;
+            center + radius * vec2(a.cos(), a.sin())
+        })
+        .collect()
+}
+
+/// A knob the Lemon Studio way, in a body of diameter `d`: a full track ring over 270° from 7:30 round to 4:30, the value
+/// as a lemon arc on it (from the middle when `bipolar`, brighter while `lit`), a dark disc lit from above, and a light
+/// pointer at the value. Returns the geometry with `inner` the disc's radius, where the value text goes.
+fn lemon_dial(
+    painter: &egui::Painter,
+    center: Pos2,
+    d: f32,
+    v: f32,
+    bipolar: bool,
+    lit: bool,
+) -> Ring {
+    let v = v.clamp(0.0, 1.0);
+    let (start, sweep) = (0.75 * PI, 1.5 * PI);
+    let angle = start + sweep * v;
+    let outer = 0.48 * d;
+    let w = (outer * 0.16).clamp(1.6, 2.6);
+    let track = outer - w / 2.0;
+    let disc = (outer - w - 1.5).max(1.0);
+    painter.add(Shape::line(
+        arc_points(center, track, start, start + sweep),
+        Stroke::new(w, LEMON_TRACK),
+    ));
+    let from = if bipolar { start + sweep / 2.0 } else { start };
+    if (angle - from).abs() > 0.01 {
+        let arc = if lit {
+            LEMON.lerp_to_gamma(Color32::WHITE, 0.2)
+        } else {
+            LEMON
+        };
+        painter.add(Shape::line(
+            arc_points(center, track, from.min(angle), from.max(angle)),
+            Stroke::new(w, arc),
+        ));
+    }
+    // The disc: a dark base, and a lighter cap on its upper part for the gradient.
+    let (top, bottom) = if lit {
+        (
+            Color32::from_rgb(0x5C, 0x5C, 0x5C),
+            Color32::from_rgb(0x40, 0x40, 0x40),
+        )
+    } else {
+        (
+            Color32::from_rgb(0x52, 0x52, 0x52),
+            Color32::from_rgb(0x38, 0x38, 0x38),
+        )
+    };
+    painter.circle_filled(center, disc, bottom);
+    painter.circle_filled(center - vec2(0.0, 0.1 * disc), 0.88 * disc, top);
+    let (sin, cos) = (angle.sin(), angle.cos());
+    let (p0, p1) = (disc * 0.25, (disc - 1.5).max(1.0));
+    painter.line_segment(
+        [center + p0 * vec2(cos, sin), center + p1 * vec2(cos, sin)],
+        Stroke::new((disc * 0.22).clamp(1.4, 2.2), LEMON_POINTER),
+    );
+    Ring {
+        outer,
+        inner: disc,
+        dot: center + p1 * vec2(cos, sin),
+        dot_r: 0.0,
+        halo_r: 0.0,
+    }
 }
 
 /// The ring's diameter at rest in `body`.
