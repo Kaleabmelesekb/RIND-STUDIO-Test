@@ -1,7 +1,6 @@
 //! The ring knob and the graph knob.
 
 use std::f32::consts::{PI, TAU};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui;
 use eframe::egui::{Align2, Color32, Pos2, Rect, Response, Shape, Stroke, Ui, Vec2, vec2};
@@ -19,12 +18,7 @@ const GRAPH_LINE_PX: f32 = 4.0;
 
 /// Whether knobs are drawn the Lemon Studio way (a dark disc in a track ring with the value as a lemon arc, see
 /// [`lemon_dial`]) rather than as the FL ring and dot. On in the app, off in the tests, which pin the ring's geometry.
-static LEMON_KNOBS: AtomicBool = AtomicBool::new(!cfg!(test));
-
-/// Turns the Lemon Studio knob look on or off for every knob.
-pub fn set_lemon_knobs(on: bool) {
-    LEMON_KNOBS.store(on, Ordering::Relaxed);
-}
+const LEMON_KNOBS: bool = !cfg!(test);
 
 /// Lemon's brand colour (its `MAIN`): the value arc.
 const LEMON: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x66);
@@ -84,7 +78,7 @@ fn dial(ui: &Ui, cx: &UiCtx, c: &Control, response: &Response, v: f32) -> (Pos2,
     let lit = touched || hovered(ui, response);
     let swell = pulse(ui, c.id, touched, c.rect.height() * m.ppp());
     let center = body.center();
-    if LEMON_KNOBS.load(Ordering::Relaxed) {
+    if LEMON_KNOBS {
         let r = lemon_dial(painter, center, diameter(body) * swell, v, c.bipolar, lit);
         return (center, r);
     }
