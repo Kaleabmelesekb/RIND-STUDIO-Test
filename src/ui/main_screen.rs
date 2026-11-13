@@ -78,6 +78,11 @@ const SLOT_W: f32 = 1.75;
 const CTRL_SLOT: f32 = 4.0;
 /// The transport's row line, the scale name and a disabled icon: `text` at these alphas.
 const DIVIDER_ALPHA: f32 = 0.18;
+/// The control bar's sheen: white at the top and black at the bottom, at these alphas.
+const BAR_SHEEN_TOP: u8 = 14;
+const BAR_SHEEN_BOTTOM: u8 = 34;
+/// The tempo display's dark well, black at this alpha.
+const TEMPO_WELL_ALPHA: u8 = 110;
 const SCALE_ALPHA: f32 = 0.6;
 const DISABLED_ALPHA: f32 = 0.25;
 /// The vertical dividers: fainter than the row line.
@@ -1998,6 +2003,25 @@ impl MainScreen {
         painter.rect_filled(rect, 0.0, c.control_fill.to_color32());
         let line = rect.with_min_y(rect.bottom() - 1.0 / m.ppp());
         painter.rect_filled(line, 0.0, c.background.to_color32());
+        // Depth: a light top fading to a dark bottom over the flat fill, so the bar reads as a raised panel.
+        let mut sheen = egui::Mesh::default();
+        let (light, dark) = (
+            Color32::from_white_alpha(BAR_SHEEN_TOP),
+            Color32::from_black_alpha(BAR_SHEEN_BOTTOM),
+        );
+        let (tl, tr) = (rect.left_top(), rect.right_top());
+        let (bl, br) = (rect.left_bottom(), rect.right_bottom());
+        for (pos, color) in [(tl, light), (tr, light), (br, dark), (bl, dark)] {
+            sheen.colored_vertex(pos, color);
+        }
+        sheen.add_triangle(0, 1, 2);
+        sheen.add_triangle(0, 2, 3);
+        painter.add(egui::Shape::mesh(sheen));
+        // While playing, a line in the accent colour runs along the bar's foot.
+        if self.playing {
+            let foot = rect.with_min_y(rect.bottom() - 2.0 / m.ppp());
+            painter.rect_filled(foot, 0.0, c.accent.to_color32().gamma_multiply(0.8));
+        }
         let top = rect.top() - regions.screen.top();
         let meters = input.settings.hardware_meters;
         let slots = transport_slots(rect, top, meters, input.can_preview, m);
@@ -2088,8 +2112,20 @@ impl MainScreen {
         }
         let font = m.font_id(FontSize::Pt12);
         let bpm = transport_bpm_text(input.bpm);
-        let tempo = content_rect(slots.bpm, true, m).center();
-        (ui.painter()).text(tempo, Align2::CENTER_CENTER, bpm, font, text);
+        let display = content_rect(slots.bpm, true, m);
+        // The tempo reads off a dark display, in the accent colour, like a hardware LCD.
+        let well = display.shrink2(vec2(m.u(0.1), m.u(0.1)));
+        let radius = m.u(0.12);
+        let painter = ui.painter();
+        painter.rect_filled(well, radius, Color32::from_black_alpha(TEMPO_WELL_ALPHA));
+        painter.rect_stroke(
+            well,
+            radius,
+            egui::Stroke::new(1.0 / m.ppp(), text.gamma_multiply(0.12)),
+            egui::StrokeKind::Inside,
+        );
+        let lit = c.accent.to_color32();
+        painter.text(display.center(), Align2::CENTER_CENTER, bpm, font, lit);
         let control = BarButton::icon(IconId::Knob).caption("CONTROL");
         if button(ui, "CONTROL", slots.control, control).clicked() {
             nav = Some(Nav::Toggle(Overlay::CtrlMenu));
