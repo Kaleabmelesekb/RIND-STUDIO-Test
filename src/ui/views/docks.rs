@@ -30,9 +30,9 @@ const BROWSER_W: f32 = 9.0;
 const PORTRAIT_W: f32 = 10.0;
 /// The collapsed Browser's rail, in U.
 const RAIL_W: f32 = 1.25;
-/// The headers' height, the Browser's tab row and a list row, in U: touch sized.
 /// How far right of the list, in U, a press on a row must be dragged for it to leave the list.
 const DRAG_OUT: f32 = 0.6;
+/// The headers' height, the Browser's tab row and a list row, in U: touch sized.
 const HEADER_H: f32 = 1.5;
 const TAB_H: f32 = 1.5;
 const ROW_H: f32 = 1.5;
