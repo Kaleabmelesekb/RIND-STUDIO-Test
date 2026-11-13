@@ -984,17 +984,6 @@ pub const CHORDS: [(&str, &[i32]); 7] = [
     ("Min 7", &[3, 7, 10]),
 ];
 
-/// The first start and the last end of the flagged notes, in ticks.
-fn span(events: &[Event], which: &[bool]) -> Option<(f64, f64)> {
-    let first = flagged(events, which)
-        .map(|(pos, _, _)| pos)
-        .reduce(f64::min)?;
-    let last = flagged(events, which)
-        .map(|(pos, len, _)| pos + len)
-        .reduce(f64::max)?;
-    Some((first, last))
-}
-
 /// Mirrors the flagged notes in time inside their own span: the one that started first ends last. Not re-sorted.
 pub fn reverse_notes(events: &mut [Event], which: &[bool]) {
     let Some((first, last)) = span(events, which) else {
