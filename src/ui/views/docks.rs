@@ -31,6 +31,8 @@ const PORTRAIT_W: f32 = 10.0;
 /// The collapsed Browser's rail, in U.
 const RAIL_W: f32 = 1.25;
 /// The headers' height, the Browser's tab row and a list row, in U: touch sized.
+/// How far right of the list, in U, a press on a row must be dragged for it to leave the list.
+const DRAG_OUT: f32 = 0.6;
 const HEADER_H: f32 = 1.5;
 const TAB_H: f32 = 1.5;
 const ROW_H: f32 = 1.5;
@@ -96,6 +98,8 @@ pub struct Docks {
     files: Option<(FilesKey, Vec<SongEntry>)>,
     /// A device chip's tap: the card to scroll into view in the strip.
     pub reveal: Option<usize>,
+    /// A browser row being dragged out to a track or the Device Rack: what it adds and its name.
+    drag: Option<(BrowserAction, String)>,
 }
 
 type FilesKey = (Tab, Option<PathBuf>, u64);
@@ -112,6 +116,7 @@ impl Default for Docks {
             modules: None,
             files: None,
             reveal: None,
+            drag: None,
         }
     }
 }
@@ -282,6 +287,89 @@ impl Docks {
         self.list(ui, app, picker, list, &look)
     }
 
+    /// A browser row in flight: a chip at the pointer, the track row or the Device Rack under it lit; letting go over
+    /// one returns the channel to add to and what to add. `rows` are the playlist's track rows as last drawn.
+    pub fn drag(
+        &mut self,
+        ui: &Ui,
+        app: &AppCtx,
+        rows: &[(Rect, usize)],
+    ) -> Option<(usize, BrowserAction)> {
+        let (action, label) = self.drag.clone()?;
+        let pos = ui.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos()));
+        let target = pos.and_then(|p| {
+            let row = rows
+                .iter()
+                .find(|(r, _)| r.contains(p))
+                .map(|&(r, c)| (c, r));
+            let rack = [app.regions.device_rack, app.regions.rack]
+                .into_iter()
+                .find(|r| r.width() > 0.0 && r.contains(p));
+            row.or_else(|| rack.map(|r| (*app.selected, r)))
+        });
+        if ui.input(|i| i.pointer.any_down()) {
+            let m = app.cx.m;
+            let look = Look::of(&app.cx);
+            let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("dock drag"));
+            let painter = ui.ctx().layer_painter(layer);
+            if let Some((_, area)) = target {
+                painter.rect_filled(area, 0.0, look.accent.gamma_multiply(0.16));
+                painter.rect_stroke(
+                    area.shrink(look.px),
+                    0.0,
+                    Stroke::new(2.0 * look.px, look.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            if let Some(p) = pos {
+                let galley = painter.layout_no_wrap(
+                    format!("+ {label}"),
+                    m.font_id(FontSize::Pt10),
+                    look.bg,
+                );
+                let chip = Rect::from_min_size(
+                    p + vec2(m.u(0.6), m.u(0.3)),
+                    galley.size() + vec2(m.u(0.8), m.u(0.5)),
+                );
+                painter.rect_filled(chip, m.u(0.2), look.accent);
+                painter.galley(chip.min + vec2(m.u(0.4), m.u(0.25)), galley, look.bg);
+            }
+            ui.ctx().request_repaint();
+            return None;
+        }
+        self.drag = None;
+        target.map(|(channel, _)| (channel, action))
+    }
+
+    /// Adds `action` to channel `channel` as a drop from the Browser: the channel becomes the selected one and its
+    /// Device Rack shows the new card. A channel that does not take it is left alone and says so.
+    pub fn add_dropped(
+        &mut self,
+        app: &mut AppCtx,
+        picker: &mut preset_picker::State,
+        channel: usize,
+        action: BrowserAction,
+    ) {
+        let Some(ch) = app.song.channels.get(channel) else {
+            return;
+        };
+        let fits = rows("", ModuleOrdering::Category, crate::ui::rack::takes(ch))
+            .into_iter()
+            .any(|r| matches!(r, Row::Item(e) if e.action() == action));
+        if !fits {
+            app.files.flash("That track does not take it");
+            return;
+        }
+        if channel > 0 {
+            *app.selected = channel;
+        }
+        picks::add_pick(picker, app, channel, action);
+        if let Some(ch) = app.song.channels.get(channel) {
+            self.reveal = ch.rack.modules.len().checked_sub(1);
+        }
+        self.rack_open = true;
+    }
+
     /// The Browser's list in `list`.
     fn list(
         &mut self,
@@ -361,6 +449,7 @@ impl Docks {
         let font = m.font_id(FontSize::Pt10);
         let small = m.font_id(FontSize::Pt8);
         let mut click = None;
+        let mut begun: Option<(BrowserAction, String)> = None;
         let mut child = ui.new_child(UiBuilder::new().max_rect(list).id(("dock list", tab as u8)));
         child.set_clip_rect(list.intersect(ui.clip_rect()));
         egui::ScrollArea::vertical()
@@ -463,6 +552,17 @@ impl Docks {
                     if !matches!(item, Item::Section(_)) {
                         rule(painter, r.left_bottom(), r.right_bottom(), look);
                     }
+                    // A press on a module row dragged out of the list to the right (a vertical drag scrolls) carries it
+                    // to a track or the Device Rack; letting go there adds it.
+                    if let Item::Module(entry) = item
+                        && active
+                        && response.is_pointer_button_down_on()
+                        && ui
+                            .input(|i| i.pointer.interact_pos())
+                            .is_some_and(|p| p.x > list.right() + m.u(DRAG_OUT))
+                    {
+                        begun = Some((entry.action(), entry.name().to_owned()));
+                    }
                     if response.clicked() {
                         click = match item {
                             Item::Module(entry) => Some(Click::Pick(entry.action())),
@@ -478,6 +578,9 @@ impl Docks {
                 }
             });
 
+        if begun.is_some() {
+            self.drag = begun;
+        }
         match click? {
             Click::Pick(action) => {
                 app.song.channels.get(selected)?;

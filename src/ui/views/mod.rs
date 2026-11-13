@@ -650,12 +650,18 @@ impl Slots {
         ui: &mut egui::Ui,
         app: &mut AppCtx,
         (racked, windowed): (bool, bool),
+        rows: &[(egui::Rect, usize)],
     ) -> Vec<Nav> {
         let mut navs = Vec::new();
         if !self.docks.enabled {
             return navs;
         }
         navs.extend(self.docks.browser(ui, app, &mut self.preset_picker));
+        // A Browser row dropped on a track row or the Device Rack.
+        if let Some((channel, action)) = self.docks.drag(ui, app, rows) {
+            self.docks
+                .drop(app, &mut self.preset_picker, channel, action);
+        }
         if !racked {
             let held = self.roll_clip(*app.selected);
             let (state, clipboard) = (&mut self.rack, &mut self.clipboard);

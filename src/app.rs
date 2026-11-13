@@ -2432,7 +2432,8 @@ impl HoneydewApp {
                 // The docks, over the view and the keyboard panel's chrome and under every overlay.
                 let windowed =
                     (self.nav.overlays.iter()).any(|o| matches!(o, Overlay::DeviceEditor { .. }));
-                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed)));
+                let rows = self.main_screen.row_hits.clone();
+                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed), &rows));
                 views::drum_editor::after_chrome(&mut self.slots.drum_editor, ui, &mut app);
                 // The corner buttons go over the rack and under the other overlays.
                 let hue = app.song.channels.get(input.selected).map_or(0.0, |c| c.hue);

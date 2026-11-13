@@ -572,6 +572,9 @@ pub struct MainScreen {
     pub docks_on: bool,
     /// A chip's tap with the docks on: the device's index, for the app to give the Device Rack.
     pub chip_tap: Option<usize>,
+    /// The playlist's track rows as last drawn (the whole row, header and lanes) with their channel: where a Browser
+    /// drag can drop.
+    pub row_hits: Vec<(Rect, usize)>,
     /// Toggled by the play button; the app sends `Play` / `Stop` when it changes.
     pub playing: bool,
     /// The keyboard panel's height in points as last drawn, on its way to the preferred height ([`Self::panel_h`]);
@@ -787,6 +790,7 @@ impl MainScreen {
         // its track row's id wherever it shows, so a hold follows its track; the held one is sensed off screen too.
         let mut lanes = Vec::new();
         self.header_busy = false;
+        self.row_hits.clear();
         for &(i, at) in &placed {
             let held = self.hold.as_ref().is_some_and(|h| h.row == i);
             if !visible(at) && !held {
@@ -795,6 +799,7 @@ impl MainScreen {
             let TrackRow { channel, lane, .. } = tracks[i];
             let top = top_of(at);
             let row = Rect::from_x_y_ranges(track_area.x_range(), top..=top + row_h);
+            self.row_hits.push((row.intersect(track_area), channel));
             let lane_rect = row.with_min_x(grid.left());
             // At c = 1 only the header's own part takes its gestures; collapsed or animating, the whole row does.
             let header = if expanded {

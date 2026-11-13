@@ -287,8 +287,7 @@ pub fn builtin_themes() -> Vec<Theme> {
         }
     };
     const ACCENT: u32 = 0x1F1412; // flat industrial dark accent
-    // Rind Studio's own look (Bitwig's charcoal surfaces, Ableton's and Bitwig's orange): theme 0 keeps its neutrals and
-    // takes the orange as its accent.
+    // Rind Studio's own look (Ableton's mid-grey chrome with its orange accent): theme 0.
     const ORANGE: u32 = 0xFF8A00;
     let clay_keys = Some([0xC5CAD7, 0x211D20, 0x9A98A4, 0x807981]);
     let clay_options = Some([0.90, 0.63, 1.00, 0.153]);
@@ -297,7 +296,7 @@ pub fn builtin_themes() -> Vec<Theme> {
         row(
             0,
             "Flat Industrial",
-            [0x141414, 0x1E1E1E, 0x252525, 0x2D2D2D, 0xD0D0D0, ORANGE],
+            [0x262626, 0x333333, 0x3D3D3D, 0x484848, 0xE0E0E0, ORANGE],
             None,
             None,
         ),
@@ -464,8 +463,8 @@ mod tests {
     #[test]
     fn flat_industrial_resolves_with_defaults() {
         let c = theme_by_id(0).colors;
-        assert_eq!(c.background.to_hex(), "141414");
-        assert_eq!(c.text.to_hex(), "D0D0D0");
+        assert_eq!(c.background.to_hex(), "262626");
+        assert_eq!(c.text.to_hex(), "E0E0E0");
         assert_eq!(c.accent.to_hex(), "FF8A00");
         assert_eq!(c.white_key.to_hex(), "C7CEDA");
         assert_eq!(c.black_key_disabled.to_hex(), "717981");
