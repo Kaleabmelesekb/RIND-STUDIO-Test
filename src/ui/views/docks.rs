@@ -496,7 +496,11 @@ impl Docks {
         child.set_clip_rect(list.intersect(ui.clip_rect()));
         egui::ScrollArea::vertical()
             .id_salt(("dock list scroll", tab as u8))
-            .enable_scrolling(!crate::ui::file_drag::dragging(ui.ctx()))
+            .scroll_source(if crate::ui::file_drag::dragging(ui.ctx()) {
+                egui::scroll_area::ScrollSource::NONE
+            } else {
+                egui::scroll_area::ScrollSource::ALL
+            })
             .auto_shrink([false, false])
             .show_rows(&mut child, row_h, items.len(), |ui, range| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
