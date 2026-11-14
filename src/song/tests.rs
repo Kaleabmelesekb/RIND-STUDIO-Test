@@ -2186,7 +2186,7 @@ fn a_group_with_its_bus_and_the_members_outputs_survives_a_save_and_load() {
     assert!(song.group_with_above(at(&song, 3)));
     let group = song.groups[0].clone();
     let back = crate::flm::read(&crate::flm::write(&song).unwrap()).unwrap();
-    assert_eq!(back.groups, [group.clone()]);
+    assert_eq!(back.groups.as_slice(), std::slice::from_ref(&group));
     for id in [1, 2, 3] {
         let c = &back.channels[at(&back, id)];
         assert_eq!(c.file.sends[0].target_channel_id, group.bus, "channel {id}");
