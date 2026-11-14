@@ -139,6 +139,7 @@ enum Click {
     Up,
     Open(PathBuf),
     Sample,
+    AddFolder,
 }
 
 /// One row of the Browser's list.
@@ -149,6 +150,8 @@ enum Item<'a> {
     Folder(&'a SongEntry),
     File(&'a SongEntry),
     Note(&'static str),
+    /// The Samples tab's first row: pick a folder of the device's storage to bring into the library.
+    AddFolder,
 }
 
 impl Docks {
@@ -460,6 +463,8 @@ impl Docks {
             Some(slot) => {
                 if !self.folders[slot].is_empty() {
                     items.push(Item::Up);
+                } else if tab == Tab::Samples {
+                    items.push(Item::AddFolder);
                 }
                 let entries = self.files.as_ref().map_or(&[][..], |(_, e)| &e[..]);
                 for e in entries {
@@ -468,6 +473,12 @@ impl Docks {
                     } else {
                         Item::File(e)
                     });
+                }
+                if tab == Tab::Samples && entries.iter().any(|e| !e.is_folder) {
+                    items.insert(
+                        items.len().min(1),
+                        Item::Note("Hold a sample, then drag it onto the playlist"),
+                    );
                 }
                 if items.is_empty() {
                     items.push(Item::Note("Nothing here"));
@@ -485,6 +496,7 @@ impl Docks {
         child.set_clip_rect(list.intersect(ui.clip_rect()));
         egui::ScrollArea::vertical()
             .id_salt(("dock list scroll", tab as u8))
+            .enable_scrolling(!crate::ui::file_drag::dragging(ui.ctx()))
             .auto_shrink([false, false])
             .show_rows(&mut child, row_h, items.len(), |ui, range| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
@@ -552,6 +564,33 @@ impl Docks {
                                 look.text,
                             );
                         }
+                        Item::AddFolder => {
+                            let plus = pos2(r.left() + pad + m.u(0.2), r.center().y);
+                            let arm = m.u(0.24);
+                            let stroke = Stroke::new(1.5 * look.px, look.accent);
+                            painter.line_segment(
+                                [plus - vec2(arm, 0.0), plus + vec2(arm, 0.0)],
+                                stroke,
+                            );
+                            painter.line_segment(
+                                [plus - vec2(0.0, arm), plus + vec2(0.0, arm)],
+                                stroke,
+                            );
+                            let name = ellipsis(
+                                painter,
+                                "Add folder from device...",
+                                &font,
+                                look.accent,
+                                r.width() - pad - m.u(1.2),
+                            );
+                            painter.text(
+                                pos2(at.x + m.u(0.8), at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.accent,
+                            );
+                        }
                         Item::File(e) => {
                             let name =
                                 ellipsis(painter, &e.name, &font, look.text, r.width() - 2.0 * pad);
@@ -594,8 +633,18 @@ impl Docks {
                     {
                         begun = Some((entry.action(), entry.name().to_owned()));
                     }
+                    // A long press then a drag on a sample row carries the file to the playlist: where it lands on a
+                    // track it makes a clip, and anywhere else a new audio track ([`crate::ui::file_drag`]).
+                    if let Item::File(e) = item
+                        && tab == Tab::Samples
+                        && active
+                        && crate::ui::file_drag::row_dragged(ui, &response, m)
+                    {
+                        crate::ui::file_drag::start(ui.ctx(), &e.path, &e.name);
+                    }
                     if response.clicked() {
                         click = match item {
+                            Item::AddFolder => Some(Click::AddFolder),
                             Item::Module(entry) => Some(Click::Pick(entry.action())),
                             Item::Up => Some(Click::Up),
                             Item::Folder(e) => Some(Click::Enter(e.path.clone())),
@@ -637,6 +686,11 @@ impl Docks {
             }
             Click::Open(path) => {
                 super::main_menu::replace(app, Replace::Open(path));
+                None
+            }
+            Click::AddFolder => {
+                // The system folder picker; the folder's audio is copied into `My Samples` after a Yes, and listed.
+                app.files.pick_folder();
                 None
             }
             Click::Sample => {
