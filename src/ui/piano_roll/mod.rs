@@ -116,6 +116,7 @@
 
 mod humanize;
 pub(crate) mod notes;
+mod panel;
 
 use std::hash::{BuildHasher, RandomState};
 
@@ -323,6 +324,8 @@ pub struct PianoRoll {
     knob: PlayheadKnob,
     /// The clip is a take being recorded ([`RollOptions::recording`]): nothing edits it.
     recording: bool,
+    /// The tool panel down the left ([`panel`]): open or a rail, and its knobs.
+    tools: panel::Tools,
 }
 
 /// A touch on the grid (module docs). Outside a touch, the selection is the one showing.
@@ -441,6 +444,10 @@ enum MoreOp {
     /// `Swing...` opens the amounts; one (a percent) is the channel's Swing.
     SwingBy,
     Swing(u8),
+    /// The tool panel's transpose buttons: the notes move by this many semitones.
+    Shift(i8),
+    /// The tool panel's `Set`: every note takes this velocity (1 to 127).
+    SetVelocity(u8),
 }
 
 /// The floating buttons over a selection.
@@ -478,6 +485,7 @@ impl PianoRoll {
             pending: Vec::new(),
             knob: PlayheadKnob::default(),
             recording: false,
+            tools: panel::Tools::default(),
         }
     }
 
@@ -504,6 +512,7 @@ impl PianoRoll {
                 row_u: self.row_u,
                 graph: self.graph,
                 remembered: self.remembered,
+                tools: self.tools,
                 gate: self.gate,
                 keys_down,
                 keys_pass: self.keys_pass,
@@ -2221,7 +2230,13 @@ impl PianoRoll {
                 stretch_by(&mut clip.events, &which, if double { 2.0 } else { 0.5 });
                 sort(&mut clip.events, sel);
             }
-            MoreOp::RandomVelocity => randomize_velocity(&mut clip.events, &which, seed),
+            MoreOp::RandomVelocity => {
+                randomize_velocity_by(&mut clip.events, &which, seed, self.tools.random)
+            }
+            MoreOp::Shift(by) => {
+                clip.events = shift_notes(&clip.events, &which, 0.0, i32::from(by));
+            }
+            MoreOp::SetVelocity(v) => set_velocity(&mut clip.events, &which, v),
             MoreOp::Fade(rising) => fade_velocity(&mut clip.events, &which, rising),
             MoreOp::SelectAll => {
                 for (s, e) in sel.iter_mut().zip(&clip.events) {

@@ -310,6 +310,8 @@ pub fn band_layout(screen_h: f32, u: f32, panel_h: f32, rows: u8) -> Bands {
 /// What the user did on the playlist screen this frame. Play / Stop shows in [`MainScreen::playing`].
 #[derive(Default)]
 pub struct ScreenActions {
+    /// The control bar's metronome, `TAP` tempo and time-signature taps this frame.
+    pub bar: crate::ui::transport_pro::BarAsk,
     /// The channel kind or plugin picked in the add-channel popup.
     pub add: Option<AddChannelPick>,
     /// The channel whose track header was clicked.
@@ -565,6 +567,10 @@ fn chip_rects(strip: Rect, devices: &[DeviceChip], m: &Metrics) -> Vec<Rect> {
 /// Transient state of the playlist screen.
 #[derive(Default)]
 pub struct MainScreen {
+    /// What the control bar shows beside its slots (position, metronome, time signature), set by the app each frame.
+    pub bar: crate::ui::transport_pro::BarExtras,
+    /// `TAP` in the control bar: its taps so far.
+    tap: crate::ui::tempo::TapTempo,
     /// The selected track's devices for the dock's chain, set by the app before each frame.
     pub devices: Vec<DeviceChip>,
     /// The docks are on (the app sets it each frame): a chip's tap shows its card in the Device Rack instead of opening
@@ -2030,6 +2036,18 @@ impl MainScreen {
         let top = rect.top() - regions.screen.top();
         let meters = input.settings.hardware_meters;
         let slots = transport_slots(rect, top, meters, input.can_preview, m);
+        // The Ableton look, in the running app only: the groups of buttons each in a well of their own.
+        if !cfg!(test) {
+            let inset = vec2(m.u(0.05), m.u(0.12));
+            for (a, b) in [
+                (slots.mixer, slots.keys),
+                (slots.rec, slots.play),
+                (slots.undo, slots.redo),
+            ] {
+                let well = Rect::from_min_max(a.min, b.max).shrink2(inset);
+                crate::ui::transport_pro::well(ui.painter(), well, text, m);
+            }
+        }
         // The last vertical divider is the one left of ↘, which sits in the dock.
         let hide_divider = (slots.dividers.iter()).rposition(|d| d.height() > d.width());
         for (i, &divider) in slots.dividers.iter().enumerate() {
@@ -2064,20 +2082,31 @@ impl MainScreen {
         if button(ui, "keyboard_settings", slots.keys, strip).clicked() {
             nav = Some(Nav::Toggle(Overlay::KeyboardSettings));
         }
+        // The position, metronome, TAP and signature take what room the bar leaves left of REC.
+        let mut scale_zone = slots.scale;
+        if !cfg!(test) {
+            let now = ui.input(|i| i.time);
+            let (left, ask) = crate::ui::transport_pro::extras(
+                ui,
+                cx,
+                slots.scale,
+                now,
+                &self.bar,
+                &mut self.tap,
+                self.playing,
+            );
+            scale_zone = left;
+            actions.bar = ask;
+            if ask.tempo_dialog {
+                nav = Some(Nav::Toggle(Overlay::TempoEditor));
+            }
+        }
         if let Some(name) = input.scale_name {
             // No control: a tap there is a tap on the empty bar.
             let font = m.font_id(FontSize::Pt8);
             let ink = text.gamma_multiply(SCALE_ALPHA);
             let painter = ui.painter();
-            widgets::truncated(
-                painter,
-                slots.scale,
-                Align2::LEFT_CENTER,
-                name,
-                font,
-                ink,
-                5,
-            );
+            widgets::truncated(painter, scale_zone, Align2::LEFT_CENTER, name, font, ink, 5);
         }
 
         // Centre group: REC, REWIND, play, tempo, CONTROL.
