@@ -2174,3 +2174,23 @@ fn midi_sends_are_saved_apart_and_go_with_their_target() {
     song.delete_channel(3);
     assert_eq!(song.channels[1].file.midi_sends, [send(b, true)]);
 }
+
+#[test]
+fn a_group_with_its_bus_and_the_members_outputs_survives_a_save_and_load() {
+    let mut song = Song::default();
+    for _ in 0..3 {
+        song.add_channel(ChannelKind::Instrument);
+    }
+    assert!(song.group_with_above(2));
+    let at = |song: &Song, id: i32| song.channels.iter().position(|c| c.id == id).unwrap();
+    assert!(song.group_with_above(at(&song, 3)));
+    let group = song.groups[0].clone();
+    let back = crate::flm::read(&crate::flm::write(&song).unwrap()).unwrap();
+    assert_eq!(back.groups, [group.clone()]);
+    for id in [1, 2, 3] {
+        let c = &back.channels[at(&back, id)];
+        assert_eq!(c.file.sends[0].target_channel_id, group.bus, "channel {id}");
+        let bus = &back.channels[at(&back, group.bus)];
+        assert_eq!(c.output_bus, bus.bus_id, "channel {id}");
+    }
+}
