@@ -156,11 +156,11 @@ pub fn track_rows(song: &Song, show_hidden: bool) -> Vec<TrackRow> {
         }
         let mark = group.map(|g| GroupMark {
             id: g.id,
-            hue: g.hue,
+            hue: song.group_hue(g),
             first: false,
             last: false,
             collapsed: g.collapsed,
-            count: song.group_channels(g).len(),
+            count: g.size(),
         });
         let folded = mark.is_some_and(|g| g.collapsed);
         let shown = if ch.zipped || folded {
@@ -2688,17 +2688,20 @@ mod tests {
     }
 
     #[test]
-    fn a_folded_group_shows_its_head_row_alone_and_open_it_marks_its_run() {
+    fn a_folded_group_shows_its_bus_row_alone_and_open_it_marks_its_run() {
         let mut song = Song::default();
         for _ in 0..4 {
             song.add_channel(ChannelKind::Instrument);
         }
         song.group_with_above(2);
-        song.group_with_above(3);
+        let third = song.channels.iter().position(|c| c.id == 3).unwrap();
+        song.group_with_above(third);
         let id = song.groups[0].id;
-        // The master, three grouped channels and one below.
+        let bus = song.group_head(&song.groups[0].clone()).unwrap();
+        assert_eq!(song.channels[bus].kind, ChannelKind::EffectTrack);
+        // The master, the group's bus and its three channels, and one below.
         let open = track_rows(&song, false);
-        assert_eq!(open.len(), 5);
+        assert_eq!(open.len(), 6);
         let marks: Vec<_> = open
             .iter()
             .map(|r| r.group.map(|g| (g.first, g.last)))
@@ -2709,15 +2712,18 @@ mod tests {
                 None,
                 Some((true, false)),
                 Some((false, false)),
+                Some((false, false)),
                 Some((false, true)),
                 None
             ]
         );
+        assert_eq!(open[1].channel, bus);
         assert!(open.iter().all(|r| r.group.is_none_or(|g| !g.collapsed)));
         song.set_group_collapsed(id, true);
         let folded = track_rows(&song, false);
         let channels: Vec<usize> = folded.iter().map(|r| r.channel).collect();
-        assert_eq!(channels, [0, 1, 4]);
+        assert_eq!(channels.len(), 3);
+        assert_eq!(channels[1], bus);
         let head = folded[1].group.unwrap();
         assert!(head.collapsed && head.first && head.last);
         assert_eq!(head.count, 3);

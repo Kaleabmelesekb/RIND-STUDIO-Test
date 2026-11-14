@@ -357,11 +357,21 @@ impl Song {
             return;
         }
         let gone = self.channels.remove(index);
-        // A group left with fewer than two channels is dissolved.
+        // A group left with fewer than two channels is dissolved, and its bus goes with it (below).
+        let mut orphan_buses = Vec::new();
         for g in &mut self.groups {
             g.members.retain(|&m| m != gone.id);
+            if g.bus == gone.id {
+                g.bus = 0;
+            }
         }
-        self.groups.retain(|g| g.members.len() >= 2);
+        self.groups.retain(|g| {
+            let keep = g.size() >= 2;
+            if !keep && g.bus != 0 {
+                orphan_buses.push(g.bus);
+            }
+            keep
+        });
         // The master keeps its place, below the channel that was above the deleted one.
         if self.master_below == Some(gone.id) {
             self.master_below = (index > 1).then(|| self.channels[index - 1].id);
@@ -400,6 +410,11 @@ impl Song {
             // Its output follows its SENDs, as a save and load would set it.
             if routed {
                 c.output_bus = output_bus(&c.file.sends, &buses);
+            }
+        }
+        for bus in orphan_buses {
+            if let Some(at) = self.channels.iter().position(|c| c.id == bus) {
+                self.delete_channel(at);
             }
         }
     }

@@ -257,7 +257,7 @@ pub fn show(
             (RowKind::Sub, _) => ch.lanes[row.lane].label.as_str(),
             // A folded group's head row is the group: its name and how many channels it holds.
             (_, Some(g)) if g.collapsed => {
-                let group = song.group(g.id).map_or("Group", |g| g.name.as_str());
+                let group = song.group(g.id).map_or("Group", |g| song.group_name(g));
                 owned = format!("{group} ({})", g.count);
                 owned.as_str()
             }

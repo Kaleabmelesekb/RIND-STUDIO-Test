@@ -287,22 +287,17 @@ impl HoneydewApp {
                 // The audio never reads it: an undo step with no rebuild.
                 self.song_edited(SongEdit::Param, tick);
             }
-            // In a group, the channel leaves it; else it groups with the channel above (joining that one's group). A
-            // regrouped channel moves next to its group, which the audio takes over by channel id.
+            // In a group, the channel leaves it (on the group's bus: the whole group is undone); else it groups with the
+            // channel above (joining that one's group, or making a group with a bus). The members output to the bus.
             TrackOp::ToggleGroup => {
-                let (id, ids) = (ch.id, channel_ids(&self.song));
+                let id = ch.id;
                 let changed = match self.song.group_of(id).is_some() {
                     true => self.song.leave_group(channel),
                     false => self.song.group_with_above(channel),
                 };
                 if changed {
-                    let moved = channel_ids(&self.song) != ids;
-                    let edit = if moved {
-                        SongEdit::Final
-                    } else {
-                        SongEdit::Param
-                    };
-                    self.song_edited(edit, tick);
+                    // A group's bus and its members' outputs reach the audio: a rebuild, not a bare undo step.
+                    self.song_edited(SongEdit::Final, tick);
                 } else {
                     self.files.flash("No track above to group with");
                 }
