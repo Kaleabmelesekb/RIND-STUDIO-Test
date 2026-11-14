@@ -19,6 +19,7 @@ import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.DocumentsContract.Document;
 import android.provider.OpenableColumns;
@@ -63,6 +64,7 @@ public final class HoneydewActivity extends NativeActivity {
     private static final int OPEN_DOCUMENT = 1;
     private static final int OPEN_FOLDER = 2;
     private static final int RECORD_AUDIO = 3;
+    private static final int STORAGE = 4;
     private long openLimit;
     private AudioFocusRequest focus;
 
@@ -147,8 +149,31 @@ public final class HoneydewActivity extends NativeActivity {
         return false;
     }
 
+    // The Browser's internal storage: Android 11 and up give it as "All files access" (a settings page, no question
+    // dialog), older ones as the storage permission. hasStorage() is read again by the Browser while it shows.
+    public boolean hasStorage() {
+        if (Build.VERSION.SDK_INT >= 30) return Environment.isExternalStorageManager();
+        return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public void askStorage() {
+        runOnUiThread(() -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                }
+            } else {
+                requestPermissions(new String[] {Manifest.permission.READ_EXTERNAL_STORAGE}, STORAGE);
+            }
+        });
+    }
+
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        if (request == STORAGE) return; // the Browser reads hasStorage() again on its own
         if (request != RECORD_AUDIO) {
             super.onRequestPermissionsResult(request, permissions, results);
             return;
