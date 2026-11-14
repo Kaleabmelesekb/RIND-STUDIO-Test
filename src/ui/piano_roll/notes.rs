@@ -984,17 +984,6 @@ pub const CHORDS: [(&str, &[i32]); 7] = [
     ("Min 7", &[3, 7, 10]),
 ];
 
-/// The first start and the last end of the flagged notes, in ticks.
-fn span(events: &[Event], which: &[bool]) -> Option<(f64, f64)> {
-    let first = flagged(events, which)
-        .map(|(pos, _, _)| pos)
-        .reduce(f64::min)?;
-    let last = flagged(events, which)
-        .map(|(pos, len, _)| pos + len)
-        .reduce(f64::max)?;
-    Some((first, last))
-}
-
 /// Mirrors the flagged notes in time inside their own span: the one that started first ends last. Not re-sorted.
 pub fn reverse_notes(events: &mut [Event], which: &[bool]) {
     let Some((first, last)) = span(events, which) else {
@@ -1045,6 +1034,13 @@ pub fn stretch_by(events: &mut [Event], which: &[bool], k: f64) {
 
 /// Gives each flagged note a velocity of 65 to 135 % of its own, from `seed` (the same seed, the same result).
 pub fn randomize_velocity(events: &mut [Event], which: &[bool], seed: u64) {
+    randomize_velocity_by(events, which, seed, 1.0);
+}
+
+/// [`randomize_velocity`] with an `amount` (0 to 1) of that spread: at 1 a velocity moves to 65 to 135 % of itself,
+/// at 0.5 to 82 to 118 %, at 0 not at all.
+pub fn randomize_velocity_by(events: &mut [Event], which: &[bool], seed: u64, amount: f32) {
+    let amount = f64::from(amount.clamp(0.0, 1.0));
     let mut state = seed;
     let mut next = move || {
         state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -1058,8 +1054,22 @@ pub fn randomize_velocity(events: &mut [Event], which: &[bool], seed: u64) {
             && note(e).is_some()
             && let Event::Note { velocity, .. } = e
         {
-            let scaled = f64::from(*velocity) * (0.65 + 0.7 * next());
+            let factor = 1.0 + amount * (next() * 0.7 - 0.35);
+            let scaled = f64::from(*velocity) * factor;
             *velocity = scaled.round().clamp(1.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Gives each flagged note velocity `v`, of 127 (the song holds velocities up to 255).
+pub fn set_velocity(events: &mut [Event], which: &[bool], v: u8) {
+    let value = (f32::from(v.clamp(1, 127)) / 127.0 * 255.0).round() as u8;
+    for (e, &on) in events.iter_mut().zip(which) {
+        if on
+            && note(e).is_some()
+            && let Event::Note { velocity, .. } = e
+        {
+            *velocity = value;
         }
     }
 }

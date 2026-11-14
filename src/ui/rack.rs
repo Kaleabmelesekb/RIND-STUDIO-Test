@@ -367,6 +367,9 @@ pub fn card_gap(u: f32) -> f32 {
     (CARD_GAP * u).trunc()
 }
 
+/// The least the device strip scales a card to fit it, as a share of the U.
+const MIN_FIT: f32 = 0.45;
+
 /// The rack's frame, in device px: the header and its buttons, and in a side rack the collapse tab.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Chrome {
@@ -1372,6 +1375,8 @@ pub struct RackPanel {
     column: (f32, f32),
     /// The pointer was over a Lemon card's editor last frame: the wheel is the editor's, not the rack's.
     lemon_wheel: bool,
+    /// The device strip draws a card taller than itself smaller to fit ([`Self::show_strip`]); off in the unit tests.
+    pub fit: bool,
     /// Issue #68: the Lemon card (channel index, instance id) whose editor shows full screen, which drives it: the card
     /// shows its last frame meanwhile.
     pub lemon_full: Option<(usize, i32)>,
@@ -1730,7 +1735,7 @@ impl RackPanel {
         reveal: Option<usize>,
     ) -> RackActions {
         let (m, colors) = (cx.m, &cx.theme.colors);
-        let (ppp, u) = (m.ppp(), m.u_px());
+        let (ppp, full_u) = (m.ppp(), m.u_px());
         let ink = channel_color(channel.hue, cx.theme).to_color32();
         let px = rect * ppp;
         let strip = Rect::from_min_max(px.min.round(), px.max.round());
@@ -1742,11 +1747,6 @@ impl RackPanel {
             .rect_filled(rect, 0.0, colors.background.to_color32());
         self.adopt(index, channel, &mut actions);
 
-        // The cards' width is the side rack's column.
-        let gap = card_gap(u);
-        let pad = (gap / 2.0).floor().max(1.0);
-        let width = strip_card_width(u);
-        self.column = (width, u);
         let input = channel.kind == ChannelKind::AudioRecord;
         // The cards drawn: every module's, or the one the window shows.
         let only = self.only;
@@ -1754,9 +1754,31 @@ impl RackPanel {
             .filter(|&i| only.is_none_or(|id| channel.rack.modules[i].instance_id == id))
             .collect();
         self.strip = true;
-        let heights: Vec<f32> = (shown.iter())
-            .map(|&i| self.card_height(&channel.rack.modules[i]))
-            .collect();
+        // A card taller than the strip draws smaller to fit it (the whole device in view, as a hand-stretched rack
+        // shows it) rather than scrolling, down to [`MIN_FIT`] of the U; the unit tests keep the full size.
+        let mut u = full_u;
+        let (heights, tallest) = loop {
+            // The cards' width is the side rack's column.
+            self.column = (strip_card_width(u), u);
+            let heights: Vec<f32> = (shown.iter())
+                .map(|&i| self.card_height(&channel.rack.modules[i]))
+                .collect();
+            let tallest = heights.iter().copied().fold(ROW, f32::max) * u
+                + 2.0 * (card_gap(u) / 2.0).floor().max(1.0);
+            let next = (u * strip.height() / tallest).floor().min(u - 1.0);
+            if !self.fit || tallest <= strip.height() || next < (full_u * MIN_FIT).floor() {
+                break (heights, tallest);
+            }
+            u = next;
+        };
+        let fitted = m.with_u_px(u);
+        let fit_cx = UiCtx {
+            theme: cx.theme,
+            m: &fitted,
+        };
+        let gap = card_gap(u);
+        let pad = (gap / 2.0).floor().max(1.0);
+        let width = strip_card_width(u);
         let n = shown.len();
         // Content positions in px from the strip's left and top, unscrolled.
         let left_of = |i: usize| gap + i as f32 * (width + gap);
@@ -1766,7 +1788,6 @@ impl RackPanel {
             (ADD_W * u).min(width)
         };
         let content_w = left_of(n) + add_w + if only.is_some() { 0.0 } else { gap };
-        let tallest = heights.iter().copied().fold(ROW, f32::max) * u + 2.0 * pad;
 
         if let Some(slot) = reveal.and_then(|i| shown.iter().position(|&s| s == i)) {
             self.scroll_x = (left_of(slot) - gap) / ppp;
@@ -1831,7 +1852,15 @@ impl RackPanel {
             if !ui.clip_rect().intersects(card) {
                 continue;
             }
-            let edits = self.card(ui, cx, card, module, false, ink, if input { 1 } else { 2 });
+            let edits = self.card(
+                ui,
+                &fit_cx,
+                card,
+                module,
+                false,
+                ink,
+                if input { 1 } else { 2 },
+            );
             if edits.double_tap {
                 module.minimized ^= true;
                 actions.minimized = true;
@@ -1843,7 +1872,7 @@ impl RackPanel {
         if only.is_none() && ui.clip_rect().intersects(add) {
             add_row(
                 ui,
-                cx,
+                &fit_cx,
                 add,
                 "Add Module",
                 ink,

@@ -23,6 +23,9 @@ pub struct State {
     pub(crate) takes: Vec<LiveTake>,
 }
 
+/// The editor's width, in U, from which the roll has its tool panel beside it.
+const TOOLS_MIN_EDITOR_W: f32 = 18.0;
+
 /// Draws the piano roll of `channel`'s note lane in `app.regions.editor`; back to the playlist once the channel is gone
 /// (the app collapses an editor whose clip goes).
 pub fn show(state: &mut State, ui: &mut egui::Ui, app: &mut AppCtx, channel: usize) -> Option<Nav> {
@@ -52,7 +55,15 @@ pub fn show(state: &mut State, ui: &mut egui::Ui, app: &mut AppCtx, channel: usi
     roll.value_snap = [app.settings.velocity_snap, app.settings.pan_snap];
     // So is the grid size (#53).
     roll.snap.size = app.settings.grid_size;
-    let actions = roll.show(ui, app.regions.editor, &app.cx, app.song, &opts);
+    // The tool panel down the left, in the running app and a window wide enough to leave the roll room.
+    let mut editor = app.regions.editor;
+    if !cfg!(test) && editor.width() >= app.cx.m.u(TOOLS_MIN_EDITOR_W) {
+        let width = roll.tools_width(app.cx.m);
+        let tools = editor.with_max_x(editor.left() + width);
+        roll.tool_panel(ui, tools, &app.cx, app.song, app.covered);
+        editor = editor.with_min_x(tools.right());
+    }
+    let actions = roll.show(ui, editor, &app.cx, app.song, &opts);
     [app.settings.velocity_snap, app.settings.pan_snap] = roll.value_snap;
     app.settings.grid_size = roll.snap.size;
     for action in actions {

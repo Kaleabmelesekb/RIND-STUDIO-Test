@@ -30,6 +30,8 @@ const BROWSER_W: f32 = 9.0;
 const PORTRAIT_W: f32 = 10.0;
 /// The collapsed Browser's rail, in U.
 const RAIL_W: f32 = 1.25;
+/// How far right of the list, in U, a press on a row must be dragged for it to leave the list.
+const DRAG_OUT: f32 = 0.6;
 /// The headers' height, the Browser's tab row and a list row, in U: touch sized.
 const HEADER_H: f32 = 1.5;
 const TAB_H: f32 = 1.5;
@@ -37,6 +39,11 @@ const ROW_H: f32 = 1.5;
 /// The Device Rack's body when open: a fixed height in U, however the window is sized (only a window too short for it
 /// gives it less, [`MAX_SHARE`]).
 const RACK_BODY_H: f32 = 7.5;
+/// How far a hand may stretch the Browser (its width) and the Device Rack (its body's height), in U.
+const BROWSER_RANGE: (f32, f32) = (5.0, 26.0);
+const RACK_RANGE: (f32, f32) = (4.0, 30.0);
+/// The grab strip on a dock's edge, in U.
+const GRIP: f32 = 0.6;
 /// The most of the content area either dock takes.
 const MAX_SHARE: f32 = 0.7;
 /// A row's left padding, in U.
@@ -88,6 +95,10 @@ pub struct Docks {
     pub tab: Tab,
     /// The first frame decides the portrait layout: the Browser starts collapsed there.
     placed: bool,
+    /// The Browser's width in U once a hand has stretched it (0: the default for the window), and the Device Rack's
+    /// body height in U.
+    browser_w: f32,
+    rack_body: f32,
     /// The folders entered in Samples and Projects, outermost first.
     folders: [Vec<PathBuf>; 2],
     /// The list of the Instruments and Effects tabs, kept while the tab and the track's kind stay.
@@ -96,6 +107,8 @@ pub struct Docks {
     files: Option<(FilesKey, Vec<SongEntry>)>,
     /// A device chip's tap: the card to scroll into view in the strip.
     pub reveal: Option<usize>,
+    /// A browser row being dragged out to a track or the Device Rack: what it adds and its name.
+    drag: Option<(BrowserAction, String)>,
 }
 
 type FilesKey = (Tab, Option<PathBuf>, u64);
@@ -108,10 +121,13 @@ impl Default for Docks {
             rack_open: true,
             tab: Tab::default(),
             placed: false,
+            browser_w: 0.0,
+            rack_body: RACK_BODY_H,
             folders: [Vec::new(), Vec::new()],
             modules: None,
             files: None,
             reveal: None,
+            drag: None,
         }
     }
 }
@@ -123,6 +139,7 @@ enum Click {
     Up,
     Open(PathBuf),
     Sample,
+    AddFolder,
 }
 
 /// One row of the Browser's list.
@@ -133,6 +150,8 @@ enum Item<'a> {
     Folder(&'a SongEntry),
     File(&'a SongEntry),
     Note(&'static str),
+    /// The Samples tab's first row: pick a folder of the device's storage to bring into the library.
+    AddFolder,
 }
 
 impl Docks {
@@ -143,7 +162,11 @@ impl Docks {
             self.placed = true;
             self.browser_open &= !portrait;
         }
-        let wide = if portrait { PORTRAIT_W } else { BROWSER_W };
+        let wide = match self.browser_w {
+            w if w > 0.0 => w,
+            _ if portrait => PORTRAIT_W,
+            _ => BROWSER_W,
+        };
         let browser = if self.browser_open {
             m.u(wide).min(area.width() * MAX_SHARE)
         } else {
@@ -153,7 +176,7 @@ impl Docks {
         let rack = if racked {
             0.0
         } else if self.rack_open {
-            (m.u(HEADER_H + RACK_BODY_H))
+            (m.u(HEADER_H + self.rack_body))
                 .min(area.height() * MAX_SHARE)
                 .max(header)
         } else {
@@ -279,7 +302,106 @@ impl Docks {
         rule(&painter, tabs.left_bottom(), tabs.right_bottom(), &look);
 
         let list = Rect::from_min_max(tabs.left_bottom(), rect.right_bottom() - vec2(look.px, 0.0));
-        self.list(ui, app, picker, list, &look)
+        let nav = self.list(ui, app, picker, list, &look);
+        // The grab strip on its right edge: drag to stretch the Browser, double tap to give it back its width.
+        let grip = Rect::from_x_y_ranges(rect.right() - m.u(GRIP)..=rect.right(), rect.y_range());
+        let drag = ui.interact(
+            grip,
+            egui::Id::new("dock browser grip"),
+            grab_sense(covered),
+        );
+        let width = rect.width() / m.u(1.0);
+        if drag.dragged() {
+            self.browser_w =
+                (width + drag.drag_delta().x / m.u(1.0)).clamp(BROWSER_RANGE.0, BROWSER_RANGE.1);
+        } else if drag.double_clicked() {
+            self.browser_w = 0.0;
+        }
+        paint_grip(&painter, grip, false, &drag, &look, ui);
+        nav
+    }
+
+    /// A browser row in flight: a chip at the pointer, the track row or the Device Rack under it lit; letting go over
+    /// one returns the channel to add to and what to add. `rows` are the playlist's track rows as last drawn.
+    pub fn drag(
+        &mut self,
+        ui: &Ui,
+        app: &AppCtx,
+        rows: &[(Rect, usize)],
+    ) -> Option<(usize, BrowserAction)> {
+        let (action, label) = self.drag.clone()?;
+        let pos = ui.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos()));
+        let target = pos.and_then(|p| {
+            let row = rows
+                .iter()
+                .find(|(r, _)| r.contains(p))
+                .map(|&(r, c)| (c, r));
+            let rack = [app.regions.device_rack, app.regions.rack]
+                .into_iter()
+                .find(|r| r.width() > 0.0 && r.contains(p));
+            row.or_else(|| rack.map(|r| (*app.selected, r)))
+        });
+        if ui.input(|i| i.pointer.any_down()) {
+            let m = app.cx.m;
+            let look = Look::of(&app.cx);
+            let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("dock drag"));
+            let painter = ui.ctx().layer_painter(layer);
+            if let Some((_, area)) = target {
+                painter.rect_filled(area, 0.0, look.accent.gamma_multiply(0.16));
+                painter.rect_stroke(
+                    area.shrink(look.px),
+                    0.0,
+                    Stroke::new(2.0 * look.px, look.accent),
+                    egui::StrokeKind::Inside,
+                );
+            }
+            if let Some(p) = pos {
+                let galley = painter.layout_no_wrap(
+                    format!("+ {label}"),
+                    m.font_id(FontSize::Pt10),
+                    look.bg,
+                );
+                let chip = Rect::from_min_size(
+                    p + vec2(m.u(0.6), m.u(0.3)),
+                    galley.size() + vec2(m.u(0.8), m.u(0.5)),
+                );
+                painter.rect_filled(chip, m.u(0.2), look.accent);
+                painter.galley(chip.min + vec2(m.u(0.4), m.u(0.25)), galley, look.bg);
+            }
+            ui.ctx().request_repaint();
+            return None;
+        }
+        self.drag = None;
+        target.map(|(channel, _)| (channel, action))
+    }
+
+    /// Adds `action` to channel `channel` as a drop from the Browser: the channel becomes the selected one and its
+    /// Device Rack shows the new card. A channel that does not take it is left alone and says so.
+    pub fn add_dropped(
+        &mut self,
+        app: &mut AppCtx,
+        picker: &mut preset_picker::State,
+        channel: usize,
+        action: BrowserAction,
+    ) {
+        let Some(ch) = app.song.channels.get(channel) else {
+            return;
+        };
+        let fits = rows("", ModuleOrdering::Category, crate::ui::rack::takes(ch))
+            .into_iter()
+            .any(|r| matches!(r, Row::Item(e) if e.action() == action));
+        if !fits {
+            app.files.flash("That track does not take it");
+            return;
+        }
+        if channel > 0 {
+            *app.selected = channel;
+        }
+        picks::add_pick(picker, app, channel, action);
+        if let Some(ch) = app.song.channels.get(channel) {
+            self.reveal = ch.rack.modules.len().checked_sub(1);
+        }
+        self.rack_open = true;
     }
 
     /// The Browser's list in `list`.
@@ -341,6 +463,8 @@ impl Docks {
             Some(slot) => {
                 if !self.folders[slot].is_empty() {
                     items.push(Item::Up);
+                } else if tab == Tab::Samples {
+                    items.push(Item::AddFolder);
                 }
                 let entries = self.files.as_ref().map_or(&[][..], |(_, e)| &e[..]);
                 for e in entries {
@@ -349,6 +473,12 @@ impl Docks {
                     } else {
                         Item::File(e)
                     });
+                }
+                if tab == Tab::Samples && entries.iter().any(|e| !e.is_folder) {
+                    items.insert(
+                        items.len().min(1),
+                        Item::Note("Hold a sample, then drag it onto the playlist"),
+                    );
                 }
                 if items.is_empty() {
                     items.push(Item::Note("Nothing here"));
@@ -361,10 +491,12 @@ impl Docks {
         let font = m.font_id(FontSize::Pt10);
         let small = m.font_id(FontSize::Pt8);
         let mut click = None;
+        let mut begun: Option<(BrowserAction, String)> = None;
         let mut child = ui.new_child(UiBuilder::new().max_rect(list).id(("dock list", tab as u8)));
         child.set_clip_rect(list.intersect(ui.clip_rect()));
         egui::ScrollArea::vertical()
             .id_salt(("dock list scroll", tab as u8))
+            .enable_scrolling(!crate::ui::file_drag::dragging(ui.ctx()))
             .auto_shrink([false, false])
             .show_rows(&mut child, row_h, items.len(), |ui, range| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
@@ -432,6 +564,33 @@ impl Docks {
                                 look.text,
                             );
                         }
+                        Item::AddFolder => {
+                            let plus = pos2(r.left() + pad + m.u(0.2), r.center().y);
+                            let arm = m.u(0.24);
+                            let stroke = Stroke::new(1.5 * look.px, look.accent);
+                            painter.line_segment(
+                                [plus - vec2(arm, 0.0), plus + vec2(arm, 0.0)],
+                                stroke,
+                            );
+                            painter.line_segment(
+                                [plus - vec2(0.0, arm), plus + vec2(0.0, arm)],
+                                stroke,
+                            );
+                            let name = ellipsis(
+                                painter,
+                                "Add folder from device...",
+                                &font,
+                                look.accent,
+                                r.width() - pad - m.u(1.2),
+                            );
+                            painter.text(
+                                pos2(at.x + m.u(0.8), at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.accent,
+                            );
+                        }
                         Item::File(e) => {
                             let name =
                                 ellipsis(painter, &e.name, &font, look.text, r.width() - 2.0 * pad);
@@ -463,8 +622,29 @@ impl Docks {
                     if !matches!(item, Item::Section(_)) {
                         rule(painter, r.left_bottom(), r.right_bottom(), look);
                     }
+                    // A press on a module row dragged out of the list to the right (a vertical drag scrolls) carries it
+                    // to a track or the Device Rack; letting go there adds it.
+                    if let Item::Module(entry) = item
+                        && active
+                        && response.is_pointer_button_down_on()
+                        && ui
+                            .input(|i| i.pointer.interact_pos())
+                            .is_some_and(|p| p.x > list.right() + m.u(DRAG_OUT))
+                    {
+                        begun = Some((entry.action(), entry.name().to_owned()));
+                    }
+                    // A long press then a drag on a sample row carries the file to the playlist: where it lands on a
+                    // track it makes a clip, and anywhere else a new audio track ([`crate::ui::file_drag`]).
+                    if let Item::File(e) = item
+                        && tab == Tab::Samples
+                        && active
+                        && crate::ui::file_drag::row_dragged(ui, &response, m)
+                    {
+                        crate::ui::file_drag::start(ui.ctx(), &e.path, &e.name);
+                    }
                     if response.clicked() {
                         click = match item {
+                            Item::AddFolder => Some(Click::AddFolder),
                             Item::Module(entry) => Some(Click::Pick(entry.action())),
                             Item::Up => Some(Click::Up),
                             Item::Folder(e) => Some(Click::Enter(e.path.clone())),
@@ -478,6 +658,9 @@ impl Docks {
                 }
             });
 
+        if begun.is_some() {
+            self.drag = begun;
+        }
         match click? {
             Click::Pick(action) => {
                 app.song.channels.get(selected)?;
@@ -503,6 +686,11 @@ impl Docks {
             }
             Click::Open(path) => {
                 super::main_menu::replace(app, Replace::Open(path));
+                None
+            }
+            Click::AddFolder => {
+                // The system folder picker; the folder's audio is copied into `My Samples` after a Yes, and listed.
+                app.files.pick_folder();
                 None
             }
             Click::Sample => {
@@ -633,6 +821,23 @@ impl Docks {
         }
         rule(&painter, header.left_bottom(), header.right_bottom(), &look);
 
+        // The grab strip on its top edge: drag up or down to stretch the rack, double tap to give it back its height.
+        if self.rack_open {
+            let grip = Rect::from_x_y_ranges(
+                rect.x_range(),
+                rect.top() - m.u(GRIP / 2.0)..=rect.top() + m.u(GRIP / 2.0),
+            );
+            let drag = ui.interact(grip, egui::Id::new("dock rack grip"), grab_sense(covered));
+            if drag.dragged() {
+                let body = rect.height() / m.u(1.0) - HEADER_H;
+                self.rack_body =
+                    (body - drag.drag_delta().y / m.u(1.0)).clamp(RACK_RANGE.0, RACK_RANGE.1);
+            } else if drag.double_clicked() {
+                self.rack_body = RACK_BODY_H;
+            }
+            paint_grip(&painter, grip, true, &drag, &look, ui);
+        }
+
         let body = rect.with_min_y(header.bottom());
         if !draw_strip || !self.rack_open || body.height() < 1.0 || name.is_none() {
             return nav;
@@ -640,6 +845,58 @@ impl Docks {
         let reveal = self.reveal.take();
         let strip = rack::show_strip(state, ui, app, body, selected, clipboard, held, reveal);
         nav.or(strip)
+    }
+}
+
+/// A grab strip's input: a drag, none while a dialog covers it.
+fn grab_sense(covered: bool) -> Sense {
+    if covered {
+        Sense::hover()
+    } else {
+        Sense::click_and_drag()
+    }
+}
+
+/// A grab strip's look: while hovered or dragged an accent line along the edge, always three dots at its middle; the
+/// pointer is a resize arrow over it.
+fn paint_grip(
+    painter: &egui::Painter,
+    grip: Rect,
+    horizontal: bool,
+    response: &egui::Response,
+    look: &Look,
+    ui: &Ui,
+) {
+    let live = response.dragged() || widgets::hovered(ui, response);
+    if live {
+        ui.ctx().set_cursor_icon(if horizontal {
+            egui::CursorIcon::ResizeVertical
+        } else {
+            egui::CursorIcon::ResizeHorizontal
+        });
+    }
+    let tone = if live { look.accent } else { look.dim };
+    let c = grip.center();
+    let r = look.px * 1.5;
+    let step = look.px * 7.0;
+    for i in -1..=1 {
+        let at = if horizontal {
+            pos2(c.x + step * i as f32, c.y)
+        } else {
+            pos2(c.x, c.y + step * i as f32)
+        };
+        painter.circle_filled(at, r, tone);
+    }
+    if live {
+        let line = if horizontal {
+            [grip.left_center(), grip.right_center()]
+        } else {
+            [
+                grip.right_top() - vec2(look.px, 0.0),
+                grip.right_bottom() - vec2(look.px, 0.0),
+            ]
+        };
+        painter.line_segment(line, Stroke::new(2.0 * look.px, look.accent));
     }
 }
 

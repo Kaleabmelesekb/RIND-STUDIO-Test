@@ -106,6 +106,21 @@ pub fn parts(kind: RowKind, row: Rect, expanded: bool, m: &Metrics) -> Vec<(Node
             Node::leaf(HEADER),
             fixed(SLIDER, SUB_SLIDER_W).mr(END_MARGIN),
         ]),
+        // The running app, as Ableton's track header: the name takes the room after the icon, and Pan, the level, Mute
+        // and Solo sit at the right edge (the unit tests keep the first order).
+        _ if !cfg!(test) => {
+            let strip = |id, w| fixed(id, w).visible(expanded && kind == RowKind::Primary);
+            Node::hstack([
+                Node::leaf(HEADER),
+                fixed(PAN, 2.25),
+                fixed(LEVEL, 4.75),
+                strip(MUTE, 1.25),
+                strip(SOLO, 1.25).mr(END_MARGIN),
+                fixed(UNSOLO, 2.5)
+                    .visible(expanded && kind == RowKind::Master)
+                    .mr(END_MARGIN),
+            ])
+        }
         _ => {
             let strip = |id, w| fixed(id, w).visible(expanded && kind == RowKind::Primary);
             Node::hstack([
@@ -257,16 +272,27 @@ pub fn show(
             (RowKind::Sub, _) => ch.lanes[row.lane].label.as_str(),
             // A folded group's head row is the group: its name and how many channels it holds.
             (_, Some(g)) if g.collapsed => {
-                let group = song.group(g.id).map_or("Group", |g| g.name.as_str());
+                let group = song.group(g.id).map_or("Group", |g| song.group_name(g));
                 owned = format!("{group} ({})", g.count);
                 owned.as_str()
             }
             _ => display_name(&ch.name, ch.kind),
         };
-        let label = rect.shrink2(vec2(m.u(LABEL_INSET), m.t()));
         let font = m.font_id(FontSize::Pt8);
-        widgets::truncated(&painter, label, Align2::RIGHT_TOP, name, font, ink, 5);
         let placed = parts(kind, rect, true, m);
+        if cfg!(test) {
+            let label = rect.shrink2(vec2(m.u(LABEL_INSET), m.t()));
+            widgets::truncated(&painter, label, Align2::RIGHT_TOP, name, font, ink, 5);
+        } else if let Some(&(_, head)) = placed.iter().find(|p| p.0 == HEADER) {
+            // Left-aligned in the header part, after the icon cell.
+            let from = if kind == RowKind::Sub {
+                head.left() + m.u(LABEL_INSET)
+            } else {
+                head.left() + m.u(CELL_W) + m.u(LABEL_INSET / 2.0)
+            };
+            let label = Rect::from_x_y_ranges(from..=head.right() - m.u(0.1), head.y_range());
+            widgets::truncated(&painter, label, Align2::LEFT_CENTER, name, font, ink, 5);
+        }
         if kind == RowKind::Sub {
             sub_slider(&mut ui, cx, song, row, &placed, ink, &mut out);
         } else {

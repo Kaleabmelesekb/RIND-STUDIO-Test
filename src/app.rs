@@ -2236,6 +2236,15 @@ impl HoneydewApp {
                 regions = regions.with_rack(open, &metrics);
                 // The keyboard settings strip takes its height off the top of the keys.
                 regions = regions.with_strip(strip, &metrics);
+                // The control bar's position, clock, metronome and time signature.
+                self.main_screen.bar = crate::ui::transport_pro::BarExtras {
+                    metronome: self.audio.metronome_flag(),
+                    time_sig: self.song.time_sig,
+                    tick: snapshot
+                        .as_ref()
+                        .map_or(self.main_screen.play_start, |s| s.transport_tick),
+                    bpm: shown_bpm,
+                };
                 let input = ScreenInput {
                     view: self.nav.view,
                     tracks: &tracks,
@@ -2432,7 +2441,8 @@ impl HoneydewApp {
                 // The docks, over the view and the keyboard panel's chrome and under every overlay.
                 let windowed =
                     (self.nav.overlays.iter()).any(|o| matches!(o, Overlay::DeviceEditor { .. }));
-                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed)));
+                let rows = self.main_screen.row_hits.clone();
+                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed), &rows));
                 views::drum_editor::after_chrome(&mut self.slots.drum_editor, ui, &mut app);
                 // The corner buttons go over the rack and under the other overlays.
                 let hue = app.song.channels.get(input.selected).map_or(0.0, |c| c.hue);
@@ -2497,6 +2507,15 @@ impl HoneydewApp {
         }
         // The keymap's global actions, after the screens' own keys (`app/keys.rs`).
         self.global_keys(ctx, &mut actions.rewind, &mut navs);
+        // The control bar's metronome and TAP: the engine's metronome flag, and a tempo tapped in.
+        if actions.bar.metronome {
+            let (on, level) = (!self.audio.metronome_flag(), self.settings.metronome_level);
+            self.audio.send(AudioCommand::MetronomeFlag { on, level });
+        }
+        if let Some(bpm) = actions.bar.tempo {
+            self.song.set_tempo(bpm);
+            self.song_edited(SongEdit::Final, tick);
+        }
         // After the screens: a focused text field keeps its own Ctrl+Z.
         let step = actions.step.or_else(|| history::shortcut(ctx));
         // The header's channel, then the keyboard's and the typed keys: every press of the frame can start playback

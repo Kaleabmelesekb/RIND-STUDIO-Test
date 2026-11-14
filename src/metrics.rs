@@ -134,6 +134,16 @@ impl Metrics {
         }
     }
 
+    /// These metrics with `U` at `u_px` device pixels (a whole number, at least 1): a panel drawn smaller to fit.
+    pub fn with_u_px(&self, u_px: f32) -> Self {
+        let u_px = u_px.round().max(1.0);
+        Self {
+            u: u_px / self.ppp,
+            u_px,
+            ..*self
+        }
+    }
+
     /// The percent the window width limits the UI scale to, while it does (SETTINGS shows it).
     pub fn scale_limited_to(&self) -> Option<u32> {
         self.limited

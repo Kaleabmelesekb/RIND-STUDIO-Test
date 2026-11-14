@@ -1149,10 +1149,10 @@ mod tests {
                 assert!(near(l.rect.height(), px) && (l.rect.top() - t.y(v)).abs() < px);
                 assert_eq!(l.rect.x_range(), t.plot.x_range());
             }
-            // 4. Labels: FontSize 1 in the per-RGBA average of `controlFill` (30, 30, 30) and the channel (255, 0, 0),
-            //    (143, 15, 15), at 50 % (premultiplied); each box text width × FontSize 1 high, its bottom on its line,
+            // 4. Labels: FontSize 1 in the per-RGBA average of `controlFill` (51, 51, 51) and the channel (255, 0, 0),
+            //    (153, 26, 26), at 50 % (premultiplied); each box text width × FontSize 1 high, its bottom on its line,
             //    from 0.25 U in; none at 0.
-            let label = Color32::from_rgba_premultiplied(72, 8, 8, 128);
+            let label = Color32::from_rgba_premultiplied(77, 13, 13, 128);
             let font = metrics(ppp).font_id(FontSize::Pt8);
             let labels: Vec<_> = (shapes[13..19].iter())
                 .map(|s| {

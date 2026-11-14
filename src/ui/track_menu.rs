@@ -86,6 +86,7 @@ pub fn track_menu(song: &Song, channel: usize, lane: usize) -> Vec<PopupItem<Tra
             false => (ToggleHidden, "Hide track", true),
         }),
         (!master).then_some(match song.group_of(ch.id) {
+            Some(g) if g.bus == ch.id => (ToggleGroup, "Ungroup Tracks", true),
             Some(_) => (ToggleGroup, "Remove From Group", true),
             None => (ToggleGroup, "Group With Above", true),
         }),

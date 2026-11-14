@@ -50,6 +50,8 @@ const HEADER_W: f32 = 1.5;
 /// How much wider the expanded header column is (13.5 U in all), and its per-frame law c ← c + 0.4·(t − c), snapping
 /// to t within 0.05 (the drum mixer column's law).
 const HEADER_GROW: f32 = 12.0;
+/// The running app's header column grows a little more, for the track name beside the icon.
+const HEADER_GROW_APP: f32 = 13.25;
 const COLUMN_RATE: f32 = 0.4;
 const COLUMN_SNAP: f32 = 0.05;
 const ROW_H: f32 = 2.0;
@@ -78,6 +80,11 @@ const SLOT_W: f32 = 1.75;
 const CTRL_SLOT: f32 = 4.0;
 /// The transport's row line, the scale name and a disabled icon: `text` at these alphas.
 const DIVIDER_ALPHA: f32 = 0.18;
+/// The control bar's sheen: white at the top and black at the bottom, at these alphas.
+const BAR_SHEEN_TOP: u8 = 14;
+const BAR_SHEEN_BOTTOM: u8 = 34;
+/// The tempo display's dark well, black at this alpha.
+const TEMPO_WELL_ALPHA: u8 = 110;
 const SCALE_ALPHA: f32 = 0.6;
 const DISABLED_ALPHA: f32 = 0.25;
 /// The vertical dividers: fainter than the row line.
@@ -151,11 +158,11 @@ pub fn track_rows(song: &Song, show_hidden: bool) -> Vec<TrackRow> {
         }
         let mark = group.map(|g| GroupMark {
             id: g.id,
-            hue: g.hue,
+            hue: song.group_hue(g),
             first: false,
             last: false,
             collapsed: g.collapsed,
-            count: song.group_channels(g).len(),
+            count: g.size(),
         });
         let folded = mark.is_some_and(|g| g.collapsed);
         let shown = if ch.zipped || folded {
@@ -305,6 +312,8 @@ pub fn band_layout(screen_h: f32, u: f32, panel_h: f32, rows: u8) -> Bands {
 /// What the user did on the playlist screen this frame. Play / Stop shows in [`MainScreen::playing`].
 #[derive(Default)]
 pub struct ScreenActions {
+    /// The control bar's metronome, `TAP` tempo and time-signature taps this frame.
+    pub bar: crate::ui::transport_pro::BarAsk,
     /// The channel kind or plugin picked in the add-channel popup.
     pub add: Option<AddChannelPick>,
     /// The channel whose track header was clicked.
@@ -560,6 +569,10 @@ fn chip_rects(strip: Rect, devices: &[DeviceChip], m: &Metrics) -> Vec<Rect> {
 /// Transient state of the playlist screen.
 #[derive(Default)]
 pub struct MainScreen {
+    /// What the control bar shows beside its slots (position, metronome, time signature), set by the app each frame.
+    pub bar: crate::ui::transport_pro::BarExtras,
+    /// `TAP` in the control bar: its taps so far.
+    tap: crate::ui::tempo::TapTempo,
     /// The selected track's devices for the dock's chain, set by the app before each frame.
     pub devices: Vec<DeviceChip>,
     /// The docks are on (the app sets it each frame): a chip's tap shows its card in the Device Rack instead of opening
@@ -567,6 +580,9 @@ pub struct MainScreen {
     pub docks_on: bool,
     /// A chip's tap with the docks on: the device's index, for the app to give the Device Rack.
     pub chip_tap: Option<usize>,
+    /// The playlist's track rows as last drawn (the whole row, header and lanes) with their channel: where a Browser
+    /// drag can drop.
+    pub row_hits: Vec<(Rect, usize)>,
     /// Toggled by the play button; the app sends `Play` / `Stop` when it changes.
     pub playing: bool,
     /// The keyboard panel's height in points as last drawn, on its way to the preferred height ([`Self::panel_h`]);
@@ -782,6 +798,7 @@ impl MainScreen {
         // its track row's id wherever it shows, so a hold follows its track; the held one is sensed off screen too.
         let mut lanes = Vec::new();
         self.header_busy = false;
+        self.row_hits.clear();
         for &(i, at) in &placed {
             let held = self.hold.as_ref().is_some_and(|h| h.row == i);
             if !visible(at) && !held {
@@ -790,6 +807,7 @@ impl MainScreen {
             let TrackRow { channel, lane, .. } = tracks[i];
             let top = top_of(at);
             let row = Rect::from_x_y_ranges(track_area.x_range(), top..=top + row_h);
+            self.row_hits.push((row.intersect(track_area), channel));
             let lane_rect = row.with_min_x(grid.left());
             // At c = 1 only the header's own part takes its gestures; collapsed or animating, the whole row does.
             let header = if expanded {
@@ -1204,7 +1222,12 @@ impl MainScreen {
 
     /// The header column's width: 1.5 U + c·12 U.
     fn header_w(&self, m: &Metrics) -> f32 {
-        m.u(HEADER_W + HEADER_GROW * self.column.0)
+        let grow = if cfg!(test) {
+            HEADER_GROW
+        } else {
+            HEADER_GROW_APP
+        };
+        m.u(HEADER_W + grow * self.column.0)
     }
 
     /// The ruler's gestures over `strip` ([`RangeSelect`]) in song ticks on the Snap `grid` (whole ticks with Snap
@@ -1998,9 +2021,40 @@ impl MainScreen {
         painter.rect_filled(rect, 0.0, c.control_fill.to_color32());
         let line = rect.with_min_y(rect.bottom() - 1.0 / m.ppp());
         painter.rect_filled(line, 0.0, c.background.to_color32());
+        // Depth: a light top fading to a dark bottom over the flat fill, so the bar reads as a raised panel.
+        let mut sheen = egui::Mesh::default();
+        let (light, dark) = (
+            Color32::from_white_alpha(BAR_SHEEN_TOP),
+            Color32::from_black_alpha(BAR_SHEEN_BOTTOM),
+        );
+        let (tl, tr) = (rect.left_top(), rect.right_top());
+        let (bl, br) = (rect.left_bottom(), rect.right_bottom());
+        for (pos, color) in [(tl, light), (tr, light), (br, dark), (bl, dark)] {
+            sheen.colored_vertex(pos, color);
+        }
+        sheen.add_triangle(0, 1, 2);
+        sheen.add_triangle(0, 2, 3);
+        painter.add(egui::Shape::mesh(sheen));
+        // While playing, a line in the accent colour runs along the bar's foot.
+        if self.playing {
+            let foot = rect.with_min_y(rect.bottom() - 2.0 / m.ppp());
+            painter.rect_filled(foot, 0.0, c.accent.to_color32().gamma_multiply(0.8));
+        }
         let top = rect.top() - regions.screen.top();
         let meters = input.settings.hardware_meters;
         let slots = transport_slots(rect, top, meters, input.can_preview, m);
+        // The Ableton look, in the running app only: the groups of buttons each in a well of their own.
+        if !cfg!(test) {
+            let inset = vec2(m.u(0.05), m.u(0.12));
+            for (a, b) in [
+                (slots.mixer, slots.keys),
+                (slots.rec, slots.play),
+                (slots.undo, slots.redo),
+            ] {
+                let well = Rect::from_min_max(a.min, b.max).shrink2(inset);
+                crate::ui::transport_pro::well(ui.painter(), well, text, m);
+            }
+        }
         // The last vertical divider is the one left of ↘, which sits in the dock.
         let hide_divider = (slots.dividers.iter()).rposition(|d| d.height() > d.width());
         for (i, &divider) in slots.dividers.iter().enumerate() {
@@ -2035,20 +2089,31 @@ impl MainScreen {
         if button(ui, "keyboard_settings", slots.keys, strip).clicked() {
             nav = Some(Nav::Toggle(Overlay::KeyboardSettings));
         }
+        // The position, metronome, TAP and signature take what room the bar leaves left of REC.
+        let mut scale_zone = slots.scale;
+        if !cfg!(test) {
+            let now = ui.input(|i| i.time);
+            let (left, ask) = crate::ui::transport_pro::extras(
+                ui,
+                cx,
+                slots.scale,
+                now,
+                &self.bar,
+                &mut self.tap,
+                self.playing,
+            );
+            scale_zone = left;
+            actions.bar = ask;
+            if ask.tempo_dialog {
+                nav = Some(Nav::Toggle(Overlay::TempoEditor));
+            }
+        }
         if let Some(name) = input.scale_name {
             // No control: a tap there is a tap on the empty bar.
             let font = m.font_id(FontSize::Pt8);
             let ink = text.gamma_multiply(SCALE_ALPHA);
             let painter = ui.painter();
-            widgets::truncated(
-                painter,
-                slots.scale,
-                Align2::LEFT_CENTER,
-                name,
-                font,
-                ink,
-                5,
-            );
+            widgets::truncated(painter, scale_zone, Align2::LEFT_CENTER, name, font, ink, 5);
         }
 
         // Centre group: REC, REWIND, play, tempo, CONTROL.
@@ -2088,8 +2153,20 @@ impl MainScreen {
         }
         let font = m.font_id(FontSize::Pt12);
         let bpm = transport_bpm_text(input.bpm);
-        let tempo = content_rect(slots.bpm, true, m).center();
-        (ui.painter()).text(tempo, Align2::CENTER_CENTER, bpm, font, text);
+        let display = content_rect(slots.bpm, true, m);
+        // The tempo reads off a dark display, in the accent colour, like a hardware LCD.
+        let well = display.shrink2(vec2(m.u(0.1), m.u(0.1)));
+        let radius = m.u(0.12);
+        let painter = ui.painter();
+        painter.rect_filled(well, radius, Color32::from_black_alpha(TEMPO_WELL_ALPHA));
+        painter.rect_stroke(
+            well,
+            radius,
+            egui::Stroke::new(1.0 / m.ppp(), text.gamma_multiply(0.12)),
+            egui::StrokeKind::Inside,
+        );
+        let lit = c.accent.to_color32();
+        painter.text(display.center(), Align2::CENTER_CENTER, bpm, font, lit);
         let control = BarButton::icon(IconId::Knob).caption("CONTROL");
         if button(ui, "CONTROL", slots.control, control).clicked() {
             nav = Some(Nav::Toggle(Overlay::CtrlMenu));
@@ -2647,17 +2724,20 @@ mod tests {
     }
 
     #[test]
-    fn a_folded_group_shows_its_head_row_alone_and_open_it_marks_its_run() {
+    fn a_folded_group_shows_its_bus_row_alone_and_open_it_marks_its_run() {
         let mut song = Song::default();
         for _ in 0..4 {
             song.add_channel(ChannelKind::Instrument);
         }
         song.group_with_above(2);
-        song.group_with_above(3);
+        let third = song.channels.iter().position(|c| c.id == 3).unwrap();
+        song.group_with_above(third);
         let id = song.groups[0].id;
-        // The master, three grouped channels and one below.
+        let bus = song.group_head(&song.groups[0].clone()).unwrap();
+        assert_eq!(song.channels[bus].kind, ChannelKind::EffectTrack);
+        // The master, the group's bus and its three channels, and one below.
         let open = track_rows(&song, false);
-        assert_eq!(open.len(), 5);
+        assert_eq!(open.len(), 6);
         let marks: Vec<_> = open
             .iter()
             .map(|r| r.group.map(|g| (g.first, g.last)))
@@ -2668,15 +2748,18 @@ mod tests {
                 None,
                 Some((true, false)),
                 Some((false, false)),
+                Some((false, false)),
                 Some((false, true)),
                 None
             ]
         );
+        assert_eq!(open[1].channel, bus);
         assert!(open.iter().all(|r| r.group.is_none_or(|g| !g.collapsed)));
         song.set_group_collapsed(id, true);
         let folded = track_rows(&song, false);
         let channels: Vec<usize> = folded.iter().map(|r| r.channel).collect();
-        assert_eq!(channels, [0, 1, 4]);
+        assert_eq!(channels.len(), 3);
+        assert_eq!(channels[1], bus);
         let head = folded[1].group.unwrap();
         assert!(head.collapsed && head.first && head.last);
         assert_eq!(head.count, 3);
