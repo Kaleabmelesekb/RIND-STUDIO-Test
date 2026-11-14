@@ -282,6 +282,7 @@ fn run(
     }
     let rate = app.audio.sample_rate().map_or(0.0, |r| r as f32);
     crate::panels::set_text_env(ui.ctx(), app.song.tempo_bpm, rate);
+    state.panel.fit = !cfg!(test);
     let actions = match place {
         Place::Side => state.panel.show(&mut ui, &app.cx, rect, channel, ch),
         Place::Strip(_, reveal) => {

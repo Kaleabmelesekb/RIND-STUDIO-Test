@@ -39,6 +39,11 @@ const ROW_H: f32 = 1.5;
 /// The Device Rack's body when open: a fixed height in U, however the window is sized (only a window too short for it
 /// gives it less, [`MAX_SHARE`]).
 const RACK_BODY_H: f32 = 7.5;
+/// How far a hand may stretch the Browser (its width) and the Device Rack (its body's height), in U.
+const BROWSER_RANGE: (f32, f32) = (5.0, 26.0);
+const RACK_RANGE: (f32, f32) = (4.0, 30.0);
+/// The grab strip on a dock's edge, in U.
+const GRIP: f32 = 0.6;
 /// The most of the content area either dock takes.
 const MAX_SHARE: f32 = 0.7;
 /// A row's left padding, in U.
@@ -90,6 +95,10 @@ pub struct Docks {
     pub tab: Tab,
     /// The first frame decides the portrait layout: the Browser starts collapsed there.
     placed: bool,
+    /// The Browser's width in U once a hand has stretched it (0: the default for the window), and the Device Rack's
+    /// body height in U.
+    browser_w: f32,
+    rack_body: f32,
     /// The folders entered in Samples and Projects, outermost first.
     folders: [Vec<PathBuf>; 2],
     /// The list of the Instruments and Effects tabs, kept while the tab and the track's kind stay.
@@ -112,6 +121,8 @@ impl Default for Docks {
             rack_open: true,
             tab: Tab::default(),
             placed: false,
+            browser_w: 0.0,
+            rack_body: RACK_BODY_H,
             folders: [Vec::new(), Vec::new()],
             modules: None,
             files: None,
@@ -148,7 +159,11 @@ impl Docks {
             self.placed = true;
             self.browser_open &= !portrait;
         }
-        let wide = if portrait { PORTRAIT_W } else { BROWSER_W };
+        let wide = match self.browser_w {
+            w if w > 0.0 => w,
+            _ if portrait => PORTRAIT_W,
+            _ => BROWSER_W,
+        };
         let browser = if self.browser_open {
             m.u(wide).min(area.width() * MAX_SHARE)
         } else {
@@ -158,7 +173,7 @@ impl Docks {
         let rack = if racked {
             0.0
         } else if self.rack_open {
-            (m.u(HEADER_H + RACK_BODY_H))
+            (m.u(HEADER_H + self.rack_body))
                 .min(area.height() * MAX_SHARE)
                 .max(header)
         } else {
@@ -284,7 +299,23 @@ impl Docks {
         rule(&painter, tabs.left_bottom(), tabs.right_bottom(), &look);
 
         let list = Rect::from_min_max(tabs.left_bottom(), rect.right_bottom() - vec2(look.px, 0.0));
-        self.list(ui, app, picker, list, &look)
+        let nav = self.list(ui, app, picker, list, &look);
+        // The grab strip on its right edge: drag to stretch the Browser, double tap to give it back its width.
+        let grip = Rect::from_x_y_ranges(rect.right() - m.u(GRIP)..=rect.right(), rect.y_range());
+        let drag = ui.interact(
+            grip,
+            egui::Id::new("dock browser grip"),
+            grab_sense(covered),
+        );
+        let width = rect.width() / m.u(1.0);
+        if drag.dragged() {
+            self.browser_w =
+                (width + drag.drag_delta().x / m.u(1.0)).clamp(BROWSER_RANGE.0, BROWSER_RANGE.1);
+        } else if drag.double_clicked() {
+            self.browser_w = 0.0;
+        }
+        paint_grip(&painter, grip, false, &drag, &look, ui);
+        nav
     }
 
     /// A browser row in flight: a chip at the pointer, the track row or the Device Rack under it lit; letting go over
@@ -736,6 +767,23 @@ impl Docks {
         }
         rule(&painter, header.left_bottom(), header.right_bottom(), &look);
 
+        // The grab strip on its top edge: drag up or down to stretch the rack, double tap to give it back its height.
+        if self.rack_open {
+            let grip = Rect::from_x_y_ranges(
+                rect.x_range(),
+                rect.top() - m.u(GRIP / 2.0)..=rect.top() + m.u(GRIP / 2.0),
+            );
+            let drag = ui.interact(grip, egui::Id::new("dock rack grip"), grab_sense(covered));
+            if drag.dragged() {
+                let body = rect.height() / m.u(1.0) - HEADER_H;
+                self.rack_body =
+                    (body - drag.drag_delta().y / m.u(1.0)).clamp(RACK_RANGE.0, RACK_RANGE.1);
+            } else if drag.double_clicked() {
+                self.rack_body = RACK_BODY_H;
+            }
+            paint_grip(&painter, grip, true, &drag, &look, ui);
+        }
+
         let body = rect.with_min_y(header.bottom());
         if !draw_strip || !self.rack_open || body.height() < 1.0 || name.is_none() {
             return nav;
@@ -743,6 +791,58 @@ impl Docks {
         let reveal = self.reveal.take();
         let strip = rack::show_strip(state, ui, app, body, selected, clipboard, held, reveal);
         nav.or(strip)
+    }
+}
+
+/// A grab strip's input: a drag, none while a dialog covers it.
+fn grab_sense(covered: bool) -> Sense {
+    if covered {
+        Sense::hover()
+    } else {
+        Sense::click_and_drag()
+    }
+}
+
+/// A grab strip's look: while hovered or dragged an accent line along the edge, always three dots at its middle; the
+/// pointer is a resize arrow over it.
+fn paint_grip(
+    painter: &egui::Painter,
+    grip: Rect,
+    horizontal: bool,
+    response: &egui::Response,
+    look: &Look,
+    ui: &Ui,
+) {
+    let live = response.dragged() || widgets::hovered(ui, response);
+    if live {
+        ui.ctx().set_cursor_icon(if horizontal {
+            egui::CursorIcon::ResizeVertical
+        } else {
+            egui::CursorIcon::ResizeHorizontal
+        });
+    }
+    let tone = if live { look.accent } else { look.dim };
+    let c = grip.center();
+    let r = look.px * 1.5;
+    let step = look.px * 7.0;
+    for i in -1..=1 {
+        let at = if horizontal {
+            pos2(c.x + step * i as f32, c.y)
+        } else {
+            pos2(c.x, c.y + step * i as f32)
+        };
+        painter.circle_filled(at, r, tone);
+    }
+    if live {
+        let line = if horizontal {
+            [grip.left_center(), grip.right_center()]
+        } else {
+            [
+                grip.right_top() - vec2(look.px, 0.0),
+                grip.right_bottom() - vec2(look.px, 0.0),
+            ]
+        };
+        painter.line_segment(line, Stroke::new(2.0 * look.px, look.accent));
     }
 }
 
