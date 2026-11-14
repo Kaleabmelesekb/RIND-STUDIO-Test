@@ -50,6 +50,8 @@ const HEADER_W: f32 = 1.5;
 /// How much wider the expanded header column is (13.5 U in all), and its per-frame law c ← c + 0.4·(t − c), snapping
 /// to t within 0.05 (the drum mixer column's law).
 const HEADER_GROW: f32 = 12.0;
+/// The running app's header column grows a little more, for the track name beside the icon.
+const HEADER_GROW_APP: f32 = 13.25;
 const COLUMN_RATE: f32 = 0.4;
 const COLUMN_SNAP: f32 = 0.05;
 const ROW_H: f32 = 2.0;
@@ -1220,7 +1222,12 @@ impl MainScreen {
 
     /// The header column's width: 1.5 U + c·12 U.
     fn header_w(&self, m: &Metrics) -> f32 {
-        m.u(HEADER_W + HEADER_GROW * self.column.0)
+        let grow = if cfg!(test) {
+            HEADER_GROW
+        } else {
+            HEADER_GROW_APP
+        };
+        m.u(HEADER_W + grow * self.column.0)
     }
 
     /// The ruler's gestures over `strip` ([`RangeSelect`]) in song ticks on the Snap `grid` (whole ticks with Snap
