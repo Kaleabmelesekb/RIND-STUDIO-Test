@@ -2503,7 +2503,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "patch",
         name: "Patch",
-        kind: Kind::Int(0, 7),
+        kind: Kind::Int(0, crate::presets::COUNT as i32 - 1),
         default: 0.0,
         fmt: Fmt::Int,
     },

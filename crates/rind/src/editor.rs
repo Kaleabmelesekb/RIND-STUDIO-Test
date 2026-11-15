@@ -395,14 +395,26 @@ impl Logic {
                 self.apply_all(&init);
             }
             2 => self.step_patch(false),
-            _ => self.step_patch(true),
+            3 => self.step_patch(true),
+            _ => self.open_presets(),
         }
+    }
+
+    /// Opens the preset browser on the category and page of the patch now loaded.
+    fn open_presets(&mut self) {
+        let patch = self.patch();
+        let cat = presets::category(patch);
+        self.ui.cat = cat;
+        self.ui.ppage = (patch - presets::in_category(cat).start) / view::PRESETS_PER_PAGE;
+        self.ui.presets = true;
+        self.ui.menu = false;
     }
 
     fn navigate(&mut self, nav: Nav) {
         match nav {
             Nav::Tab(i) => self.switch_tab(i),
             Nav::Patch(next) => self.step_patch(next),
+            Nav::Presets if !self.ui.presets => self.open_presets(),
             other => self.ui.apply(other),
         }
         self.relayout();
@@ -481,10 +493,22 @@ impl Logic {
                 self.relayout();
                 return vec![Act::Repaint];
             }
+            // A patch of the open preset browser: load it and close the browser.
+            Kind::Preset(i) => {
+                if btn == Btn::Left {
+                    self.load_patch(i);
+                    self.ui.presets = false;
+                    self.relayout();
+                    return vec![Act::Repaint];
+                }
+                return Vec::new();
+            }
+            Kind::Backdrop => return Vec::new(),
             // Anywhere else: the list or menu closes and the press goes no further.
             Kind::Dismiss => {
                 self.ui.popup = None;
                 self.ui.menu = false;
+                self.ui.presets = false;
                 self.relayout();
                 return vec![Act::Repaint];
             }
@@ -553,6 +577,8 @@ impl Logic {
                     Kind::Nav(_)
                     | Kind::Item(_)
                     | Kind::MenuItem(_)
+                    | Kind::Preset(_)
+                    | Kind::Backdrop
                     | Kind::Dismiss
                     | Kind::Key(_) => {}
                 }
@@ -689,6 +715,12 @@ impl Logic {
 
     /// The wheel over a control: `notches` up are positive.
     pub fn wheel(&mut self, x: f32, y: f32, notches: f32, m: Mods) -> Vec<Act> {
+        // The preset browser pages with the wheel.
+        if self.ui.presets && notches != 0.0 {
+            self.ui.apply(view::Nav::PresetPage(notches < 0.0));
+            self.relayout();
+            return vec![Act::Repaint];
+        }
         let Some(h) = self.hit(x, y) else {
             return Vec::new();
         };
@@ -1556,6 +1588,44 @@ mod tests {
         assert!(near(norm(&l, cutoff), 0.25));
         nav(&mut l, view::Nav::Tab(1));
         assert!(near(norm(&l, cutoff), 0.75));
+    }
+
+    #[test]
+    fn the_preset_browser_opens_from_the_patch_bar_and_a_tap_loads_a_patch() {
+        let (mut l, params) = logic();
+        nav(&mut l, view::Nav::Presets);
+        assert!(l.ui.presets);
+        nav(&mut l, view::Nav::Category(1));
+        assert_eq!(l.ui.cat, 1);
+        let want_patch = presets::in_category(1).start + 2;
+        let r = l
+            .hits
+            .iter()
+            .find(|h| h.kind == Kind::Preset(want_patch))
+            .unwrap()
+            .r;
+        tap(&mut l, r);
+        assert!(!l.ui.presets);
+        assert_eq!(live(&params, ids::PATCH), want_patch as f32);
+        let want = presets::values(want_patch);
+        for p in 0..ids::COUNT {
+            assert!(near(live(&params, p), want[p]), "{}", SPECS[p].id);
+        }
+        // It opens on the category of the patch now loaded; a press outside the panel closes it.
+        nav(&mut l, view::Nav::Presets);
+        assert_eq!(l.ui.cat, 1);
+        l.down(1.0, 1.0, Btn::Left, NONE);
+        assert!(!l.ui.presets);
+        // The menu's last entry opens it too.
+        nav(&mut l, view::Nav::Menu);
+        let r = l
+            .hits
+            .iter()
+            .find(|h| h.kind == Kind::MenuItem(4))
+            .unwrap()
+            .r;
+        tap(&mut l, r);
+        assert!(l.ui.presets && !l.ui.menu);
     }
 
     #[test]
