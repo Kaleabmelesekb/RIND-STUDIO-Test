@@ -249,7 +249,7 @@ impl RawTheme {
     }
 }
 
-/// The 9 built-in themes, in ID order 0..=8.
+/// The 10 built-in themes, in ID order 0..=9.
 pub fn builtin_themes() -> Vec<Theme> {
     // [background, controlFill, moduleFill, menuFill, text, accent]
     type Main = [u32; 6];
@@ -387,8 +387,8 @@ pub fn builtin_themes() -> Vec<Theme> {
 /// The user folder's folder of theme files, each `<name>.json` in the theme JSON: the theme creator's `Save` writes
 /// there, and the `Theme:` list shows them after the built-ins.
 pub const THEMES_FOLDER: &str = "My Themes";
-/// The id a user theme is saved with, the first after the built-ins.
-pub const USER_THEME_ID: u32 = 9;
+/// The id a user theme is saved with, the first after the built-ins (ids 0..=9).
+pub const USER_THEME_ID: u32 = 10;
 
 /// The theme in the file `bytes` (`Load themes`, `Import`): what it leaves out falls back to the defaults, and a file
 /// without a name takes `stem`, its own. Not JSON, a colour that is no `RRGGBB`, or no colours or options at all, is

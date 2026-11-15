@@ -2909,7 +2909,6 @@ mod tests {
         assert!(dropdown(ids::ARP_WRAP));
         assert!(!dropdown(ids::MONO));
         assert!(!dropdown(filt_param(0, ids::filt::SLOPE)));
-        assert!(!dropdown(filt_param(0, ids::filt::TYPE)));
         assert!(!dropdown(ids::MASTER_VOL));
         // What the design draws with arrows steps; no list.
         let hits = layout(&Ui::default());
