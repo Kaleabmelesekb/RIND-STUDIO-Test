@@ -475,7 +475,7 @@ mod tests {
         let setup = Setup::new(LADDER, true, 8000.0, 0.0, 1.0, SR);
         let mut f = Filter::default();
         let (mut s1, mut c1, mut s3, mut c3) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
-        let hz = 400.0;
+        let hz = 400.0f32;
         for i in 0..48_000 {
             let ph = 2.0 * std::f64::consts::PI * f64::from(hz) * i as f64 / f64::from(SR);
             let y = f.tick(0, ph.sin() as f32, &setup);
@@ -584,8 +584,8 @@ mod tests {
             .collect();
         let setup = Setup::new(LADDER, true, cutoff, res, drive, 2.0 * SR);
         let mut f = Filter::default();
-        let mut up = vec![0.0f32; TAPS];
-        let mut down = vec![0.0f32; TAPS];
+        let mut up = [0.0f32; TAPS];
+        let mut down = [0.0f32; TAPS];
         let mut out = Vec::with_capacity(x.len());
         for &v in x {
             let mut pair = [0.0f32; 2];
