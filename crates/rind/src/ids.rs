@@ -50,6 +50,10 @@ pub const WAVE_NAMES: &[&str] = &[
     "Quarter Pulse",
     "TriSaw",
     "Noise",
+    "PWM",
+    "Saw+Sub",
+    "Pulse+Sub",
+    "SuperSaw",
 ];
 pub const LFO_WAVE_NAMES: &[&str] = &[
     "Sine",
@@ -68,7 +72,7 @@ pub const DIV_NAMES: &[&str] = &[
     "2/1", "1/1", "1/2.", "1/2", "1/4.", "1/4", "1/4T", "1/8.", "1/8", "1/8T", "1/16.", "1/16",
     "1/16T", "1/32", "1/64",
 ];
-pub const FILTER_TYPE_NAMES: &[&str] = &["Low", "Band", "High"];
+pub const FILTER_TYPE_NAMES: &[&str] = &["Low", "Band", "High", "Ladder", "LadBP", "LadHP"];
 pub const SLOPE_NAMES: &[&str] = &["12 dB", "24 dB"];
 pub const OFFON_NAMES: &[&str] = &["Off", "On"];
 pub const POLYMONO_NAMES: &[&str] = &["Poly", "Mono"];
@@ -144,6 +148,11 @@ pub const TARGET_NAMES: &[&str] = &[
     "Pan All",
     "LFO 1 Gain",
     "LFO 2 Gain",
+    "Width A1",
+    "Width A2",
+    "Width B1",
+    "Width B2",
+    "Width All",
 ];
 /// Length of a note division in quarter notes, by [`DIV_NAMES`] index.
 pub const DIV_BEATS: [f32; 15] = [
@@ -569,6 +578,11 @@ pub mod mtgt {
     pub const PAN_ALL: usize = 32;
     pub const LFO_1_GAIN: usize = 33;
     pub const LFO_2_GAIN: usize = 34;
+    pub const WIDTH_A1: usize = 35;
+    pub const WIDTH_A2: usize = 36;
+    pub const WIDTH_B1: usize = 37;
+    pub const WIDTH_B2: usize = 38;
+    pub const WIDTH_ALL: usize = 39;
 }
 pub const ARP_STEP_BASE: usize = 171;
 pub const ARP_TR_BASE: usize = 188;
@@ -732,7 +746,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "o1_wave",
         name: "Osc A1 Wave",
-        kind: Kind::Int(0, 7),
+        kind: Kind::Int(0, 11),
         default: 1.0,
         fmt: Fmt::Names(WAVE_NAMES),
     },
@@ -816,7 +830,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "o2_wave",
         name: "Osc A2 Wave",
-        kind: Kind::Int(0, 7),
+        kind: Kind::Int(0, 11),
         default: 1.0,
         fmt: Fmt::Names(WAVE_NAMES),
     },
@@ -900,7 +914,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "o3_wave",
         name: "Osc B1 Wave",
-        kind: Kind::Int(0, 7),
+        kind: Kind::Int(0, 11),
         default: 1.0,
         fmt: Fmt::Names(WAVE_NAMES),
     },
@@ -984,7 +998,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "o4_wave",
         name: "Osc B2 Wave",
-        kind: Kind::Int(0, 7),
+        kind: Kind::Int(0, 11),
         default: 1.0,
         fmt: Fmt::Names(WAVE_NAMES),
     },
@@ -1075,7 +1089,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "f1_type",
         name: "Filter 1 Type",
-        kind: Kind::Int(0, 2),
+        kind: Kind::Int(0, 5),
         default: 0.0,
         fmt: Fmt::Names(FILTER_TYPE_NAMES),
     },
@@ -1152,7 +1166,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "f2_type",
         name: "Filter 2 Type",
-        kind: Kind::Int(0, 2),
+        kind: Kind::Int(0, 5),
         default: 0.0,
         fmt: Fmt::Names(FILTER_TYPE_NAMES),
     },
@@ -1397,7 +1411,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m1_dst",
         name: "Mod 1 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1418,7 +1432,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m2_dst",
         name: "Mod 2 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1439,7 +1453,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m3_dst",
         name: "Mod 3 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1460,7 +1474,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m4_dst",
         name: "Mod 4 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1481,7 +1495,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m5_dst",
         name: "Mod 5 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1502,7 +1516,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m6_dst",
         name: "Mod 6 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1523,7 +1537,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m7_dst",
         name: "Mod 7 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1544,7 +1558,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m8_dst",
         name: "Mod 8 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1565,7 +1579,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m9_dst",
         name: "Mod 9 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1586,7 +1600,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m10_dst",
         name: "Mod 10 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1607,7 +1621,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m11_dst",
         name: "Mod 11 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1628,7 +1642,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m12_dst",
         name: "Mod 12 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1649,7 +1663,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m13_dst",
         name: "Mod 13 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1670,7 +1684,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m14_dst",
         name: "Mod 14 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1691,7 +1705,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m15_dst",
         name: "Mod 15 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },
@@ -1712,7 +1726,7 @@ pub static SPECS: [Spec; COUNT] = [
     Spec {
         id: "m16_dst",
         name: "Mod 16 Target",
-        kind: Kind::Int(0, 34),
+        kind: Kind::Int(0, 39),
         default: 0.0,
         fmt: Fmt::Names(TARGET_NAMES),
     },

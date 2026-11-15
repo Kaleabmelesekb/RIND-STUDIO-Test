@@ -565,4 +565,111 @@ mod tests {
         wide[GF_CUTOFF] = 20_000.0;
         assert_eq!(loud(&wide), loud(&open));
     }
+
+    // ---- The DSP upgrade, through the whole voice. ----
+
+    fn note_rms(p: &Snapshot, note: u8, blocks: usize) -> f32 {
+        let mut e = Engine::new(48_000.0);
+        play(&mut e, p, 1);
+        e.note_on(note, 1.0);
+        rms(&play(&mut e, p, blocks).0)
+    }
+
+    #[test]
+    fn the_ladder_filters_the_voice_and_opens_with_its_cutoff() {
+        let mut p = defaults();
+        p[OSC_BASE + osc::WAVE] = 1.0;
+        p[FILT_BASE + filt::TYPE] = 3.0;
+        p[FILT_BASE + filt::CUTOFF] = 150.0;
+        let shut = note_rms(&p, 60, 40);
+        p[FILT_BASE + filt::CUTOFF] = 12_000.0;
+        let open = note_rms(&p, 60, 40);
+        assert!(shut > 1e-4 && open > shut * 3.0, "{shut} vs {open}");
+    }
+
+    #[test]
+    fn a_pulse_width_modulation_changes_the_pulse() {
+        // PWM wave, velocity opens the width from 50 % to 95 %: a thin pulse has much less power once the DC is out.
+        let mut p = defaults();
+        p[OSC_BASE + osc::WAVE] = f32::from(crate::osc::WAVE_PWM);
+        p[FILT_BASE + filt::ON] = 0.0;
+        let square = note_rms(&p, 48, 40);
+        p[MAT_BASE + mat::SRC] = 5.0;
+        p[MAT_BASE + mat::DST] = mtgt::WIDTH_A1 as f32;
+        p[MAT_BASE + mat::AMT] = 1.0;
+        let thin = note_rms(&p, 48, 40);
+        assert!(square > 0.01 && thin < square * 0.6, "{thin} vs {square}");
+        // The other oscillators' widths are not touched by Width A1.
+        p[MAT_BASE + mat::DST] = mtgt::WIDTH_B2 as f32;
+        let untouched = note_rms(&p, 48, 40);
+        assert!(
+            (untouched / square - 1.0).abs() < 0.05,
+            "{untouched} vs {square}"
+        );
+    }
+
+    #[test]
+    fn every_wave_with_every_filter_type_stays_finite_and_inside_the_limiter() {
+        let mut worst = 0.0f32;
+        for wave in 0..=11 {
+            for ft in 0..=5 {
+                for (res, drive, voices) in [(0.0, 0.0, 1.0), (1.0, 1.0, 8.0), (0.8, 0.5, 3.0)] {
+                    let mut p = defaults();
+                    p[OSC_BASE + osc::WAVE] = wave as f32;
+                    p[OSC_BASE + osc::VOICES] = voices;
+                    p[OSC_BASE + osc::DETUNE] = 0.7;
+                    p[OSC_BASE + osc::STEREO] = 1.0;
+                    p[FILT_BASE + filt::TYPE] = ft as f32;
+                    p[FILT_BASE + filt::RES] = res;
+                    p[FILT_BASE + filt::DRIVE] = drive;
+                    p[FILT_BASE + filt::CUTOFF] = 900.0;
+                    let mut e = Engine::new(48_000.0);
+                    play(&mut e, &p, 1);
+                    for n in [36u8, 60, 96] {
+                        e.note_on(n, 1.0);
+                    }
+                    let (l, r) = play(&mut e, &p, 60);
+                    for s in l.iter().chain(&r) {
+                        assert!(s.is_finite(), "wave {wave} filter {ft} res {res}");
+                        worst = worst.max(s.abs());
+                    }
+                }
+            }
+        }
+        assert!(worst <= 1.0, "{worst}");
+    }
+
+    #[test]
+    fn a_spread_of_patches_still_plays_with_all_the_new_parts() {
+        for i in (0..crate::presets::COUNT).step_by(7) {
+            let p = crate::presets::values(i);
+            let mut e = Engine::new(44_100.0);
+            play(&mut e, &p, 1);
+            e.note_on(55, 0.9);
+            let (l, r) = play(&mut e, &p, 30);
+            assert!(
+                l.iter().chain(&r).all(|s| s.is_finite() && s.abs() <= 1.0),
+                "patch {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_ladder_survives_fast_modulation_at_the_engine_level() {
+        // LFO 1 at its fastest on the cutoff at full depth, resonance maxed: no blow-up, no NaN.
+        let mut p = defaults();
+        p[OSC_BASE + osc::WAVE] = 1.0;
+        p[FILT_BASE + filt::TYPE] = 3.0;
+        p[FILT_BASE + filt::RES] = 1.0;
+        p[FILT_BASE + filt::CUTOFF] = 600.0;
+        p[MAT_BASE + mat::SRC] = 1.0;
+        p[MAT_BASE + mat::DST] = 1.0;
+        p[MAT_BASE + mat::AMT] = 1.0;
+        let mut e = Engine::new(48_000.0);
+        play(&mut e, &p, 1);
+        e.note_on(48, 1.0);
+        let (l, _) = play(&mut e, &p, 400);
+        assert!(l.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
+        assert!(rms(&l) > 1e-3);
+    }
 }

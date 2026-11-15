@@ -256,4 +256,209 @@ mod tests {
         l.advance(0.1);
         assert!(l.value(0, 0.0) > 0.5);
     }
+
+    // ---- Timing, retrigger and extremes, measured. ----
+
+    /// Ticks until `level` first reaches `goal` (up or down), or `None` within `max` ticks.
+    fn ticks_until(e: &mut Env, c: &EnvCoef, goal: f32, rising: bool, max: usize) -> Option<usize> {
+        for i in 1..=max {
+            let v = e.tick(c);
+            if (rising && v >= goal) || (!rising && v <= goal) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn the_stage_times_hold_at_every_sample_rate() {
+        for rate in [22_050.0f32, 44_100.0, 48_000.0, 96_000.0, 192_000.0] {
+            for time in [0.005f32, 0.05, 0.5, 2.0] {
+                // Attack: full level after the attack time.
+                let c = EnvCoef::new(time, 1.0, 0.0, 1.0, rate);
+                let mut e = Env::default();
+                e.gate_on();
+                let n =
+                    ticks_until(&mut e, &c, 1.0, true, (4.0 * time * rate) as usize + 10).unwrap();
+                let secs = n as f32 / rate;
+                assert!(
+                    (secs / time - 1.0).abs() < 0.03,
+                    "attack {time} s at {rate}: {secs}"
+                );
+                // Decay to zero sustain: 60 dB down after the decay time.
+                let c = EnvCoef::new(0.0001, time, 0.0, 1.0, rate);
+                let mut e = Env::default();
+                e.gate_on();
+                ticks_until(&mut e, &c, 1.0, true, 10_000).unwrap();
+                let n = ticks_until(&mut e, &c, 1e-3, false, (4.0 * time * rate) as usize + 10)
+                    .unwrap();
+                let secs = n as f32 / rate;
+                assert!(
+                    (secs / time - 1.0).abs() < 0.05,
+                    "decay {time} s at {rate}: {secs}"
+                );
+                // Release: 60 dB down after the release time, from any level.
+                let c = EnvCoef::new(0.0001, 1.0, 1.0, time, rate);
+                let mut e = Env::default();
+                e.gate_on();
+                for _ in 0..(0.02 * rate) as usize {
+                    e.tick(&c);
+                }
+                e.gate_off();
+                let from = e.level;
+                let n = ticks_until(
+                    &mut e,
+                    &c,
+                    from * 1e-3,
+                    false,
+                    (4.0 * time * rate) as usize + 10,
+                )
+                .unwrap();
+                let secs = n as f32 / rate;
+                assert!(
+                    (secs / time - 1.0).abs() < 0.05,
+                    "release {time} s at {rate}: {secs}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_segments_move_one_way_and_never_leave_the_range() {
+        let c = EnvCoef::new(0.01, 0.1, 0.4, 0.2, 48_000.0);
+        let mut e = Env::default();
+        e.gate_on();
+        let mut prev = 0.0f32;
+        for _ in 0..480 {
+            let v = e.tick(&c);
+            assert!(
+                v >= prev && v <= 1.0,
+                "attack must rise to 1 and stop: {prev} -> {v}"
+            );
+            prev = v;
+        }
+        for _ in 0..48_000 {
+            let v = e.tick(&c);
+            assert!((0.4 - 1e-3..=1.0).contains(&v), "{v}");
+        }
+        e.gate_off();
+        let mut prev = e.level;
+        for _ in 0..96_000 {
+            let v = e.tick(&c);
+            assert!(v <= prev && v >= 0.0, "release only falls: {prev} -> {v}");
+            prev = v;
+        }
+        assert!(e.is_idle());
+    }
+
+    #[test]
+    fn a_retrigger_continues_from_the_level_it_finds_without_a_step() {
+        let rate = 48_000.0;
+        let c = EnvCoef::new(0.02, 0.2, 0.6, 0.3, rate);
+        // Gate on again at any moment of any stage: the next sample is within a normal step of the last.
+        for stop in [10usize, 400, 2_000, 9_000, 30_000] {
+            for released in [false, true] {
+                let mut e = Env::default();
+                e.gate_on();
+                for _ in 0..stop {
+                    e.tick(&c);
+                }
+                if released {
+                    e.gate_off();
+                    for _ in 0..300 {
+                        e.tick(&c);
+                    }
+                }
+                let before = e.level;
+                e.gate_on();
+                let after = e.tick(&c);
+                assert!(
+                    (after - before).abs() < 0.05,
+                    "stop {stop} released {released}: {before} -> {after}"
+                );
+                assert!(
+                    after >= before - 1e-3,
+                    "a new attack never starts by falling"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn releasing_during_the_attack_and_idle_gates_are_safe() {
+        let c = EnvCoef::new(0.5, 0.2, 0.6, 0.3, 48_000.0);
+        let mut e = Env::default();
+        e.gate_off();
+        assert!(
+            e.is_idle() && e.tick(&c) == 0.0,
+            "a release with nothing playing stays idle"
+        );
+        e.gate_on();
+        for _ in 0..2_000 {
+            e.tick(&c);
+        }
+        let mid = e.level;
+        assert!(mid > 0.0 && mid < 1.0);
+        e.gate_off();
+        let next = e.tick(&c);
+        assert!(
+            next < mid && next > mid * 0.99,
+            "the release starts from the level it was at: {mid} -> {next}"
+        );
+    }
+
+    #[test]
+    fn extreme_times_and_sustains_stay_finite() {
+        for rate in [8_000.0f32, 48_000.0, 384_000.0] {
+            for (a, d, s, r) in [
+                (0.0, 0.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0, 0.0),
+                (60.0, 60.0, 0.5, 60.0),
+                (0.0001, 0.0001, 0.0, 0.0001),
+                (1e-9, 1e9, 2.0, 1e9),
+            ] {
+                let c = EnvCoef::new(a, d, s, r, rate);
+                let mut e = Env::default();
+                e.gate_on();
+                for i in 0..20_000 {
+                    if i == 10_000 {
+                        e.gate_off();
+                    }
+                    let v = e.tick(&c);
+                    assert!(
+                        v.is_finite() && (0.0..=2.0).contains(&v),
+                        "{a} {d} {s} {r} at {rate}: {v}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn two_envelopes_are_independent_and_the_tail_ends_exactly() {
+        let amp = EnvCoef::new(0.001, 0.3, 0.7, 0.05, 48_000.0);
+        let filter = EnvCoef::new(0.2, 0.4, 0.1, 1.5, 48_000.0);
+        let (mut a, mut f) = (Env::default(), Env::default());
+        a.gate_on();
+        f.gate_on();
+        for _ in 0..2_000 {
+            a.tick(&amp);
+            f.tick(&filter);
+        }
+        assert!(
+            a.level > 0.7 && f.level < 0.5 && f.level < a.level,
+            "{} {}",
+            a.level,
+            f.level
+        );
+        a.gate_off();
+        for _ in 0..48_000 {
+            a.tick(&amp);
+        }
+        assert!(
+            a.is_idle() && a.level == 0.0,
+            "an ended envelope is exactly zero"
+        );
+        assert!(!f.is_idle(), "the other one is untouched");
+    }
 }
