@@ -1454,6 +1454,9 @@ pub fn layout(ui: &Ui) -> Vec<Hit> {
 /// How many patches a page of the preset browser lists: three columns of twelve.
 pub const PRESETS_PER_PAGE: usize = 36;
 const PRESET_ROWS: usize = 12;
+/// The category grid: rows to a column and the width of a column; the three columns hold up to 45 categories.
+const CAT_ROWS: usize = 15;
+const CAT_W: f32 = 96.0;
 
 /// The pages of category `cat`.
 pub fn preset_pages(cat: usize) -> usize {
@@ -1480,10 +1483,18 @@ fn preset_rects(ui: &Ui) -> PresetRects {
     let panel = Rect::new(20.0, 14.0, W as f32 - 40.0, H as f32 - 28.0);
     let close = Rect::new(panel.right() - 40.0, panel.y + 4.0, 32.0, 26.0);
     let top = panel.y + 42.0;
+    // The categories form a grid of three columns, filled down the columns.
     let cats = (0..crate::presets::CATEGORIES.len())
-        .map(|i| Rect::new(panel.x + 10.0, top + 32.0 * i as f32, 150.0, 30.0))
+        .map(|i| {
+            Rect::new(
+                panel.x + 10.0 + (i / CAT_ROWS) as f32 * (CAT_W + 2.0),
+                top + 28.0 * (i % CAT_ROWS) as f32,
+                CAT_W,
+                26.0,
+            )
+        })
         .collect();
-    let list_x = panel.x + 172.0;
+    let list_x = panel.x + 10.0 + 3.0 * (CAT_W + 2.0) + 8.0;
     let col_w = (panel.right() - 10.0 - list_x) / 3.0;
     let range = crate::presets::in_category(ui.cat);
     let pages = preset_pages(ui.cat);
@@ -1543,10 +1554,10 @@ fn paint_presets(c: &mut Canvas, v: &dyn Values, ui: &Ui) {
         c.fill_rect(*r, if on { BLUE } else { PAPER_HI });
         c.stroke_rrect(*r, 0.0, 1.0, INK_DIM);
         let ink = if on { WHITE } else { INK };
-        let ty = (r.cy() - c.line_height(VALUE) / 2.0).round();
-        c.text(VALUE, r.x + 10.0, ty, ink, crate::presets::CATEGORIES[i]);
-        let n = crate::presets::in_category(i).len().to_string();
-        c.text_right(VALUE, r.right() - 10.0, ty, ink, &n);
+        let name = crate::presets::CATEGORIES[i];
+        let f = c.fit_font(VALUE, name, r.w - 12.0);
+        let ty = (r.cy() - c.line_height(f) / 2.0).round();
+        c.text(f, r.x + 6.0, ty, ink, name);
     }
     for &(i, r) in &g.items {
         let on = i == now;
@@ -2580,6 +2591,10 @@ fn wave_shape(wave: i32, t: f32) -> f32 {
         4 => pulse(0.25),
         5 => pulse(0.125),
         6 => 0.5 * (1.0 - 2.0 * t) + 0.5 * tri,
+        8 => pulse(0.3),
+        9 => 0.75 * (1.0 - 2.0 * t) + 0.25 * (t * tau * 0.5).sin(),
+        10 => 0.7 * pulse(0.25) + 0.3 * if t < 0.5 { 1.0 } else { -1.0 },
+        11 => 1.0 - 2.0 * (t * 2.0).rem_euclid(1.0),
         _ => (((t * 7919.0).sin() * 43758.5).fract() * 2.0 - 1.0).clamp(-1.0, 1.0),
     }
 }
@@ -2833,6 +2848,36 @@ mod tests {
             }
         }
         assert!(seen.iter().all(|&b| b), "a patch is not in any page");
+    }
+
+    #[test]
+    fn every_category_has_a_button_inside_the_window_and_none_overlap() {
+        assert!(crate::presets::CATEGORIES.len() <= 3 * CAT_ROWS);
+        let ui = Ui {
+            presets: true,
+            ..Ui::default()
+        };
+        let cats: Vec<_> = layout(&ui)
+            .into_iter()
+            .filter(|h| matches!(h.kind, Kind::Nav(Nav::Category(_))))
+            .collect();
+        assert_eq!(cats.len(), crate::presets::CATEGORIES.len());
+        for (k, a) in cats.iter().enumerate() {
+            assert!(
+                inside(window(), a.r) && a.r.h >= 24.0 && a.r.w >= 90.0,
+                "{a:?}"
+            );
+            for b in &cats[k + 1..] {
+                assert!(apart(a.r, b.r), "{a:?} {b:?}");
+            }
+        }
+        // The first patch column starts right of the grid.
+        let g = preset_rects(&ui);
+        assert!(
+            g.items
+                .iter()
+                .all(|(_, r)| cats.iter().all(|c| apart(c.r, *r)))
+        );
     }
 
     #[test]

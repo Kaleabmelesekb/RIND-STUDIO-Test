@@ -16,7 +16,7 @@ use crate::util::{Rng, note_hz};
 pub const VOICE_GAIN: f32 = 0.3;
 
 const SOURCES: usize = 14;
-const TARGETS: usize = 35;
+const TARGETS: usize = 40;
 
 /// What every voice shares in a control step.
 pub struct Step<'a> {
@@ -246,6 +246,7 @@ impl Voice {
             on: bool,
             wave: u8,
             phase: f32,
+            width: f32,
             scale: f32,
             part: usize,
         }
@@ -253,6 +254,7 @@ impl Voice {
             on: false,
             wave: 0,
             phase: 0.0,
+            width: 0.5,
             scale: 0.0,
             part: 0,
         });
@@ -276,12 +278,22 @@ impl Voice {
             let base_dt = note_hz(semis) / sr;
             let d = (p[b + osc::DETUNE] + detune_mod).clamp(0.0, 1.0);
             let detune = 1.2 * d * d + 0.04 * d;
-            let norm =
-                self.osc[o].configure(voices, base_dt, detune, p[b + osc::STEREO], p[b + osc::PAN]);
+            let wave = p[b + osc::WAVE] as u8;
+            let norm = self.osc[o].configure(
+                wave,
+                voices,
+                base_dt,
+                detune,
+                p[b + osc::STEREO],
+                p[b + osc::PAN],
+            );
             let inv = if p[b + osc::INV] >= 0.5 { -1.0 } else { 1.0 };
             os[o] = OscStep {
                 on: true,
-                wave: p[b + osc::WAVE] as u8,
+                wave,
+                // 50 % at rest; a modulation of +-1 moves the edge by 0.45 of the period.
+                width: (0.5 + 0.45 * (md[mtgt::WIDTH_A1 + o] + md[mtgt::WIDTH_ALL]))
+                    .clamp(0.05, 0.95),
                 phase: (p[b + osc::PHASE]
                     + (md[mtgt::PHASE_A1 + o]
                         + md[mtgt::PHASE_PART_A + part]
@@ -331,7 +343,7 @@ impl Voice {
             for o in 0..4 {
                 let st = &os[o];
                 if st.on {
-                    let (l, r) = self.osc[o].tick(st.wave, st.phase, &mut self.rng);
+                    let (l, r) = self.osc[o].tick(st.wave, st.phase, st.width, &mut self.rng);
                     part[st.part][0] += l * st.scale;
                     part[st.part][1] += r * st.scale;
                 }
