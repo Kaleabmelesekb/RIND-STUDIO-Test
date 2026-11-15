@@ -13,9 +13,12 @@
 
 use std::path::PathBuf;
 
-use eframe::egui::{self, Align2, Color32, Pos2, Rect, Sense, Stroke, Ui, UiBuilder, pos2, vec2};
+use eframe::egui::{
+    self, Align2, Color32, Pos2, Rect, Sense, Shape, Stroke, Ui, UiBuilder, pos2, vec2,
+};
 
 use super::{AppCtx, Nav, Overlay, modules_browser as picks, preset_picker, rack};
+use crate::device_storage::{self, on_storage, pins, save_pins};
 use crate::metrics::{FontSize, Metrics};
 use crate::project_files::Replace;
 use crate::song::{LaneKind, ModuleInstance};
@@ -109,6 +112,12 @@ pub struct Docks {
     pub reveal: Option<usize>,
     /// A browser row being dragged out to a track or the Device Rack: what it adds and its name.
     drag: Option<(BrowserAction, String)>,
+    /// The folders of the internal storage the user pinned as places (the user folder's `browser-places.txt`), read on
+    /// first use.
+    pins: Vec<PathBuf>,
+    pins_read: bool,
+    /// Whether the app may read the internal storage, and when that was last asked (s): about once a second.
+    storage: (bool, f64),
 }
 
 type FilesKey = (Tab, Option<PathBuf>, u64);
@@ -128,6 +137,9 @@ impl Default for Docks {
             files: None,
             reveal: None,
             drag: None,
+            pins: Vec::new(),
+            pins_read: false,
+            storage: (false, f64::NEG_INFINITY),
         }
     }
 }
@@ -140,13 +152,20 @@ enum Click {
     Open(PathBuf),
     Sample,
     AddFolder,
+    /// Open the system page that gives the app the internal storage.
+    Grant,
 }
 
 /// One row of the Browser's list.
 enum Item<'a> {
     Section(&'static str),
     Module(Entry),
-    Up,
+    /// The folder being listed: a tap goes up one level.
+    Up(String),
+    /// A place at the top: its name, folder, and whether it is a pinned one.
+    Place(String, PathBuf, bool),
+    /// The internal storage is not readable yet: a tap asks for it.
+    Grant,
     Folder(&'a SongEntry),
     File(&'a SongEntry),
     Note(&'static str),
@@ -404,6 +423,15 @@ impl Docks {
         self.rack_open = true;
     }
 
+    /// Whether the app may read the internal storage: asked of the system about once a second (a JNI call), and never
+    /// where there is no internal storage.
+    fn storage_granted(&mut self, now: f64) -> bool {
+        if device_storage::root().is_some() && now - self.storage.1 >= 1.0 {
+            self.storage = (device_storage::granted(), now);
+        }
+        self.storage.0
+    }
+
     /// The Browser's list in `list`.
     fn list(
         &mut self,
@@ -427,12 +455,33 @@ impl Docks {
                 }
             }
             Some(slot) => {
+                if !self.pins_read {
+                    self.pins_read = true;
+                    self.pins = app.files.user_dir().map(pins).unwrap_or_default();
+                }
+                let granted = self.storage_granted(ui.input(|i| i.time));
                 let folder = self.folders[slot].last().cloned();
-                let key: FilesKey = (tab, folder, app.files.library_changes());
+                let key: FilesKey = (
+                    tab,
+                    folder,
+                    app.files.library_changes() + u64::from(granted),
+                );
                 if self.files.as_ref().is_none_or(|(k, _)| *k != key) {
-                    let read = match tab {
-                        Tab::Samples => app.files.sample_library().list(key.1.as_deref()),
-                        _ => app.files.library.list(key.1.as_deref()),
+                    let read = match (tab, key.1.as_deref()) {
+                        // The internal storage: read from disk, already sorted.
+                        (Tab::Samples, Some(dir)) if on_storage(dir) => {
+                            Ok((device_storage::list(dir))
+                                .into_iter()
+                                .map(|(name, path, is_folder)| SongEntry {
+                                    name,
+                                    path,
+                                    is_folder,
+                                    recency: 0,
+                                })
+                                .collect::<Vec<_>>())
+                        }
+                        (Tab::Samples, dir) => app.files.sample_library().list(dir),
+                        (_, dir) => app.files.library.list(dir),
                     };
                     let mut entries = read.unwrap_or_default();
                     entries.sort_by(|a, b| {
@@ -461,9 +510,30 @@ impl Docks {
                 }
             }
             Some(slot) => {
-                if !self.folders[slot].is_empty() {
-                    items.push(Item::Up);
+                if let Some(top) = self.folders[slot].last() {
+                    items.push(Item::Up(place_name(top, app.files.user_dir())));
                 } else if tab == Tab::Samples {
+                    // The top: the places (the internal storage, its music folders, the pinned ones), then the app's
+                    // own library.
+                    if let Some(root) = device_storage::root() {
+                        items.push(Item::Section("PLACES"));
+                        if self.storage.0 {
+                            items.push(Item::Place("Internal storage".into(), root, false));
+                            for (name, path) in device_storage::places() {
+                                items.push(Item::Place(name, path, false));
+                            }
+                            for path in &self.pins {
+                                let name = place_name(path, None);
+                                items.push(Item::Place(name, path.clone(), true));
+                            }
+                        } else {
+                            items.push(Item::Grant);
+                        }
+                        items.push(Item::Section("LIBRARY"));
+                    }
+                    if let Some(user) = app.files.user_dir() {
+                        items.push(Item::Place("My library".into(), user.to_path_buf(), false));
+                    }
                     items.push(Item::AddFolder);
                 }
                 let entries = self.files.as_ref().map_or(&[][..], |(_, e)| &e[..]);
@@ -492,11 +562,18 @@ impl Docks {
         let small = m.font_id(FontSize::Pt8);
         let mut click = None;
         let mut begun: Option<(BrowserAction, String)> = None;
+        let mut pin: Option<PathBuf> = None;
+        let mut unreadable = false;
+        let user = app.files.user_dir().map(std::path::Path::to_path_buf);
         let mut child = ui.new_child(UiBuilder::new().max_rect(list).id(("dock list", tab as u8)));
         child.set_clip_rect(list.intersect(ui.clip_rect()));
         egui::ScrollArea::vertical()
             .id_salt(("dock list scroll", tab as u8))
-            .enable_scrolling(!crate::ui::file_drag::dragging(ui.ctx()))
+            .scroll_source(if crate::ui::file_drag::dragging(ui.ctx()) {
+                egui::scroll_area::ScrollSource::NONE
+            } else {
+                egui::scroll_area::ScrollSource::ALL
+            })
             .auto_shrink([false, false])
             .show_rows(&mut child, row_h, items.len(), |ui, range| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
@@ -523,35 +600,17 @@ impl Docks {
                         Item::Note(text) => {
                             painter.text(at, Align2::LEFT_CENTER, text, small.clone(), look.dim);
                         }
-                        Item::Up => {
-                            chevron(
+                        Item::Up(name) => {
+                            triangle(
                                 painter,
                                 pos2(r.left() + pad + m.u(0.2), r.center().y),
-                                m.u(0.22),
+                                m.u(0.2),
                                 Dir::Left,
                                 look.text,
-                                look.px,
-                            );
-                            painter.text(
-                                pos2(at.x + m.u(0.8), at.y),
-                                Align2::LEFT_CENTER,
-                                "Back",
-                                font.clone(),
-                                look.text,
-                            );
-                        }
-                        Item::Folder(e) => {
-                            chevron(
-                                painter,
-                                pos2(r.left() + pad + m.u(0.2), r.center().y),
-                                m.u(0.22),
-                                Dir::Right,
-                                look.dim,
-                                look.px,
                             );
                             let name = ellipsis(
                                 painter,
-                                &e.name,
+                                name,
                                 &font,
                                 look.text,
                                 r.width() - pad - m.u(1.2),
@@ -563,6 +622,112 @@ impl Docks {
                                 font.clone(),
                                 look.text,
                             );
+                        }
+                        Item::Place(name, path, pinned) => {
+                            folder_icon(
+                                painter,
+                                pos2(r.left() + pad + m.u(0.45), r.center().y),
+                                m.u(0.5),
+                                look.accent,
+                                look.px,
+                            );
+                            let name = ellipsis(
+                                painter,
+                                name,
+                                &font,
+                                look.text,
+                                r.width() - pad - m.u(3.0),
+                            );
+                            painter.text(
+                                pos2(at.x + m.u(1.3), at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.text,
+                            );
+                            if *pinned {
+                                pin_icon(
+                                    painter,
+                                    pos2(r.right() - m.u(0.8), r.center().y),
+                                    m.u(0.5),
+                                    true,
+                                    look,
+                                );
+                                let pin_r = Rect::from_min_size(
+                                    pos2(r.right() - m.u(1.5), r.top()),
+                                    vec2(m.u(1.5), r.height()),
+                                );
+                                let id = egui::Id::new(("dock unpin", path.clone()));
+                                if ui.interact(pin_r, id, sense).clicked() {
+                                    pin = Some(path.clone());
+                                }
+                            }
+                        }
+                        Item::Grant => {
+                            folder_icon(
+                                painter,
+                                pos2(r.left() + pad + m.u(0.45), r.center().y),
+                                m.u(0.5),
+                                look.accent,
+                                look.px,
+                            );
+                            let name = ellipsis(
+                                painter,
+                                "Allow access to internal storage",
+                                &font,
+                                look.accent,
+                                r.width() - pad - m.u(1.5),
+                            );
+                            painter.text(
+                                pos2(at.x + m.u(1.3), at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.accent,
+                            );
+                        }
+                        Item::Folder(e) => {
+                            let device = on_storage(&e.path);
+                            folder_icon(
+                                painter,
+                                pos2(r.left() + pad + m.u(0.45), r.center().y),
+                                m.u(0.5),
+                                look.dim,
+                                look.px,
+                            );
+                            let name = ellipsis(
+                                painter,
+                                &e.name,
+                                &font,
+                                look.text,
+                                r.width() - pad - m.u(if device { 3.0 } else { 1.8 }),
+                            );
+                            painter.text(
+                                pos2(at.x + m.u(1.3), at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.text,
+                            );
+                            // A folder of the internal storage can be pinned as a place.
+                            if device {
+                                let on = self.pins.contains(&e.path);
+                                pin_icon(
+                                    painter,
+                                    pos2(r.right() - m.u(0.8), r.center().y),
+                                    m.u(0.5),
+                                    on,
+                                    look,
+                                );
+                                let pin_r = Rect::from_min_size(
+                                    pos2(r.right() - m.u(1.5), r.top()),
+                                    vec2(m.u(1.5), r.height()),
+                                );
+                                let id = egui::Id::new(("dock pin", e.path.clone()));
+                                if ui.interact(pin_r, id, sense).clicked() {
+                                    pin = Some(e.path.clone());
+                                }
+                            }
                         }
                         Item::AddFolder => {
                             let plus = pos2(r.left() + pad + m.u(0.2), r.center().y);
@@ -578,7 +743,7 @@ impl Docks {
                             );
                             let name = ellipsis(
                                 painter,
-                                "Add folder from device...",
+                                "Import a folder into the library...",
                                 &font,
                                 look.accent,
                                 r.width() - pad - m.u(1.2),
@@ -592,9 +757,31 @@ impl Docks {
                             );
                         }
                         Item::File(e) => {
-                            let name =
-                                ellipsis(painter, &e.name, &font, look.text, r.width() - 2.0 * pad);
-                            painter.text(at, Align2::LEFT_CENTER, name, font.clone(), look.text);
+                            let sample = tab == Tab::Samples;
+                            let shift = if sample { m.u(1.3) } else { 0.0 };
+                            if sample {
+                                wave_icon(
+                                    painter,
+                                    pos2(r.left() + pad + m.u(0.45), r.center().y),
+                                    m.u(0.5),
+                                    look.dim,
+                                    look.px,
+                                );
+                            }
+                            let name = ellipsis(
+                                painter,
+                                &e.name,
+                                &font,
+                                look.text,
+                                r.width() - 2.0 * pad - shift,
+                            );
+                            painter.text(
+                                pos2(at.x + shift, at.y),
+                                Align2::LEFT_CENTER,
+                                name,
+                                font.clone(),
+                                look.text,
+                            );
                         }
                         Item::Module(entry) => {
                             let name = ellipsis(
@@ -635,18 +822,31 @@ impl Docks {
                     }
                     // A long press then a drag on a sample row carries the file to the playlist: where it lands on a
                     // track it makes a clip, and anywhere else a new audio track ([`crate::ui::file_drag`]).
+                    // A file of the internal storage is copied into `My Samples/Device` first: a project reads its files from
+                    // the user folder.
                     if let Item::File(e) = item
                         && tab == Tab::Samples
                         && active
+                        && !crate::ui::file_drag::dragging(ui.ctx())
                         && crate::ui::file_drag::row_dragged(ui, &response, m)
                     {
-                        crate::ui::file_drag::start(ui.ctx(), &e.path, &e.name);
+                        let path = if on_storage(&e.path) {
+                            (user.as_deref()).and_then(|u| device_storage::bring_in(u, &e.path))
+                        } else {
+                            Some(e.path.clone())
+                        };
+                        match path {
+                            Some(path) => crate::ui::file_drag::start(ui.ctx(), &path, &e.name),
+                            None => unreadable = true,
+                        }
                     }
                     if response.clicked() {
                         click = match item {
                             Item::AddFolder => Some(Click::AddFolder),
                             Item::Module(entry) => Some(Click::Pick(entry.action())),
-                            Item::Up => Some(Click::Up),
+                            Item::Up(_) => Some(Click::Up),
+                            Item::Grant => Some(Click::Grant),
+                            Item::Place(_, path, _) => Some(Click::Enter(path.clone())),
                             Item::Folder(e) => Some(Click::Enter(e.path.clone())),
                             Item::File(e) if tab == Tab::Projects => {
                                 Some(Click::Open(e.path.clone()))
@@ -660,6 +860,19 @@ impl Docks {
 
         if begun.is_some() {
             self.drag = begun;
+        }
+        if unreadable {
+            app.files.flash("Could not read that file");
+        }
+        if let Some(path) = pin {
+            if let Some(at) = self.pins.iter().position(|p| *p == path) {
+                self.pins.remove(at);
+            } else {
+                self.pins.push(path);
+            }
+            if let Some(user) = user.as_deref() {
+                save_pins(user, &self.pins);
+            }
         }
         match click? {
             Click::Pick(action) => {
@@ -688,6 +901,12 @@ impl Docks {
                 super::main_menu::replace(app, Replace::Open(path));
                 None
             }
+            Click::Grant => {
+                device_storage::ask();
+                // Asked again at once on the way back.
+                self.storage.1 = f64::NEG_INFINITY;
+                None
+            }
             Click::AddFolder => {
                 // The system folder picker; the folder's audio is copied into `My Samples` after a Yes, and listed.
                 app.files.pick_folder();
@@ -705,7 +924,9 @@ impl Docks {
                         tick: 0,
                     })),
                     None => {
-                        app.files.flash("Select an audio track to add a sample");
+                        app.files.flash(
+                            "Select an audio track, or hold a sample and drag it onto the playlist",
+                        );
                         None
                     }
                 }
@@ -942,16 +1163,85 @@ enum Dir {
     Down,
 }
 
-/// A chevron `size` big at `center`, two 1 px strokes (no glyph: every font draws it the same).
-fn chevron(painter: &egui::Painter, center: Pos2, size: f32, dir: Dir, color: Color32, px: f32) {
+/// A solid triangle `size` from its centre to its corners, pointing `dir`: Ableton's disclosure arrow.
+fn triangle(painter: &egui::Painter, center: Pos2, size: f32, dir: Dir, color: Color32) {
     let (a, b, tip) = match dir {
         Dir::Left => (vec2(size, -size), vec2(size, size), vec2(-size, 0.0)),
         Dir::Right => (vec2(-size, -size), vec2(-size, size), vec2(size, 0.0)),
         Dir::Down => (vec2(-size, -size), vec2(size, -size), vec2(0.0, size)),
     };
-    let stroke = Stroke::new(2.0 * px, color);
-    painter.line_segment([center + a, center + tip], stroke);
-    painter.line_segment([center + b, center + tip], stroke);
+    painter.add(Shape::convex_polygon(
+        vec![center + a, center + b, center + tip],
+        color,
+        Stroke::NONE,
+    ));
+}
+
+/// The arrows of the docks: solid triangles, as Live draws them.
+fn chevron(painter: &egui::Painter, center: Pos2, size: f32, dir: Dir, color: Color32, _px: f32) {
+    triangle(painter, center, size * 0.8, dir, color);
+}
+
+/// A folder: a body with its tab, `size` wide.
+fn folder_icon(painter: &egui::Painter, c: Pos2, size: f32, color: Color32, _px: f32) {
+    let (w, h) = (size * 0.5, size * 0.36);
+    let body = Rect::from_center_size(c + vec2(0.0, h * 0.15), vec2(2.0 * w, 1.6 * h));
+    painter.rect_filled(body, size * 0.06, color);
+    let tab = Rect::from_min_size(
+        pos2(body.left(), body.top() - h * 0.45),
+        vec2(w * 0.8, h * 0.5),
+    );
+    painter.rect_filled(tab, size * 0.05, color);
+}
+
+/// An audio file: a few bars of a waveform, `size` high.
+fn wave_icon(painter: &egui::Painter, c: Pos2, size: f32, color: Color32, _px: f32) {
+    let heights = [0.35, 0.8, 0.55, 1.0, 0.45, 0.7];
+    let (step, n) = (size * 0.2, heights.len() as f32);
+    for (i, h) in heights.into_iter().enumerate() {
+        let x = c.x + (i as f32 - (n - 1.0) / 2.0) * step;
+        painter.line_segment(
+            [
+                pos2(x, c.y - h * size * 0.45),
+                pos2(x, c.y + h * size * 0.45),
+            ],
+            Stroke::new(size * 0.1, color),
+        );
+    }
+}
+
+/// A bookmark: filled in the accent while the folder is pinned as a place.
+fn pin_icon(painter: &egui::Painter, c: Pos2, size: f32, on: bool, look: &Look) {
+    let (w, h) = (size * 0.28, size * 0.42);
+    let points = vec![
+        c + vec2(-w, -h),
+        c + vec2(w, -h),
+        c + vec2(w, h),
+        c + vec2(0.0, h * 0.45),
+        c + vec2(-w, h),
+    ];
+    let tone = if on { look.accent } else { look.dim };
+    painter.add(Shape::closed_line(
+        points,
+        Stroke::new((if on { 2.5 } else { 1.5 }) * look.px, tone),
+    ));
+    if on {
+        let top = Rect::from_min_max(c + vec2(-w, -h), c + vec2(w, h * 0.2));
+        painter.rect_filled(top, 0.0, look.accent);
+    }
+}
+
+/// The name a place or folder is listed under: `Internal storage` for the storage's root, `Library` for the user
+/// folder, else the folder's own name.
+fn place_name(path: &std::path::Path, user: Option<&std::path::Path>) -> String {
+    if user.is_some_and(|u| u == path) {
+        return "Library".into();
+    }
+    if device_storage::root().is_some_and(|r| r == path) {
+        return "Internal storage".into();
+    }
+    path.file_name()
+        .map_or_else(|| "Folder".into(), |n| n.to_string_lossy().into_owned())
 }
 
 /// `text` cut to `room` points, ending in an ellipsis when it does not fit.

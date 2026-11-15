@@ -75,6 +75,7 @@ pub use plain::{display_area, separator, text_label};
 pub use slider::{h_slider, v_slider};
 pub use spinner::{spinner, spinner_button, spinner_grid, spinner_index};
 pub use text_toggle::{disc_toggle, text_button, text_toggle};
+pub(crate) use toggle::flip;
 pub use toggle::{Pill, pill_toggle, toggle};
 
 /// Height of the label strip at the top and of the value strip at the bottom, in U.

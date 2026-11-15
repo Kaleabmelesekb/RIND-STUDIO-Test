@@ -28,6 +28,7 @@ pub mod fx;
 pub mod ids;
 pub mod osc;
 pub mod params;
+mod preset_table;
 pub mod presets;
 pub mod ranges;
 pub mod shared;

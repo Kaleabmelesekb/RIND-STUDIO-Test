@@ -1033,6 +1033,7 @@ pub fn stretch_by(events: &mut [Event], which: &[bool], k: f64) {
 }
 
 /// Gives each flagged note a velocity of 65 to 135 % of its own, from `seed` (the same seed, the same result).
+#[cfg(test)]
 pub fn randomize_velocity(events: &mut [Event], which: &[bool], seed: u64) {
     randomize_velocity_by(events, which, seed, 1.0);
 }

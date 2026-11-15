@@ -53,7 +53,7 @@ fn place(c: &Control, m: &Metrics, label_right: bool) -> (Pos2, Option<Pos2>) {
 
 /// A primary click writes 1 from exactly 0 and 0 from anything else ([`toggle_on`]); a long press or secondary click
 /// opens the parameter menu, which has no `Reset`. Returns the response and the value to draw.
-pub(super) fn flip(ui: &mut Ui, cx: &UiCtx, c: &Control, value: &mut f32) -> (Response, f32) {
+pub(crate) fn flip(ui: &mut Ui, cx: &UiCtx, c: &Control, value: &mut f32) -> (Response, f32) {
     let sense = if c.disabled {
         Sense::hover()
     } else {

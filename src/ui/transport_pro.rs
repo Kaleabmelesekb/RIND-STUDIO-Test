@@ -20,6 +20,8 @@ use crate::ui::widgets;
 pub struct BarExtras {
     /// The metronome flag: the engine clicks while the transport plays.
     pub metronome: bool,
+    /// A loop range is set: the engine plays it over and over.
+    pub looping: bool,
     pub time_sig: TimeSig,
     /// The playhead, in song ticks.
     pub tick: u64,
@@ -30,6 +32,7 @@ impl Default for BarExtras {
     fn default() -> Self {
         Self {
             metronome: false,
+            looping: false,
             time_sig: TimeSig::default(),
             tick: 0,
             bpm: 120.0,
@@ -42,6 +45,8 @@ impl Default for BarExtras {
 pub struct BarAsk {
     /// The metronome button was tapped.
     pub metronome: bool,
+    /// The loop button was tapped: a set range clears, none sets four bars.
+    pub looping: bool,
     /// The fourth `TAP` of a group: the tempo it gives.
     pub tempo: Option<f64>,
     /// The time signature or the position was tapped: the tempo dialog holds the signature.
@@ -193,6 +198,28 @@ pub fn extras(
         metronome_icon(ui.painter(), r.center(), r.height(), ink, px);
         if response.clicked() {
             ask.metronome = true;
+        }
+    }
+    // The loop range.
+    if let Some(r) = take(m.u(1.5)) {
+        let response = ui.interact(r, Id::new(("transport", "loop")), Sense::click());
+        let hot = widgets::hovered(ui, &response);
+        let fill = if state.looping {
+            accent
+        } else if hot {
+            Color32::from_white_alpha(30)
+        } else {
+            Color32::from_white_alpha(14)
+        };
+        ui.painter().rect_filled(r, m.u(0.14), fill);
+        let ink = if state.looping {
+            c.control_fill.to_color32()
+        } else {
+            text
+        };
+        crate::icons::draw_icon(ui.painter(), r, crate::icons::IconId::Loop, ink, 0.8, m);
+        if response.clicked() {
+            ask.looping = true;
         }
     }
     // TAP tempo.

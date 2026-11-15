@@ -124,6 +124,12 @@ pub enum Nav {
     Menu,
     /// The next (true) or previous patch.
     Patch(bool),
+    /// The preset browser opens or closes.
+    Presets,
+    /// The preset browser lists category `i`.
+    Category(usize),
+    /// The preset browser's next (true) or previous page.
+    PresetPage(bool),
 }
 
 /// What the screen is showing, and the list open, if any (the parameter it picks).
@@ -136,6 +142,10 @@ pub struct Ui {
     pub popup: Option<usize>,
     /// The display's menu is open.
     pub menu: bool,
+    /// The preset browser is open, listing category `cat` from page `ppage`.
+    pub presets: bool,
+    pub cat: usize,
+    pub ppage: usize,
     /// The keys of the on-screen keyboard held down, one bit per note (any number at once).
     pub keys: u128,
 }
@@ -149,12 +159,34 @@ impl Ui {
             Nav::Page(i) => self.page = i.min(1),
             Nav::Menu => self.menu = !self.menu,
             Nav::Patch(_) => {}
+            Nav::Presets => {
+                self.presets = !self.presets;
+                self.menu = false;
+            }
+            Nav::Category(c) => {
+                self.cat = c.min(crate::presets::CATEGORIES.len() - 1);
+                self.ppage = 0;
+            }
+            Nav::PresetPage(next) => {
+                let last = preset_pages(self.cat) - 1;
+                self.ppage = if next {
+                    (self.ppage + 1).min(last)
+                } else {
+                    self.ppage.saturating_sub(1)
+                };
+            }
         }
     }
 }
 
 /// What the display's menu offers, in order.
-pub const MENU_ITEMS: [&str; 4] = ["Reload Patch", "Init Patch", "Previous Patch", "Next Patch"];
+pub const MENU_ITEMS: [&str; 5] = [
+    "Reload Patch",
+    "Init Patch",
+    "Previous Patch",
+    "Next Patch",
+    "Browse Presets",
+];
 
 const FX_NAMES: [&str; 8] = [
     "ARPEG", "DISTORT", "PHASER", "CHORUS", "EQ", "DELAY", "REVERB", "COMPRESS",
@@ -255,6 +287,10 @@ pub enum Kind {
     Item(usize),
     /// Entry `i` of the display's open menu.
     MenuItem(usize),
+    /// Patch `i` in the open preset browser.
+    Preset(usize),
+    /// The preset browser's panel: a press on it goes no further.
+    Backdrop,
     /// Anywhere else while a list is open: it closes.
     Dismiss,
 }
@@ -272,7 +308,13 @@ impl Hit {
     pub fn is_param(&self) -> bool {
         !matches!(
             self.kind,
-            Kind::Nav(_) | Kind::Item(_) | Kind::MenuItem(_) | Kind::Dismiss | Kind::Key(_)
+            Kind::Nav(_)
+                | Kind::Item(_)
+                | Kind::MenuItem(_)
+                | Kind::Preset(_)
+                | Kind::Backdrop
+                | Kind::Dismiss
+                | Kind::Key(_)
         )
     }
 }
@@ -1350,6 +1392,21 @@ pub fn layout(ui: &Ui) -> Vec<Hit> {
         kind: Kind::Dismiss,
         r: Rect::new(0.0, 0.0, W as f32, H as f32),
     };
+    if ui.presets {
+        let g = preset_rects(ui);
+        let hit = |kind, r| Hit { param: 0, kind, r };
+        let mut hits = vec![dismiss, hit(Kind::Backdrop, g.panel)];
+        hits.push(hit(Kind::Nav(Nav::Presets), g.close));
+        for (i, r) in g.cats.iter().enumerate() {
+            hits.push(hit(Kind::Nav(Nav::Category(i)), *r));
+        }
+        if g.pages > 1 {
+            hits.push(hit(Kind::Nav(Nav::PresetPage(false)), g.prev));
+            hits.push(hit(Kind::Nav(Nav::PresetPage(true)), g.next));
+        }
+        hits.extend(g.items.iter().map(|&(i, r)| hit(Kind::Preset(i), r)));
+        return hits;
+    }
     if ui.menu {
         let (_, rects) = popup_rects(menu_rect(), MENU_ITEMS.len());
         let mut hits = vec![dismiss];
@@ -1374,14 +1431,138 @@ pub fn layout(ui: &Ui) -> Vec<Hit> {
         }
         return hits;
     }
-    pg.items
+    let mut hits: Vec<Hit> = pg
+        .items
         .iter()
         .map(|it| Hit {
             param: it.param,
             kind: it.kind,
             r: it.r,
         })
-        .collect()
+        .collect();
+    // The patch bar's name opens the preset browser.
+    hits.push(Hit {
+        param: 0,
+        kind: Kind::Nav(Nav::Presets),
+        r: rr(500.0, 225.0, 330.0, 24.0),
+    });
+    hits
+}
+
+// ---- the preset browser ----------------------------------------------------------------------------------------
+
+/// How many patches a page of the preset browser lists: three columns of twelve.
+pub const PRESETS_PER_PAGE: usize = 36;
+const PRESET_ROWS: usize = 12;
+
+/// The pages of category `cat`.
+pub fn preset_pages(cat: usize) -> usize {
+    crate::presets::in_category(cat)
+        .len()
+        .div_ceil(PRESETS_PER_PAGE)
+        .max(1)
+}
+
+/// Where the preset browser puts everything, for `ui`'s category and page.
+struct PresetRects {
+    panel: Rect,
+    close: Rect,
+    cats: Vec<Rect>,
+    /// The patches of the page, by number.
+    items: Vec<(usize, Rect)>,
+    prev: Rect,
+    next: Rect,
+    label: Rect,
+    pages: usize,
+}
+
+fn preset_rects(ui: &Ui) -> PresetRects {
+    let panel = Rect::new(20.0, 14.0, W as f32 - 40.0, H as f32 - 28.0);
+    let close = Rect::new(panel.right() - 40.0, panel.y + 4.0, 32.0, 26.0);
+    let top = panel.y + 42.0;
+    let cats = (0..crate::presets::CATEGORIES.len())
+        .map(|i| Rect::new(panel.x + 10.0, top + 32.0 * i as f32, 150.0, 30.0))
+        .collect();
+    let list_x = panel.x + 172.0;
+    let col_w = (panel.right() - 10.0 - list_x) / 3.0;
+    let range = crate::presets::in_category(ui.cat);
+    let pages = preset_pages(ui.cat);
+    let first = range.start + ui.ppage.min(pages - 1) * PRESETS_PER_PAGE;
+    let last = range.end.min(first + PRESETS_PER_PAGE);
+    let items = (first..last)
+        .map(|i| {
+            let k = i - first;
+            let r = Rect::new(
+                list_x + (k / PRESET_ROWS) as f32 * col_w,
+                top + 32.0 * (k % PRESET_ROWS) as f32,
+                col_w - 4.0,
+                30.0,
+            );
+            (i, r)
+        })
+        .collect();
+    let foot = top + 32.0 * PRESET_ROWS as f32 + 4.0;
+    let prev = Rect::new(panel.right() - 190.0, foot, 40.0, 30.0);
+    let next = Rect::new(panel.right() - 50.0, foot, 40.0, 30.0);
+    let label = Rect::new(prev.right(), foot, next.x - prev.right(), 30.0);
+    PresetRects {
+        panel,
+        close,
+        cats,
+        items,
+        prev,
+        next,
+        label,
+        pages,
+    }
+}
+
+fn paint_presets(c: &mut Canvas, v: &dyn Values, ui: &Ui) {
+    let g = preset_rects(ui);
+    let now = v.plain(ids::PATCH).round().max(0.0) as usize;
+    c.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), SHADE);
+    c.fill_rrect(g.panel.inset(-2.0), 7.0, INK_DIM);
+    c.fill_rrect(g.panel, 6.0, PAPER);
+    let head = Rect::new(g.panel.x, g.panel.y, g.panel.w, 34.0);
+    c.fill_rrect(head, 6.0, BLUE);
+    let bold = Font::new(10).bold();
+    let ty = (head.cy() - c.line_height(bold) / 2.0).round();
+    c.text(bold, head.x + 14.0, ty, WHITE, "PRESETS");
+    let title = format!(
+        "{}  -  {} patches",
+        crate::presets::CATEGORIES[ui.cat.min(crate::presets::CATEGORIES.len() - 1)],
+        crate::presets::in_category(ui.cat).len()
+    );
+    c.text_right(bold, g.close.x - 10.0, ty, WHITE, &title);
+    c.fill_rect(g.close, BLUE_DARK);
+    let (cx, cy, a) = (g.close.cx(), g.close.cy(), 5.0);
+    c.line(cx - a, cy - a, cx + a, cy + a, 2.0, WHITE);
+    c.line(cx - a, cy + a, cx + a, cy - a, 2.0, WHITE);
+    for (i, r) in g.cats.iter().enumerate() {
+        let on = i == ui.cat;
+        c.fill_rect(*r, if on { BLUE } else { PAPER_HI });
+        c.stroke_rrect(*r, 0.0, 1.0, INK_DIM);
+        let ink = if on { WHITE } else { INK };
+        let ty = (r.cy() - c.line_height(VALUE) / 2.0).round();
+        c.text(VALUE, r.x + 10.0, ty, ink, crate::presets::CATEGORIES[i]);
+        let n = crate::presets::in_category(i).len().to_string();
+        c.text_right(VALUE, r.right() - 10.0, ty, ink, &n);
+    }
+    for &(i, r) in &g.items {
+        let on = i == now;
+        c.fill_rect(r, if on { BLUE } else { PAPER_HI });
+        c.stroke_rrect(r, 0.0, 1.0, INK_DIM);
+        let name = crate::presets::title(i);
+        let f = c.fit_font(VALUE, name, r.w - 16.0);
+        let ty = (r.cy() - c.line_height(f) / 2.0).round();
+        c.text(f, r.x + 8.0, ty, if on { WHITE } else { INK }, name);
+    }
+    if g.pages > 1 {
+        paint_step(c, g.prev, false);
+        paint_step(c, g.next, true);
+        let text = format!("page {} / {}", ui.ppage.min(g.pages - 1) + 1, g.pages);
+        c.text_center(VALUE, g.label, INK, &text);
+    }
 }
 
 // ---- painting --------------------------------------------------------------------------------------------------
@@ -1410,7 +1591,9 @@ pub fn paint(
     for it in &pg.items {
         paint_item(c, v, ui, it, pressed == Some(it.param));
     }
-    if ui.menu {
+    if ui.presets {
+        paint_presets(c, v, ui);
+    } else if ui.menu {
         paint_menu(c);
     } else if let Some(p) = ui.popup
         && let Some(anchor) = pg.items.iter().find(|i| i.param == p).map(|i| i.r)
@@ -2618,6 +2801,62 @@ mod tests {
     }
 
     #[test]
+    fn every_patch_is_listed_in_the_preset_browser_inside_the_window() {
+        let mut seen = vec![false; crate::presets::COUNT];
+        for cat in 0..crate::presets::CATEGORIES.len() {
+            for ppage in 0..preset_pages(cat) {
+                let ui = Ui {
+                    presets: true,
+                    cat,
+                    ppage,
+                    ..Ui::default()
+                };
+                let hits = layout(&ui);
+                assert_eq!(hits[0].kind, Kind::Dismiss);
+                for h in &hits {
+                    assert!(inside(window(), h.r), "{h:?}");
+                    if let Kind::Preset(i) = h.kind {
+                        assert_eq!(crate::presets::category(i), cat);
+                        assert!(h.r.h >= 28.0 && h.r.w >= 120.0, "{h:?}");
+                        seen[i] = true;
+                    }
+                }
+                let items: Vec<_> = hits
+                    .iter()
+                    .filter(|h| matches!(h.kind, Kind::Preset(_)))
+                    .collect();
+                for (k, a) in items.iter().enumerate() {
+                    for b in &items[k + 1..] {
+                        assert!(apart(a.r, b.r), "{a:?} {b:?}");
+                    }
+                }
+            }
+        }
+        assert!(seen.iter().all(|&b| b), "a patch is not in any page");
+    }
+
+    #[test]
+    fn the_patch_bar_opens_the_browser_and_its_page_buttons_stay_in_range() {
+        let hits = layout(&Ui::default());
+        assert!(hits.iter().any(|h| h.kind == Kind::Nav(Nav::Presets)));
+        let mut ui = Ui::default();
+        ui.apply(Nav::Presets);
+        assert!(ui.presets);
+        ui.apply(Nav::Category(9999));
+        assert_eq!(ui.cat, crate::presets::CATEGORIES.len() - 1);
+        for _ in 0..50 {
+            ui.apply(Nav::PresetPage(true));
+        }
+        assert_eq!(ui.ppage, preset_pages(ui.cat) - 1);
+        for _ in 0..50 {
+            ui.apply(Nav::PresetPage(false));
+        }
+        assert_eq!(ui.ppage, 0);
+        ui.apply(Nav::Presets);
+        assert!(!ui.presets);
+    }
+
+    #[test]
     fn selectors_with_many_names_are_drop_downs_and_boxes_with_arrows_step() {
         assert!(dropdown(mat_param(8, ids::mat::SRC)));
         assert!(dropdown(mat_param(0, ids::mat::DST)));
@@ -2849,6 +3088,16 @@ mod tests {
             ..Ui::default()
         };
         assert_eq!(paint(&mut c, &Defaults, &menu, None, None), layout(&menu));
+        let browser = Ui {
+            presets: true,
+            cat: 6,
+            ppage: 0,
+            ..Ui::default()
+        };
+        assert_eq!(
+            paint(&mut c, &Defaults, &browser, None, None),
+            layout(&browser)
+        );
     }
 
     #[test]

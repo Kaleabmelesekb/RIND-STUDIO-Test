@@ -10,6 +10,7 @@ pub mod audio_link;
 #[cfg(any(target_arch = "wasm32", test))]
 pub mod collaboration;
 pub mod content;
+pub mod device_storage;
 pub mod flm;
 pub mod flp;
 pub mod fonts;

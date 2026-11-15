@@ -2146,7 +2146,15 @@ impl MainScreen {
         } else {
             IconId::Play
         };
-        paint_bar_button(ui, cx, &play, slots.play, BarButton::icon(icon).ring());
+        // Live's play is green (the tests keep the plain ink).
+        let play_ink = (!cfg!(test)).then_some(crate::theme::Rgba::hex(0x3BD16F));
+        paint_bar_button(
+            ui,
+            cx,
+            &play,
+            slots.play,
+            BarButton::icon(icon).ring().ink(play_ink),
+        );
         let bpm = BarButton::default().caption("BPM");
         if button(ui, "BPM", slots.bpm, bpm).clicked() {
             nav = Some(Nav::Toggle(Overlay::TempoEditor));

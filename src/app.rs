@@ -2239,6 +2239,7 @@ impl HoneydewApp {
                 // The control bar's position, clock, metronome and time signature.
                 self.main_screen.bar = crate::ui::transport_pro::BarExtras {
                     metronome: self.audio.metronome_flag(),
+                    looping: self.song.play_loop.is_some(),
                     time_sig: self.song.time_sig,
                     tick: snapshot
                         .as_ref()
@@ -2511,6 +2512,14 @@ impl HoneydewApp {
         if actions.bar.metronome {
             let (on, level) = (!self.audio.metronome_flag(), self.settings.metronome_level);
             self.audio.send(AudioCommand::MetronomeFlag { on, level });
+        }
+        if actions.bar.looping {
+            // Four bars from the start, or no range.
+            let bar = crate::song::PPQ * self.song.time_sig.bar_beats();
+            self.song.play_loop = match self.song.play_loop {
+                Some(_) => None,
+                None => Some((0, 4 * bar)),
+            };
         }
         if let Some(bpm) = actions.bar.tempo {
             self.song.set_tempo(bpm);
