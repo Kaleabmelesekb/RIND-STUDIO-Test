@@ -353,8 +353,8 @@ mod tests {
 
     #[test]
     fn there_are_hundreds_of_patches_in_a_dozen_categories() {
-        assert!(COUNT >= 300, "{COUNT}");
-        assert!(CATEGORIES.len() >= 12);
+        assert!(std::hint::black_box(COUNT) >= 300, "{COUNT}");
+        assert!(std::hint::black_box(CATEGORIES.len()) >= 12);
         for c in 0..CATEGORIES.len() {
             assert!(!in_category(c).is_empty(), "{} is empty", CATEGORIES[c]);
         }

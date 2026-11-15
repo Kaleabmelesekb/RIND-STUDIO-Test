@@ -75,6 +75,14 @@ const METER_SHARE: f32 = 1.0 / 8.0;
 const GROUP_BAR: f32 = 0.2;
 const FOLD: f32 = 0.9;
 
+/// Live's track header: how much of the row is the track's colour, the near-black type and controls on it, the off
+/// activator and its number, and the lit solo.
+const LIVE_TINT: f32 = 0.9;
+const LIVE_INK: Color32 = Color32::from_rgb(0x16, 0x16, 0x16);
+const LIVE_OFF: Color32 = Color32::from_rgb(0x4a, 0x4a, 0x4a);
+const LIVE_OFF_TEXT: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
+const LIVE_SOLO: Color32 = Color32::from_rgb(0x3e, 0x8e, 0xde);
+
 /// What a header row is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RowKind {
@@ -219,7 +227,15 @@ pub fn show(
             RowKind::Sub => c.control_fill,
             _ => c.module_fill,
         };
-        painter.rect_filled(rect, 0.0, fill.to_color32());
+        // Live's track header: the track's own colour behind dark type and controls (the tests keep the dark row).
+        let live = !cfg!(test) && kind != RowKind::Sub;
+        let face = if live { LIVE_INK } else { ink };
+        let fill = if live {
+            fill.to_color32().lerp_to_gamma(ink, LIVE_TINT)
+        } else {
+            fill.to_color32()
+        };
+        painter.rect_filled(rect, 0.0, fill);
         let is_current = row.channel == current;
         let peaks = meter_peaks(col.meters, row.channel);
         if kind == RowKind::Sub {
@@ -240,10 +256,15 @@ pub fn show(
                 };
                 let press = if is_current { col.press } else { 1.0 };
                 let grown = vec2(cell.width(), cell.height() * press);
+                let fill = if live { LIVE_INK } else { fill };
                 painter.rect_filled(Rect::from_center_size(cell.center(), grown), 0.0, fill);
-                c.module_fill.to_color32()
+                if live {
+                    ink
+                } else {
+                    c.module_fill.to_color32()
+                }
             } else {
-                ink
+                face
             };
             draw_icon(&painter, cell, row.icon, icon_ink, 1.0, m);
             if col.multitrack && row.armed {
@@ -291,7 +312,7 @@ pub fn show(
                 head.left() + m.u(CELL_W) + m.u(LABEL_INSET / 2.0)
             };
             let label = Rect::from_x_y_ranges(from..=head.right() - m.u(0.1), head.y_range());
-            widgets::truncated(&painter, label, Align2::LEFT_CENTER, name, font, ink, 5);
+            widgets::truncated(&painter, label, Align2::LEFT_CENTER, name, font, face, 5);
         }
         if kind == RowKind::Sub {
             sub_slider(&mut ui, cx, song, row, &placed, ink, &mut out);
@@ -302,7 +323,8 @@ pub fn show(
                 song,
                 row.channel,
                 &placed,
-                ink,
+                face,
+                live.then_some(ink),
                 peaks,
                 &mut out,
             );
@@ -479,6 +501,7 @@ fn strip(
     channel: usize,
     placed: &[(NodeId, Rect)],
     ink: Color32,
+    track: Option<Color32>,
     peaks: [f32; 2],
     out: &mut Output,
 ) {
@@ -496,6 +519,34 @@ fn strip(
         let none = |_| String::new();
         let grow = if held(ui, r) { PRESSED_GROWTH } else { 1.0 };
         let changed = match leaf {
+            MUTE if track.is_some() => {
+                // Live's activator: a square with the track's number, lit while the track sounds.
+                let (response, v) = widgets::flip(ui, cx, &control(0.0), &mut params[2]);
+                let lit = !toggle_on(v);
+                let side = r.width().min(r.height()) * 0.92 * grow;
+                let square = Rect::from_center_size(r.center(), vec2(side, side));
+                let fill = if lit { c.accent.to_color32() } else { LIVE_OFF };
+                ui.painter().rect_filled(square, m.u(0.12), fill);
+                let ink = if lit { LIVE_INK } else { LIVE_OFF_TEXT };
+                let font = m.font_id(FontSize::Pt8);
+                let number = (channel + 1).to_string();
+                ui.painter()
+                    .text(square.center(), Align2::CENTER_CENTER, number, font, ink);
+                response.changed()
+            }
+            SOLO if track.is_some() => {
+                let (response, v) = widgets::flip(ui, cx, &control(0.0), &mut params[3]);
+                let on = toggle_on(v);
+                let side = r.width().min(r.height()) * 0.92 * grow;
+                let square = Rect::from_center_size(r.center(), vec2(side, side));
+                let fill = if on { LIVE_SOLO } else { LIVE_OFF };
+                ui.painter().rect_filled(square, m.u(0.12), fill);
+                let ink = if on { LIVE_INK } else { LIVE_OFF_TEXT };
+                let font = m.font_id(FontSize::Pt8);
+                ui.painter()
+                    .text(square.center(), Align2::CENTER_CENTER, "S", font, ink);
+                response.changed()
+            }
             MUTE => {
                 // An invisible `moduleFill` disc behind the pill, which shows only pressed (× 1.15, radius × 1.05).
                 let disc = DISC_SHARE * r.width().min(r.height()) * grow;
