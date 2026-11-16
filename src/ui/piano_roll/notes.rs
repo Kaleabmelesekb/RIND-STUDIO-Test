@@ -1118,3 +1118,266 @@ pub fn chord_selected(events: &mut Vec<Event>, sel: &mut Vec<bool>, offsets: &[i
     events.extend(copies);
     sort(events, sel);
 }
+
+/// The step an arpeggio plays at: a sixteenth, in ticks.
+pub const ARP_STEP: f64 = BEAT / 4.0;
+/// The most notes one arpeggiated chord turns into.
+const MAX_ARP_NOTES: usize = 256;
+
+/// Turns each chord (flagged notes that start together, two or more keys) into an arpeggio: its keys one after the
+/// other, from the lowest up (`up`) or the highest down, `step` ticks each, repeating until the chord's longest note
+/// would have ended (at least once through). The new notes keep a source note's velocity, pan and slide and come out
+/// flagged. `false` when no chord was found.
+pub fn arpeggiate_selected(
+    events: &mut Vec<Event>,
+    sel: &mut Vec<bool>,
+    up: bool,
+    step: f64,
+) -> bool {
+    let step = step.max(1.0);
+    sel.resize(events.len(), false);
+    let mut chords: Vec<(f64, Vec<usize>)> = Vec::new();
+    for (i, (e, &on)) in events.iter().zip(sel.iter()).enumerate() {
+        let Some((pos, _, _)) = note(e).filter(|_| on) else {
+            continue;
+        };
+        match chords.iter_mut().find(|c| c.0 == pos) {
+            Some(c) => c.1.push(i),
+            None => chords.push((pos, vec![i])),
+        }
+    }
+    let mut gone = vec![false; events.len()];
+    let mut added: Vec<Event> = Vec::new();
+    for (pos, members) in chords {
+        let mut keys: Vec<(u8, usize)> = (members.iter())
+            .filter_map(|&i| note(&events[i]).map(|(_, _, key)| (key, i)))
+            .collect();
+        keys.sort_unstable();
+        keys.dedup_by_key(|k| k.0);
+        if keys.len() < 2 {
+            continue;
+        }
+        if !up {
+            keys.reverse();
+        }
+        let longest = (members.iter())
+            .filter_map(|&i| note(&events[i]).map(|(_, len, _)| len))
+            .fold(0.0, f64::max);
+        let count = ((longest / step).ceil() as usize).clamp(keys.len(), MAX_ARP_NOTES);
+        for &i in &members {
+            gone[i] = true;
+        }
+        for s in 0..count {
+            let (key, from) = keys[s % keys.len()];
+            added.push(with(events[from], pos + s as f64 * step, step, key));
+        }
+    }
+    if added.is_empty() {
+        return false;
+    }
+    let mut kept: Vec<(Event, bool)> = (events.iter().zip(sel.iter()))
+        .zip(&gone)
+        .filter(|t| !*t.1)
+        .map(|((e, &s), _)| (*e, s))
+        .collect();
+    kept.extend(added.into_iter().map(|e| (e, true)));
+    (*events, *sel) = kept.into_iter().unzip();
+    sort(events, sel);
+    true
+}
+
+/// Inverts each chord (flagged notes that start together, two or more): its lowest note goes up an octave (`up`) or its
+/// highest down one, unless that leaves the key range. Not re-sorted (starts do not change).
+pub fn invert_chords(events: &mut [Event], which: &[bool], up: bool) {
+    let notes: Vec<(f64, f64, u8)> = flagged(events, which).collect();
+    let new = map_notes(events, which, |pos, len, key| {
+        let chord: Vec<u8> = (notes.iter()).filter(|n| n.0 == pos).map(|n| n.2).collect();
+        let end = if up {
+            chord.iter().min()
+        } else {
+            chord.iter().max()
+        };
+        let moved = match end {
+            Some(&e) if chord.len() >= 2 && e == key => {
+                if up {
+                    key.checked_add(12).filter(|&k| k <= TOP_KEY)
+                } else {
+                    key.checked_sub(12)
+                }
+            }
+            _ => None,
+        };
+        (pos, len, moved.unwrap_or(key))
+    });
+    events.copy_from_slice(&new);
+}
+
+/// Removes the flagged notes that sit on another flagged note's start and key, keeping the longest of each. `true` when
+/// any went.
+pub fn remove_duplicates(events: &mut Vec<Event>, sel: &mut Vec<bool>) -> bool {
+    sel.resize(events.len(), false);
+    let mut best: Vec<((u32, u8), usize, f64)> = Vec::new();
+    let mut gone = vec![false; events.len()];
+    for (i, (e, &on)) in events.iter().zip(sel.iter()).enumerate() {
+        let Some((pos, len, key)) = note(e).filter(|_| on) else {
+            continue;
+        };
+        let at = (pos as u32, key);
+        match best.iter_mut().find(|b| b.0 == at) {
+            Some(b) if len > b.2 => {
+                gone[b.1] = true;
+                (b.1, b.2) = (i, len);
+            }
+            Some(_) => gone[i] = true,
+            None => best.push((at, i, len)),
+        }
+    }
+    if !gone.contains(&true) {
+        return false;
+    }
+    let mut drop = gone.iter();
+    events.retain(|_| !drop.next().copied().unwrap_or(false));
+    let mut drop = gone.iter();
+    sel.retain(|_| !drop.next().copied().unwrap_or(false));
+    true
+}
+
+#[cfg(test)]
+mod arrange_tests {
+    use super::*;
+
+    fn n(pos: u32, len: f64, key: u8) -> Event {
+        Event::Note {
+            pos,
+            len_beats: len / BEAT,
+            key,
+            velocity: Event::DEFAULT_VELOCITY,
+            pan: Event::DEFAULT_PAN,
+            slide: false,
+        }
+    }
+
+    fn spans(events: &[Event]) -> Vec<(u32, f64, u8)> {
+        events
+            .iter()
+            .filter_map(|e| note(e).map(|(p, l, k)| (p as u32, l, k)))
+            .collect()
+    }
+
+    #[test]
+    fn an_arpeggio_plays_the_chord_keys_in_turn_for_the_chords_length() {
+        // A bar-long triad: 16 sixteenths, C E G C E G ...
+        let mut events = vec![n(0, 512.0, 60), n(0, 512.0, 64), n(0, 512.0, 67)];
+        let mut sel = vec![true; 3];
+        assert!(arpeggiate_selected(&mut events, &mut sel, true, ARP_STEP));
+        let s = spans(&events);
+        assert_eq!(s.len(), 16);
+        for (i, &(pos, len, key)) in s.iter().enumerate() {
+            assert_eq!((pos, len), (i as u32 * 32, 32.0));
+            assert_eq!(key, [60, 64, 67][i % 3]);
+        }
+        assert_eq!(sel, vec![true; 16], "the new notes come out flagged");
+        // Down: from the highest.
+        let mut events = vec![n(0, 96.0, 60), n(0, 96.0, 64), n(0, 96.0, 67)];
+        let mut sel = vec![true; 3];
+        assert!(arpeggiate_selected(&mut events, &mut sel, false, ARP_STEP));
+        let keys: Vec<u8> = spans(&events).iter().map(|s| s.2).collect();
+        assert_eq!(keys, [67, 64, 60]);
+    }
+
+    #[test]
+    fn a_short_chord_still_plays_once_through_and_lone_or_unflagged_notes_stay() {
+        let mut events = vec![n(0, 10.0, 60), n(0, 10.0, 64), n(0, 10.0, 67)];
+        let mut sel = vec![true; 3];
+        assert!(arpeggiate_selected(&mut events, &mut sel, true, ARP_STEP));
+        assert_eq!(spans(&events).len(), 3);
+        let mut lone = vec![n(0, 128.0, 60), n(128, 128.0, 64)];
+        let mut sel = vec![true; 2];
+        assert!(!arpeggiate_selected(&mut lone, &mut sel, true, ARP_STEP));
+        assert_eq!(lone.len(), 2);
+        let mut chord = vec![n(0, 128.0, 60), n(0, 128.0, 64), n(256, 32.0, 50)];
+        let mut sel = vec![false, false, true];
+        assert!(!arpeggiate_selected(&mut chord, &mut sel, true, ARP_STEP));
+        assert_eq!(chord.len(), 3);
+    }
+
+    #[test]
+    fn a_selected_chord_among_other_notes_keeps_them_and_the_order() {
+        let mut events = vec![
+            n(0, 32.0, 40),
+            n(128, 64.0, 60),
+            n(128, 64.0, 64),
+            n(512, 32.0, 41),
+        ];
+        let mut sel = vec![false, true, true, false];
+        assert!(arpeggiate_selected(&mut events, &mut sel, true, ARP_STEP));
+        let s = spans(&events);
+        assert_eq!(
+            s.iter().map(|x| x.0).collect::<Vec<_>>(),
+            [0, 128, 160, 512]
+        );
+        assert_eq!(sel, [false, true, true, false]);
+        assert_eq!(s[0].2, 40);
+        assert_eq!(s[3].2, 41);
+    }
+
+    #[test]
+    fn inversions_move_the_lowest_note_up_or_the_highest_down_an_octave() {
+        let mut events = vec![
+            n(0, 64.0, 60),
+            n(0, 64.0, 64),
+            n(0, 64.0, 67),
+            n(128, 64.0, 50),
+        ];
+        let which = vec![true; 4];
+        invert_chords(&mut events, &which, true);
+        let keys: Vec<u8> = spans(&events).iter().map(|s| s.2).collect();
+        assert_eq!(keys, [72, 64, 67, 50], "the lone note stays");
+        invert_chords(&mut events, &which, false);
+        let keys: Vec<u8> = spans(&events).iter().map(|s| s.2).collect();
+        assert_eq!(keys, [60, 64, 67, 50], "back in root position");
+    }
+
+    #[test]
+    fn an_inversion_never_leaves_the_key_range() {
+        let mut top = vec![n(0, 64.0, 120), n(0, 64.0, 127)];
+        // The lowest (120) would go to 132: nothing moves.
+        invert_chords(&mut top, &[true; 2], true);
+        assert_eq!(
+            spans(&top).iter().map(|s| s.2).collect::<Vec<_>>(),
+            [120, 127]
+        );
+        let mut bottom = vec![n(0, 64.0, 0), n(0, 64.0, 5)];
+        invert_chords(&mut bottom, &[true; 2], false);
+        assert_eq!(
+            spans(&bottom).iter().map(|s| s.2).collect::<Vec<_>>(),
+            [0, 5]
+        );
+    }
+
+    #[test]
+    fn duplicates_leave_the_longest_and_only_flagged_notes_are_judged() {
+        let mut events = vec![
+            n(0, 32.0, 60),
+            n(0, 96.0, 60),
+            n(0, 64.0, 60),
+            n(0, 32.0, 62),
+            n(128, 32.0, 60),
+        ];
+        let mut sel = vec![true; 5];
+        assert!(remove_duplicates(&mut events, &mut sel));
+        assert_eq!(
+            spans(&events),
+            [(0, 96.0, 60), (0, 32.0, 62), (128, 32.0, 60)]
+        );
+        assert_eq!(sel.len(), 3);
+        assert!(!remove_duplicates(&mut events, &mut sel));
+        let mut twins = vec![n(0, 32.0, 60), n(0, 32.0, 60)];
+        let mut none = vec![true, false];
+        assert!(
+            !remove_duplicates(&mut twins, &mut none),
+            "one of them is not flagged"
+        );
+        assert_eq!(twins.len(), 2);
+    }
+}

@@ -448,6 +448,12 @@ enum MoreOp {
     Shift(i8),
     /// The tool panel's `Set`: every note takes this velocity (1 to 127).
     SetVelocity(u8),
+    /// Arpeggiate the chords from the lowest key up (`true`) or from the highest down.
+    Arp(bool),
+    /// Invert the chords: the lowest note up an octave (`true`) or the highest down one.
+    Invert(bool),
+    /// Remove the notes that sit on another's start and key.
+    Dedupe,
 }
 
 /// The floating buttons over a selection.
@@ -2222,6 +2228,31 @@ impl PianoRoll {
                 sort(&mut clip.events, sel);
             }
             MoreOp::Flip => flip_notes(&mut clip.events, &which),
+            MoreOp::Arp(up) => {
+                // With nothing selected the tool takes every note, and leaves nothing selected after.
+                let had = sel.contains(&true);
+                let mut all = which.clone();
+                arpeggiate_selected(&mut clip.events, &mut all, up, ARP_STEP);
+                *sel = if had {
+                    all
+                } else {
+                    vec![false; clip.events.len()]
+                };
+            }
+            MoreOp::Invert(up) => {
+                invert_chords(&mut clip.events, &which, up);
+                sort(&mut clip.events, sel);
+            }
+            MoreOp::Dedupe => {
+                let had = sel.contains(&true);
+                let mut all = which.clone();
+                remove_duplicates(&mut clip.events, &mut all);
+                *sel = if had {
+                    all
+                } else {
+                    vec![false; clip.events.len()]
+                };
+            }
             MoreOp::Strum(up) => {
                 strum_notes(&mut clip.events, &which, up);
                 sort(&mut clip.events, sel);
