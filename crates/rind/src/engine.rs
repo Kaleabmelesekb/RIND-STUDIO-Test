@@ -17,6 +17,14 @@ pub const MAX_VOICES: usize = 16;
 /// The control step, in samples.
 pub const STEP: usize = 16;
 
+/// The level a part's sustain knob (0 to 1) asks for. Loudness is heard in decibels, so the knob follows a square law: 10 %
+/// is -40 dB, 50 % is -12 dB (a straight knob made the first quarter of its travel nearly as loud as the top). The
+/// filter and modulation envelopes keep a straight sustain, since they scale a depth.
+pub fn amp_sustain(knob: f32) -> f32 {
+    let k = knob.clamp(0.0, 1.0);
+    k * k
+}
+
 pub struct Engine {
     sr: f32,
     cur: Snapshot,
@@ -337,7 +345,7 @@ impl Engine {
             EnvCoef::new(
                 p[b + part::ATT],
                 p[b + part::DEC],
-                p[b + part::SUS],
+                amp_sustain(p[b + part::SUS]),
                 p[b + part::REL],
                 sr,
             )
@@ -573,6 +581,32 @@ mod tests {
         play(&mut e, p, 1);
         e.note_on(note, 1.0);
         rms(&play(&mut e, p, blocks).0)
+    }
+
+    #[test]
+    fn the_sustain_knob_follows_a_square_law() {
+        assert_eq!(amp_sustain(1.0), 1.0);
+        assert_eq!(amp_sustain(0.0), 0.0);
+        assert!((20.0 * amp_sustain(0.1).log10() + 40.0).abs() < 1e-3);
+        assert!((20.0 * amp_sustain(0.5).log10() + 12.04).abs() < 0.01);
+        // Heard through the engine: a held note at a 10 % sustain is about 40 dB under the same note at 100 %.
+        let mut p = defaults();
+        p[FILT_BASE + filt::ON] = 0.0;
+        p[PART_BASE + part::ATT] = 0.001;
+        p[PART_BASE + part::DEC] = 0.05;
+        p[PART_BASE + part::SUS] = 1.0;
+        let held = |p: &Snapshot| {
+            let mut e = Engine::new(48_000.0);
+            play(&mut e, p, 1);
+            e.note_on(60, 1.0);
+            play(&mut e, p, 300);
+            rms(&play(&mut e, p, 100).0)
+        };
+        let full = held(&p);
+        p[PART_BASE + part::SUS] = 0.1;
+        let low = held(&p);
+        let db = 20.0 * (low / full).log10();
+        assert!((-44.0..-36.0).contains(&db), "{db} dB");
     }
 
     #[test]

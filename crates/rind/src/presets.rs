@@ -232,7 +232,8 @@ fn recipe_values(r: &Recipe) -> Vec<(usize, f32)> {
     for (field, x) in [
         (part::ATT, r.a),
         (part::DEC, r.d),
-        (part::SUS, r.s),
+        // The sustain knob follows a square law (`engine::amp_sustain`); the recipe's sustain is the level it means.
+        (part::SUS, r.s.sqrt()),
         (part::REL, r.r),
     ] {
         v.push((part_at(0, field), x));
