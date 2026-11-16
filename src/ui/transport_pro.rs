@@ -10,8 +10,10 @@ use eframe::egui::{
 };
 
 use crate::metrics::{FontSize, Metrics};
+use crate::song::marker::Marker;
 use crate::song::{PPQ, TimeSig};
 use crate::ui::UiCtx;
+use crate::ui::clips::TimeAxis;
 use crate::ui::tempo::TapTempo;
 use crate::ui::widgets;
 
@@ -26,6 +28,8 @@ pub struct BarExtras {
     /// The playhead, in song ticks.
     pub tick: u64,
     pub bpm: f64,
+    /// A marker sits on the playhead: the flag button lights, and a tap on it takes that marker away.
+    pub marker_here: bool,
 }
 
 impl Default for BarExtras {
@@ -36,8 +40,20 @@ impl Default for BarExtras {
             time_sig: TimeSig::default(),
             tick: 0,
             bpm: 120.0,
+            marker_here: false,
         }
     }
+}
+
+/// A tap on the marker buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MarkerAsk {
+    /// Jump to the previous marker.
+    Prev,
+    /// Set a marker at the playhead, or take the one there away.
+    Set,
+    /// Jump to the next marker.
+    Next,
 }
 
 /// What a tap on the extras asks for.
@@ -47,6 +63,8 @@ pub struct BarAsk {
     pub metronome: bool,
     /// The loop button was tapped: a set range clears, none sets four bars.
     pub looping: bool,
+    /// A marker button was tapped.
+    pub marker: Option<MarkerAsk>,
     /// The fourth `TAP` of a group: the tempo it gives.
     pub tempo: Option<f64>,
     /// The time signature or the position was tapped: the tempo dialog holds the signature.
@@ -117,6 +135,99 @@ fn metronome_icon(painter: &Painter, center: Pos2, size: f32, ink: Color32, px: 
     let tip = center + vec2(0.4 * w, -0.85 * h);
     painter.line_segment([base, tip], Stroke::new(1.5 * px, ink));
     painter.circle_filled(base + (tip - base) * 0.55, 0.11 * size, ink);
+}
+
+/// The marker buttons' icons: a flag, and a triangle with a bar either side of it for the jumps.
+fn marker_icon(
+    painter: &Painter,
+    center: Pos2,
+    size: f32,
+    which: MarkerAsk,
+    ink: Color32,
+    px: f32,
+) {
+    let s = 0.3 * size;
+    match which {
+        MarkerAsk::Set => {
+            let pole = [center + vec2(-0.55 * s, -s), center + vec2(-0.55 * s, s)];
+            painter.line_segment(pole, Stroke::new(1.5 * px, ink));
+            let flag = vec![
+                center + vec2(-0.55 * s, -s),
+                center + vec2(0.9 * s, -0.4 * s),
+                center + vec2(-0.55 * s, 0.2 * s),
+            ];
+            painter.add(Shape::convex_polygon(flag, ink, Stroke::NONE));
+        }
+        MarkerAsk::Prev | MarkerAsk::Next => {
+            let d = if which == MarkerAsk::Next { 1.0 } else { -1.0 };
+            let tri = vec![
+                center + vec2(d * 0.75 * s, 0.0),
+                center + vec2(-d * 0.35 * s, -0.7 * s),
+                center + vec2(-d * 0.35 * s, 0.7 * s),
+            ];
+            painter.add(Shape::convex_polygon(tri, ink, Stroke::NONE));
+            let bar = [
+                center + vec2(d * 0.95 * s, -0.7 * s),
+                center + vec2(d * 0.95 * s, 0.7 * s),
+            ];
+            painter.line_segment(bar, Stroke::new(1.5 * px, ink));
+        }
+    }
+}
+
+/// The markers whose flags show on `strip`: each with its x. A flag is a pennant at the marker's tick plus the room its
+/// name takes, so one just left of the strip still shows its name.
+pub fn visible_flags(
+    markers: &[Marker],
+    axis: TimeAxis,
+    strip: Rect,
+) -> impl Iterator<Item = (f32, &Marker)> {
+    markers
+        .iter()
+        .map(move |m| (axis.x(f64::from(m.tick)), m))
+        .filter(move |&(x, _)| x >= strip.left() - 60.0 && x <= strip.right())
+}
+
+/// Paints the markers' flags along the ruler `strip`, over its marks: a pole down the strip, a pennant and the name.
+/// The marker the playhead has passed last is in the accent colour. Display only: the control bar's buttons set them.
+pub fn flags(
+    painter: &Painter,
+    strip: Rect,
+    axis: TimeAxis,
+    markers: &[Marker],
+    playhead: u64,
+    cx: &UiCtx,
+) {
+    let (c, m) = (&cx.theme.colors, cx.m);
+    let painter = painter.with_clip_rect(painter.clip_rect().intersect(strip));
+    let px = 1.0 / m.ppp();
+    let current = crate::song::marker::current(markers, playhead).map(|k| k.tick);
+    let font = m.font_id(FontSize::Pt8);
+    for (x, mk) in visible_flags(markers, axis, strip) {
+        let ink = if Some(mk.tick) == current {
+            c.accent.to_color32()
+        } else {
+            c.text.to_color32().gamma_multiply(0.7)
+        };
+        painter.line_segment(
+            [pos2(x, strip.top()), pos2(x, strip.bottom())],
+            Stroke::new(1.5 * px, ink),
+        );
+        let h = (0.45 * strip.height()).min(m.u(0.9));
+        let pennant = vec![
+            pos2(x, strip.top()),
+            pos2(x + 1.3 * h, strip.top() + 0.5 * h),
+            pos2(x, strip.top() + h),
+        ];
+        painter.add(Shape::convex_polygon(pennant, ink, Stroke::NONE));
+        painter.text(
+            pos2(x + 1.6 * h, strip.top() + 0.5 * h),
+            Align2::LEFT_CENTER,
+            &mk.name,
+            font.clone(),
+            ink,
+        );
+    }
 }
 
 /// Draws the extras that fit in `zone` (the free room left of REC, right of the keyboard button) and returns the part
@@ -222,6 +333,42 @@ pub fn extras(
             ask.looping = true;
         }
     }
+    // The markers: previous, set or remove at the playhead, next.
+    if let Some(r) = take(m.u(4.5)) {
+        let cells = [
+            (MarkerAsk::Prev, "prev"),
+            (MarkerAsk::Set, "set"),
+            (MarkerAsk::Next, "next"),
+        ];
+        let w = r.width() / 3.0;
+        for (i, (which, name)) in cells.into_iter().enumerate() {
+            let cell = Rect::from_min_size(
+                pos2(r.left() + i as f32 * w, r.top()),
+                vec2(w - px.max(1.0), r.height()),
+            );
+            let response =
+                ui.interact(cell, Id::new(("transport", "marker", name)), Sense::click());
+            let lit = which == MarkerAsk::Set && state.marker_here;
+            let hot = widgets::hovered(ui, &response);
+            let fill = if lit {
+                accent
+            } else if hot {
+                Color32::from_white_alpha(30)
+            } else {
+                Color32::from_white_alpha(14)
+            };
+            ui.painter().rect_filled(cell, m.u(0.14), fill);
+            let ink = if lit {
+                c.control_fill.to_color32()
+            } else {
+                text
+            };
+            marker_icon(ui.painter(), cell.center(), cell.height(), which, ink, px);
+            if response.clicked() {
+                ask.marker = Some(which);
+            }
+        }
+    }
     // TAP tempo.
     if let Some(r) = take(m.u(1.6)) {
         let response = ui.interact(r, Id::new(("transport", "tap")), Sense::click());
@@ -283,6 +430,32 @@ mod tests {
         };
         assert_eq!(position(3 * ppq, three), (2, 1, 1));
         assert_eq!(position_text(4 * ppq, sig), "2. 1. 1");
+    }
+
+    #[test]
+    fn only_the_flags_on_the_strip_show() {
+        let mut markers = Vec::new();
+        for t in [0, 128, 128 * 10, 128 * 100] {
+            crate::song::marker::toggle(&mut markers, t);
+        }
+        let axis = TimeAxis {
+            origin: 0.0,
+            beat_w: 20.0,
+        };
+        let strip = Rect::from_min_size(pos2(0.0, 0.0), vec2(300.0, 20.0));
+        let ticks: Vec<u32> = visible_flags(&markers, axis, strip)
+            .map(|(_, m)| m.tick)
+            .collect();
+        assert_eq!(ticks, [0, 128, 1280]);
+        // Scrolled so that the second marker is left of the strip: its name still shows, the first goes.
+        let axis = TimeAxis {
+            origin: -30.0,
+            beat_w: 20.0,
+        };
+        let ticks: Vec<u32> = visible_flags(&markers, axis, strip)
+            .map(|(_, m)| m.tick)
+            .collect();
+        assert_eq!(ticks, [128, 1280]);
     }
 
     #[test]
