@@ -101,7 +101,7 @@ pub const BASE: Recipe = Recipe {
     d: 0.6,
     s: 1.0,
     r: 0.25,
-    ft: 0,
+    ft: 3,
     fs: 1,
     cut: 12000.0,
     res: 0.1,

@@ -1090,7 +1090,7 @@ pub static SPECS: [Spec; COUNT] = [
         id: "f1_type",
         name: "Filter 1 Type",
         kind: Kind::Int(0, 5),
-        default: 0.0,
+        default: 3.0,
         fmt: Fmt::Names(FILTER_TYPE_NAMES),
     },
     Spec {
@@ -1167,7 +1167,7 @@ pub static SPECS: [Spec; COUNT] = [
         id: "f2_type",
         name: "Filter 2 Type",
         kind: Kind::Int(0, 5),
-        default: 0.0,
+        default: 3.0,
         fmt: Fmt::Names(FILTER_TYPE_NAMES),
     },
     Spec {

@@ -36,6 +36,9 @@ use crate::util::soft;
 pub const MAX_TYPE: u8 = 5;
 /// The first ladder type.
 pub const LADDER: u8 = 3;
+/// The ladder's output level against the state-variable filter's, measured over the 361 original patches (the ladder was
+/// 2 dB quieter at the median).
+const LEVEL: f32 = 1.25;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Svf {
@@ -100,7 +103,7 @@ impl LadderCoef {
             big_g: g / (1.0 + g),
             keep: 1.0 / (1.0 + g),
             k,
-            makeup: 1.0 + 0.5 * k,
+            makeup: LEVEL * (1.0 + 0.5 * k),
         }
     }
 }
@@ -395,7 +398,7 @@ mod tests {
     #[test]
     fn ladder_low_pass_is_four_poles() {
         let at_cutoff = ladder_gain(LADDER, true, 1000.0, 0.0, 0.0, 1000.0, 0.002);
-        assert!((at_cutoff - 0.25).abs() < 0.02, "{at_cutoff}"); // four -3 dB poles
+        assert!((at_cutoff / LEVEL - 0.25).abs() < 0.02, "{at_cutoff}"); // four -3 dB poles
         // Well below Nyquist, where the bilinear warp is small: 24 dB per octave.
         let a = ladder_gain(LADDER, true, 100.0, 0.0, 0.0, 800.0, 0.002);
         let b = ladder_gain(LADDER, true, 100.0, 0.0, 0.0, 1600.0, 0.002);
@@ -404,7 +407,7 @@ mod tests {
             (23.0..25.0).contains(&octave_db),
             "{octave_db} dB per octave"
         );
-        assert!(ladder_gain(LADDER, true, 5000.0, 0.0, 0.0, 100.0, 0.002) > 0.98);
+        assert!((ladder_gain(LADDER, true, 5000.0, 0.0, 0.0, 100.0, 0.002) / LEVEL - 1.0).abs() < 0.02);
         // The 12 dB tap falls half as fast.
         let a = ladder_gain(LADDER, false, 100.0, 0.0, 0.0, 800.0, 0.002);
         let b = ladder_gain(LADDER, false, 100.0, 0.0, 0.0, 1600.0, 0.002);
@@ -514,9 +517,9 @@ mod tests {
     #[test]
     fn ladder_band_and_high_pass_have_their_shapes() {
         assert!(ladder_gain(5, true, 4000.0, 0.0, 0.0, 100.0, 0.002) < 0.01);
-        assert!(ladder_gain(5, true, 1000.0, 0.0, 0.0, 15_000.0, 0.002) > 0.9);
+        assert!(ladder_gain(5, true, 1000.0, 0.0, 0.0, 15_000.0, 0.002) / LEVEL > 0.9);
         let at = ladder_gain(4, true, 2000.0, 0.0, 0.0, 2000.0, 0.002);
-        assert!((at - 1.0).abs() < 0.08, "band peak {at}");
+        assert!((at / LEVEL - 1.0).abs() < 0.08, "band peak {at}");
         assert!(ladder_gain(4, true, 2000.0, 0.0, 0.0, 100.0, 0.002) < 0.05);
         assert!(ladder_gain(4, true, 2000.0, 0.0, 0.0, 15_000.0, 0.002) < 0.1);
     }
