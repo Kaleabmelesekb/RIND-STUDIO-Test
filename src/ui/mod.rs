@@ -54,6 +54,7 @@ pub mod panel_resize;
 pub mod wheels;
 // The chord keyboard of the Chords and Strum kinds.
 pub mod chord_keyboard;
+pub mod clip_ops;
 // The chord editor.
 pub mod chord_editor;
 // The playlist's header column and its mini mixer.
