@@ -447,9 +447,9 @@ mod tests {
             .map(|(_, m)| m.tick)
             .collect();
         assert_eq!(ticks, [0, 128, 1280]);
-        // Scrolled so that the second marker is left of the strip: its name still shows, the first goes.
+        // Scrolled so that the second marker is just left of the strip: its name still shows, the first goes.
         let axis = TimeAxis {
-            origin: -30.0,
+            origin: -70.0,
             beat_w: 20.0,
         };
         let ticks: Vec<u32> = visible_flags(&markers, axis, strip)
