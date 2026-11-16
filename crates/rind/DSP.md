@@ -71,10 +71,25 @@ self-oscillation within 4 % of the cutoff from 200 Hz to 4 kHz, bounded output u
 
 ## Envelopes (`env.rs`)
 
-Exponential ADSR. Attack aims at 1.3 so it reaches 1 in exactly the attack time; decay and release cover 60 dB in their time;
-sustain tracks its parameter. A new gate starts from the level it finds (no click). Times are in seconds, from 0.1 ms; the
-coefficients are computed for the real rate, and tests check the stage times at 22.05, 44.1, 48, 96 and 192 kHz. The amplitude
-envelope and the filter/mod envelopes (3, 4) are separate instances.
+Exponential ADSR. Attack aims at 1.3 so it reaches 1 in exactly the attack time; decay and release cover 60 dB (of the distance to
+the sustain, for the decay) in their time; sustain tracks its parameter. A new gate starts from the level it finds (no click).
+Times are in seconds, from 1 ms; the coefficients are computed for the real rate, and tests check the stage times at 22.05, 44.1,
+48, 96 and 192 kHz. The amplitude envelopes (one per part) and the filter/modulation envelopes (3, 4) are separate instances.
+
+How the knobs feel (changed after the first release, which was hard to use):
+
+- **Time knobs** (attack, decay, release of the parts and of envelopes 3 and 4) run 1 ms to 8 s on a power curve of exponent 3.5, so the
+  first quarter of the knob is 1 to about 65 ms, the middle is about 0.7 s and three quarters is about 2.9 s. They used to run to 10 s with
+  exponent 8, which put the whole first half of the knob under 40 ms, where an attack cannot be heard.
+- **Amplitude sustain** follows a square law (`engine::amp_sustain`): 100 % is 0 dB, 50 % is -12 dB, 10 % is -40 dB. It used to be a
+  straight amplitude, so 10 % was only -20 dB and the first quarter of the knob was nearly as loud as the top. The filter and modulation
+  envelopes keep a straight sustain because they scale a depth. Factory patches store the level they mean and the engine's
+  square law is undone for them (`presets::recipe_values` writes `sqrt(s)`), so their loudness did not change.
+
+## Analog drift (`voice.rs`)
+
+Every voice has its own slow random walk for each oscillator's pitch (+-3 cents) and the filter cutoff (+-0.3 semitone): a new target
+every 0.8 s, followed with a 0.4 s time constant. It is always on and not a parameter. It keeps stacked voices from beating in lockstep.
 
 ## Compatibility
 
