@@ -26,6 +26,7 @@ pub mod env;
 pub mod filter;
 pub mod fx;
 pub mod ids;
+pub mod mutate;
 pub mod osc;
 pub mod params;
 mod preset_table;
