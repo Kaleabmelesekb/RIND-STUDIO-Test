@@ -17,6 +17,7 @@ pub mod main_menu;
 pub mod main_screen;
 pub mod mixer;
 pub mod modules_browser;
+pub mod peak_hold;
 pub mod piano_roll;
 pub mod popup;
 pub mod preset_picker;
