@@ -405,7 +405,8 @@ impl Logic {
             3 => self.step_patch(true),
             4 => self.open_presets(),
             5 => {
-                let to = crate::mutate::random_patch(&mut self.rng, self.patch());
+                let current = self.patch();
+                let to = crate::mutate::random_patch(&mut self.rng, current);
                 self.load_patch(to);
             }
             _ => {
