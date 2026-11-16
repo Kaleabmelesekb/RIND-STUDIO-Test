@@ -407,7 +407,9 @@ mod tests {
             (23.0..25.0).contains(&octave_db),
             "{octave_db} dB per octave"
         );
-        assert!((ladder_gain(LADDER, true, 5000.0, 0.0, 0.0, 100.0, 0.002) / LEVEL - 1.0).abs() < 0.02);
+        assert!(
+            (ladder_gain(LADDER, true, 5000.0, 0.0, 0.0, 100.0, 0.002) / LEVEL - 1.0).abs() < 0.02
+        );
         // The 12 dB tap falls half as fast.
         let a = ladder_gain(LADDER, false, 100.0, 0.0, 0.0, 800.0, 0.002);
         let b = ladder_gain(LADDER, false, 100.0, 0.0, 0.0, 1600.0, 0.002);
