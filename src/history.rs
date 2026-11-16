@@ -103,6 +103,7 @@ impl Snapshot {
             file,
             master_below,
             groups,
+            markers,
         } = song;
         let head = Song {
             title: title.clone(),
@@ -115,6 +116,7 @@ impl Snapshot {
             file: file.clone(),
             master_below: *master_below,
             groups: groups.clone(),
+            markers: markers.clone(),
         };
         // The same index first, so that identical channels keep their own.
         let channels = channels
