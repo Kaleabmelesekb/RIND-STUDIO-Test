@@ -2245,6 +2245,14 @@ impl HoneydewApp {
                         .as_ref()
                         .map_or(self.main_screen.play_start, |s| s.transport_tick),
                     bpm: shown_bpm,
+                    marker_here: {
+                        let at = snapshot
+                            .as_ref()
+                            .map_or(self.main_screen.play_start, |s| s.transport_tick);
+                        u32::try_from(at).is_ok_and(|t| {
+                            crate::song::marker::index_at(&self.song.markers, t).is_some()
+                        })
+                    },
                 };
                 let input = ScreenInput {
                     view: self.nav.view,
@@ -2521,6 +2529,23 @@ impl HoneydewApp {
                 None => Some((0, 4 * bar)),
             };
         }
+        // The markers: Set puts one at the playhead or takes it away; the jumps seek (below, with the bar jumps).
+        let mut marker_seek = None;
+        match actions.bar.marker {
+            Some(crate::ui::transport_pro::MarkerAsk::Set) => {
+                if let Ok(at) = u32::try_from(tick) {
+                    self.song.toggle_marker(at);
+                    self.song_edited(SongEdit::Final, tick);
+                }
+            }
+            Some(crate::ui::transport_pro::MarkerAsk::Prev) => {
+                marker_seek = crate::song::marker::before(&self.song.markers, tick).or(Some(0));
+            }
+            Some(crate::ui::transport_pro::MarkerAsk::Next) => {
+                marker_seek = crate::song::marker::after(&self.song.markers, tick);
+            }
+            None => {}
+        }
         if let Some(bpm) = actions.bar.tempo {
             self.song.set_tempo(bpm);
             self.song_edited(SongEdit::Final, tick);
@@ -2573,6 +2598,9 @@ impl HoneydewApp {
         let mut seek = actions.seek;
         if let Some(next) = self.bar_jump.take() {
             seek = Some(keys::bar_jump(&self.song, tick, next));
+        }
+        if let Some(at) = marker_seek {
+            seek = Some(u64::from(at));
         }
         // A ruler tap that stops returns to the play-start point, as REV's first press.
         let stop_tap = actions.playhead.is_some() && was_playing;

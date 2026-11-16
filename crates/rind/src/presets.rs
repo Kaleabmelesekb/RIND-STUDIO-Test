@@ -101,7 +101,7 @@ pub const BASE: Recipe = Recipe {
     d: 0.6,
     s: 1.0,
     r: 0.25,
-    ft: 0,
+    ft: 3,
     fs: 1,
     cut: 12000.0,
     res: 0.1,
@@ -232,7 +232,8 @@ fn recipe_values(r: &Recipe) -> Vec<(usize, f32)> {
     for (field, x) in [
         (part::ATT, r.a),
         (part::DEC, r.d),
-        (part::SUS, r.s),
+        // The sustain knob follows a square law (`engine::amp_sustain`); the recipe's sustain is the level it means.
+        (part::SUS, r.s.sqrt()),
         (part::REL, r.r),
     ] {
         v.push((part_at(0, field), x));

@@ -70,6 +70,11 @@ pub fn write(song: &Song) -> Result<Vec<u8>, FlmError> {
     if !groups.is_empty() {
         writer.chunk(*b"RGRP", |writer| writer.raw(&groups))?;
     }
+    // The markers, likewise only while there is one.
+    let markers = crate::song::marker::encode(&song.markers);
+    if !markers.is_empty() {
+        writer.chunk(*b"RMRK", |writer| writer.raw(&markers))?;
+    }
     write_raw(&mut writer, &song.file.unknown_chunks)?;
     crate::versions::write(&mut writer, &song.file.versions)?;
     Ok(writer.into_bytes())

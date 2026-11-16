@@ -14,7 +14,7 @@
 //! A strip control's press or parameter menu pick is the app's recent control ([`MixerState::touch`]); its menu's
 //! `Unlink from MIDI CC` follows the channel's `CCLK`.
 
-use eframe::egui::{Align2, Id, Pos2, Rect, Ui, UiBuilder, Vec2, pos2, vec2};
+use eframe::egui::{Align2, Color32, Id, Pos2, Rect, Ui, UiBuilder, Vec2, pos2, vec2};
 use honeydew_audio::device::ModuleMeter;
 
 use crate::icons::draw_icon;
@@ -28,6 +28,7 @@ use crate::ui::fine_tune;
 use crate::ui::layout::{Node, NodeId, Size, layout};
 use crate::ui::main_screen::kind_icon;
 use crate::ui::mini_mixer;
+use crate::ui::peak_hold::PeakHold;
 use crate::ui::scroller::{self, Axis, Scroller, X, Zones};
 use crate::ui::widgets::{self, Button, Control, ParamMenu, Pill};
 
@@ -47,6 +48,10 @@ const NAME: NodeId = 6;
 /// The master's `Unsolo All`, in the row where the other strips have Mute and `Solo`.
 const UNSOLO: NodeId = 7;
 
+/// The clip lamp lit and unlit.
+const CLIP_ON: Color32 = Color32::from_rgb(0xe5, 0x48, 0x4d);
+const CLIP_OFF: Color32 = Color32::from_rgb(0x3a, 0x3a, 0x3a);
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MixerState {
     /// How far the row is scrolled, in points: 0 ..= the last strip at the right edge, or past either end while a
@@ -62,6 +67,8 @@ pub struct MixerState {
     pub touch: Option<(usize, Touch)>,
     /// The row's scroll controller: the touch it has, its fling and spring.
     scroller: Scroller,
+    /// Each channel's peak hold and clip lamp, by channel id.
+    holds: std::collections::BTreeMap<i32, PeakHold>,
 }
 
 /// A strip `h` U tall: the 0.75 U name slot, fader (60 % wide, flex), pan knob (80 % wide, 2 U), the mute/solo row
@@ -106,6 +113,31 @@ fn strip_meters(fader: Rect, peaks: [f32; 2], m: &Metrics) -> Vec<Rect> {
             Rect::from_x_y_ranges(x..=x + 3.0 * t, top..=track.bottom())
         })
         .collect()
+}
+
+/// The two hold marks over a strip's meters: a line `t / 2` tall (at least one pixel) across each bar at its held peak.
+fn hold_marks(fader: Rect, held: [f32; 2], m: &Metrics) -> Vec<Rect> {
+    let (t, track) = (m.t(), widgets::fader_track(fader, m));
+    let left = track.center().x + m.u(widgets::FADER_CAP_W / 2.0) + t;
+    let thick = (t * 0.5).max(1.0 / m.ppp());
+    (held.into_iter().enumerate())
+        .filter(|&(_, p)| mini_mixer::meter(p) > 0.0)
+        .map(|(i, p)| {
+            let x = left + 4.0 * t * i as f32;
+            let y = (track.bottom() - track.height() * mini_mixer::meter(p)).max(track.top());
+            Rect::from_x_y_ranges(x..=x + 3.0 * t, y..=(y + thick).min(track.bottom()))
+        })
+        .collect()
+}
+
+/// The clip lamp: over both meters, `1.5 t` tall, just above the top of the track.
+fn clip_lamp(fader: Rect, m: &Metrics) -> Rect {
+    let (t, track) = (m.t(), widgets::fader_track(fader, m));
+    let left = track.center().x + m.u(widgets::FADER_CAP_W / 2.0) + t;
+    Rect::from_x_y_ranges(
+        left..=left + 7.0 * t,
+        track.top() - 2.0 * t..=track.top() - 0.5 * t,
+    )
 }
 
 /// The rects (device pixels) of the parts a strip in `rect_px` shows, in drawing order, spacers left out.
@@ -174,6 +206,7 @@ pub fn show(
     let base = ui.id().with("mixer");
     let content = song.channels.len() as f32 * unit;
     let tap = scroll_row(ui, state, rect, content, m.u(1.0));
+    let dt = ui.input(|i| i.stable_dt);
     let soloed = any_soloed(song);
     let mut unsolo = false;
 
@@ -190,6 +223,7 @@ pub fn show(
             continue;
         }
         let strip = Rect::from_min_size(pos2(left, rect.top()), vec2(unit, rect.height()));
+        let id_of_channel = channel.id;
         let color = channel_color(channel.hue, cx.theme).to_color32();
         let icon = kind_icon(channel.kind);
         let master = channel.kind == ChannelKind::Master;
@@ -204,6 +238,15 @@ pub fn show(
                 .any(|&(leaf, r)| (leaf <= SOLO || leaf == UNSOLO) && (r / ppp).contains(p))
         {
             state.selected = Some(i);
+        }
+        // A tap on the clip lamp (or its strip) puts the lamp out.
+        if let Some(p) = tap
+            && strip.contains(p)
+            && let Some(&(_, fr)) = placed.iter().find(|&&(leaf, _)| leaf == FADER)
+            && clip_lamp(fr / ppp, m).expand(m.t()).contains(p)
+            && let Some(hold) = state.holds.get_mut(&id_of_channel)
+        {
+            hold.clear_clip();
         }
         for (leaf, r) in placed {
             let (id, r) = (base.with((i, leaf)), r / ppp);
@@ -233,8 +276,19 @@ pub fn show(
                 FADER => {
                     let c = control("", widgets::UNITY);
                     let changed = widgets::fader(&mut ui, cx, &c, &mut params[0]).changed();
-                    for bar in strip_meters(r, mini_mixer::meter_peaks(meters, i), m) {
+                    let peaks = mini_mixer::meter_peaks(meters, i);
+                    for bar in strip_meters(r, peaks, m) {
                         ui.painter().rect_filled(bar, 0.0, color);
+                    }
+                    let hold = state.holds.entry(id_of_channel).or_default();
+                    hold.feed(peaks, dt);
+                    if !cfg!(test) {
+                        for mark in hold_marks(r, hold.held(), m) {
+                            ui.painter()
+                                .rect_filled(mark, 0.0, Color32::from_white_alpha(215));
+                        }
+                        let lamp = if hold.clipped() { CLIP_ON } else { CLIP_OFF };
+                        ui.painter().rect_filled(clip_lamp(r, m), 1.0, lamp);
                     }
                     changed
                 }
@@ -1500,6 +1554,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_hold_marks_sit_on_the_bars_and_the_clip_lamp_above_the_track() {
+        let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
+        let fader = Rect::from_min_size(pos2(10.0, 40.0), vec2(60.0, 300.0));
+        let track = widgets::fader_track(fader, &m);
+        let peaks = [0.5, 0.25];
+        let bars = strip_meters(fader, peaks, &m);
+        let marks = hold_marks(fader, peaks, &m);
+        assert_eq!(marks.len(), bars.len());
+        for (bar, mark) in bars.iter().zip(&marks) {
+            assert_eq!(mark.left(), bar.left());
+            assert_eq!(mark.right(), bar.right());
+            assert_eq!(mark.top(), bar.top());
+            assert!(mark.height() > 0.0 && mark.bottom() <= track.bottom());
+        }
+        // A silent bar has no mark.
+        assert_eq!(hold_marks(fader, [0.0, 0.5], &m).len(), 1);
+        let lamp = clip_lamp(fader, &m);
+        assert!(lamp.bottom() <= track.top() && lamp.height() > 0.0 && lamp.width() > 0.0);
     }
 
     #[test]

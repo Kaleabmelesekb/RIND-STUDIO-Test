@@ -119,6 +119,8 @@ pub struct Logic {
     shared: Option<Arc<Shared>>,
     /// What each of the four patch slots held when it was left (a slot never visited keeps what is on the screen).
     slots: [Option<Vec<f32>>; 4],
+    /// The menu's `Random Patch` and `Mutate Sound`.
+    rng: crate::util::Rng,
 }
 
 /// A fine drag or wheel step (Ctrl) is this share of a normal one.
@@ -141,6 +143,11 @@ impl Logic {
             last: None,
             shared: None,
             slots: Default::default(),
+            rng: crate::util::Rng::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0x9e37_79b9, |d| d.subsec_nanos() ^ (d.as_secs() as u32)),
+            ),
         }
     }
 
@@ -396,7 +403,17 @@ impl Logic {
             }
             2 => self.step_patch(false),
             3 => self.step_patch(true),
-            _ => self.open_presets(),
+            4 => self.open_presets(),
+            5 => {
+                let to = crate::mutate::random_patch(&mut self.rng, self.patch());
+                self.load_patch(to);
+            }
+            _ => {
+                // The patch as it stands on the screen, nudged: the patch number stays.
+                let mut values = self.capture();
+                crate::mutate::mutate(&mut values, &mut self.rng, crate::mutate::AMOUNT);
+                self.apply_all(&values);
+            }
         }
     }
 

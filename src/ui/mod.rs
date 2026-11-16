@@ -17,6 +17,7 @@ pub mod main_menu;
 pub mod main_screen;
 pub mod mixer;
 pub mod modules_browser;
+pub mod peak_hold;
 pub mod piano_roll;
 pub mod popup;
 pub mod preset_picker;
@@ -53,6 +54,7 @@ pub mod panel_resize;
 pub mod wheels;
 // The chord keyboard of the Chords and Strum kinds.
 pub mod chord_keyboard;
+pub mod clip_ops;
 // The chord editor.
 pub mod chord_editor;
 // The playlist's header column and its mini mixer.

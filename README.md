@@ -5,7 +5,7 @@
 
 <h1 align="center">Rind Studio</h1>
 <p align="center">A free, open-source music studio modelled on FL Studio Mobile, written in Rust.</p>
-<p align="center">Runs on Windows, Linux, macOS, Android and in the browser.</p>
+<p align="center">Built for Android, with Rind, a 3,000-patch virtual analog synthesizer.</p>
 
 <p align="center"><img src="assets/screenshots/01-playlist-sampler.webp" width="100%" alt="The playlist and a sampler's rack, playing the demo song Edwan - Permich - Tropical"></p>
 <p align="center"><img src="assets/screenshots/02-playlist-supersaw.webp" width="100%" alt="The playlist and a synth's rack, playing the demo song Parrik - Initiated"></p>
@@ -42,27 +42,10 @@ FL Studio Mobile demo projects, opened as `.flm` files.
 
 ## Download
 
-Get the latest build from [Releases](https://github.com/daijro/honeydew/releases/latest).
+Android only. Every push to a `rind/**` branch builds a test APK: open the repository's **Actions** tab, pick the latest *Android test build* run and download the artifact `honeydew-android-debug-apk` (64-bit and 32-bit ARM, Android 8 or later). Tagged releases publish signed APKs on the [Releases](https://github.com/Kaleabmelesekb/RIND-STUDIO-Test/releases) page.
 
-| Platform | Download |
-|---|---|
-| Windows | `windows-x86_64.zip`, or `windows-arm64.zip` for ARM |
-| macOS | `macos-arm64.tar.gz` (Apple Silicon only) |
-| Linux | `linux-x86_64.AppImage` or `.tar.gz`, also for `aarch64` |
-| Alpine and other musl distros | `linux-x86_64-musl.tar.gz` or `linux-aarch64-musl.tar.gz` |
-| FreeBSD | `freebsd-x86_64.tar.gz` |
-| Android | `-arm-base.apk`, which downloads its sounds, or `-arm.apk` with them inside (64-bit or 32-bit ARM, Android 8 or later) |
-| iOS (experimental) | `honeydew-ios-<version>.ipa` (iOS 14 or later). It's unsigned: install it with AltStore, SideStore or Sideloadly using your own Apple ID |
-| Web | `honeydew-web-<version>.zip`, a static site you can host anywhere |
-
-Extract the archive and run `honeydew-native`. The AppImage is a single file. Run `chmod +x` on it, then start it (add `--appimage-extract-and-run` if your system has no FUSE).
-
-- `-avx2` builds can be faster on CPUs from 2013 onward. If unsure, take the plain one.
-- `-no-sounds` builds are just the app, 10 to 15 MB. Honeydew keeps its sounds in its own data folder: a full build puts them there, and without one Honeydew offers to download them (or install `honeydew-<version>-sounds.zip` from Settings > Install sound library). Later updates can be the small download. On iOS, `-no-sounds.ipa` simply leaves the built-in sounds out.
-- **Updates:** Main menu > UPDATES shows whether there's a newer version and what's new in it, and installs it on Android or downloads it on the desktop (an AppImage replaces itself). Honeydew checks at most every 6 hours, unless you turn off `Check for updates automatically`. The web version is always current.
-- **Sounds:** the sound library has its own version and its own release (`sounds-<version>`). The base APK and `-no-sounds` builds download it once, about 740 MB (on Android over Wi-Fi unless you allow mobile data in UPDATES), and after that only the packs that changed, so an update that doesn't change the sounds downloads none. UPDATES shows the installed sound library and offers a newer one on its own, whatever build you started from; updating from the full APK to the base one keeps the sounds it had.
-- Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12). Alpine needs `apk add libstdc++ alsa-lib`. FreeBSD needs `pkg install alsa-lib alsa-plugins` and has no MIDI input yet.
-- Your songs, samples and exports go in `Documents/Honeydew`. Settings > Open user folder takes you there.
+- Your songs, samples and exports go in `Documents/Honeydew`; the Browser also lists the phone's internal storage once you allow access.
+- The sound library is downloaded once (about 740 MB) in the base build, or is inside the full one. Main menu > UPDATES shows the installed library and newer versions.
 
 ---
 
@@ -167,13 +150,7 @@ adb pull /sdcard/Android/obb/<package>/       # the OBB, if the app has one
 
 ## Building from source
 
-### Desktop
-
-```sh
-cargo run --release
-```
-
-**Linux desktop icon:** Wayland only shows an app's icon if a desktop entry is installed. Run `tools/install-desktop-entry.sh` after `cargo build --release` (add `--uninstall` to remove it). Run it again if you move the repository.
+The Android app is the supported build. The synthesizer's DSP and parameter ranges are documented in [`crates/rind/DSP.md`](crates/rind/DSP.md).
 
 ### Sound library
 
@@ -184,32 +161,6 @@ tools/release-content.sh 0.5.0
 ```
 
 Commit the updated `sounds/honeydew-sounds.zip.*` parts and `sounds/release.txt` (the library's version: the app updates an installed library that is older) with your changes. Add `--web` to also build the web ZIP. Tagged releases include the sounds automatically, and the first release with a new library version also publishes it as its own release, `sounds-<version>`, which the apps download from. Give every changed library a new version.
-
-### Web
-
-For development:
-
-```sh
-rustup target add wasm32-unknown-unknown
-cargo install trunk
-trunk serve
-```
-
-To test with the bundled sounds, also run `python3 -m http.server 8081 --bind 127.0.0.1 --directory content-out`.
-
-For a release build:
-
-```sh
-tools/web-dist.sh          # build the site into dist/
-tools/web-dist.sh --check  # check an existing build
-tools/web-dist.sh --zip    # also write target/honeydew-web-<version>.zip
-```
-
-- **Requirements:** Trunk, binaryen's `wasm-opt` (or set `WASM_OPT`) and `unzip`.
-- **Hosting:** serve `dist/`. Example configs for nginx, Caddy and Cloudflare are in `deploy/`.
-- **Browsers:** Chrome 96, Firefox 113 or Safari 16.4 and later. Older browsers see a notice.
-- **Compression:** files are pre-gzipped and none is over 25 MiB. Hosts that don't send `Content-Encoding: gzip`, like Cloudflare, still work: the browser unpacks the files itself.
-- **Shortcuts:** in the browser, Honeydew's shortcuts win over the browser's, except Ctrl+C, V and X. Chrome keeps Ctrl+Shift+T.
 
 ### Android
 
@@ -231,19 +182,6 @@ This writes `target/honeydew-android-<version>-arm-debug.apk`, one APK for 64-bi
 - **GitHub releases:** add the repository secrets `ANDROID_KEYSTORE_BASE64` (the keystore as base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the Android job fails rather than publishing an unsigned APK.
 
 See Android's [app-signing guide](https://developer.android.com/studio/publish/app-signing) for creating a key.
-
-### iOS
-
-The iOS version is experimental. As on Android, your songs, renders and samples go in its Honeydew folder, which shows in the Files app under On My iPhone, and SONGS → Import and Import folder open the system's file picker. Recording asks for the microphone the first time. If you said no, the message has a button to the app's page in Settings. You hear yourself only in headphones, and a call or leaving the app stops a recording and keeps what was recorded. MIDI devices aren't supported yet, and there's no UPDATES tab: install a newer IPA the same way.
-
-Build it on a Mac with Xcode:
-
-```sh
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-tools/ios-dist.sh
-```
-
-This writes `target/honeydew-ios-<version>.ipa` and `target/honeydew-ios-<version>-no-sounds.ipa`. `tools/ios-dist.sh --sim` builds the Simulator's app, and `tools/ios-selftest.sh target/ios-sim/Honeydew.app selftest` runs its self-test in the Simulator.
 
 ---
 

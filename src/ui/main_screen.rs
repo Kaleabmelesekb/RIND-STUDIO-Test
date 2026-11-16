@@ -1258,6 +1258,16 @@ impl MainScreen {
         let out = self
             .region
             .show(ui, Id::new("playlist_region"), &at, false, &app.cx);
+        if !cfg!(test) {
+            crate::ui::transport_pro::flags(
+                ui.painter(),
+                strip,
+                axis,
+                &app.song.markers,
+                playhead,
+                &app.cx,
+            );
+        }
         if let Some(range) = out.range {
             app.song.play_loop = range.map(|r| (r.start, r.end));
         }

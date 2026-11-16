@@ -1608,7 +1608,21 @@ impl Clips {
         };
         let playhead = app.snapshot.map_or(0, |s| s.transport_tick);
         let clips: Vec<&Clip> = targets.iter().filter_map(|&r| find(app.song, r)).collect();
-        let items = more_items(&clips, playhead, can_combine(app.song, &targets));
+        let mut items = more_items(&clips, playhead, can_combine(app.song, &targets));
+        // The note edits in a second column, when every target is a notes lane's clip and one of them holds a note.
+        let on_notes = targets.iter().all(|r| {
+            (app.song.channels.get(r.channel))
+                .and_then(|c| c.lanes.get(r.lane))
+                .is_some_and(|l| matches!(l.kind, LaneKind::Notes))
+        });
+        if on_notes && clips.iter().any(|c| crate::ui::clip_ops::has_notes(c)) {
+            items.extend(
+                crate::ui::clip_ops::NOTE_OPS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(op, label))| PopupItem::new(MoreOp::Note(op), 1, i, label)),
+            );
+        }
         let result = popup::show(
             ui.ctx(),
             Id::new("clip_more"),
@@ -1631,6 +1645,7 @@ impl Clips {
             edited |= match (result.selected, clip) {
                 (Some(MoreOp::Slice), _) => slice(lane, r.id, playhead).is_some(),
                 (Some(MoreOp::UnlinkLoop), Some(clip)) => unlink_loop(clip),
+                (Some(MoreOp::Note(op)), Some(clip)) => crate::ui::clip_ops::apply(clip, op),
                 (Some(op @ (MoreOp::Mute | MoreOp::Unmute)), Some(clip)) => {
                     let muted = op == MoreOp::Mute;
                     let changed = clip.muted != muted;
@@ -2934,6 +2949,8 @@ pub enum MoreOp {
     Mute,
     Unmute,
     ReplaceSample,
+    /// A note edit of the clip's notes ([`crate::ui::clip_ops`]).
+    Note(crate::ui::clip_ops::NoteOp),
 }
 
 /// The `More...` dropdown for the selected clip, one column, with the playhead at song tick `playhead`; `combine`:

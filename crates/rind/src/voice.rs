@@ -67,6 +67,10 @@ pub struct Voice {
     gain_mod: [f32; 2],
     rng: Rng,
     tail: u32,
+    /// The analog drift: a slow random walk for each oscillator's pitch and for the filter cutoff, see [`Voice::drift_step`].
+    drift: [f32; 5],
+    drift_to: [f32; 5],
+    drift_left: f32,
 }
 
 impl Voice {
@@ -91,6 +95,27 @@ impl Voice {
             gain_mod: [0.0; 2],
             rng: Rng::new(seed.wrapping_mul(2_654_435_761)),
             tail: 0,
+            drift: [0.0; 5],
+            drift_to: [0.0; 5],
+            drift_left: 0.0,
+        }
+    }
+
+    /// Moves the analog drift on by `n` samples. Each voice wanders on its own: every 0.8 s a new target in `[-1, 1]` is drawn
+    /// for each of the four oscillators and the cutoff, and the value follows it with a 0.4 s time constant. Oscillator
+    /// drift is worth +-3 cents and the cutoff's +-0.3 semitone, which no one hears as a wobble but which stops stacked
+    /// voices from beating in lockstep and gives the thin, exactly tuned sound of a digital oscillator some life.
+    fn drift_step(&mut self, n: usize, sr: f32) {
+        self.drift_left -= n as f32;
+        if self.drift_left <= 0.0 {
+            self.drift_left += 0.8 * sr;
+            for t in &mut self.drift_to {
+                *t = self.rng.bipolar();
+            }
+        }
+        let a = 1.0 - (-(n as f32) / (0.4 * sr)).exp();
+        for (d, t) in self.drift.iter_mut().zip(self.drift_to) {
+            *d += (t - *d) * a;
         }
     }
 
@@ -188,6 +213,8 @@ impl Voice {
             self.pos = self.target;
         }
 
+        self.drift_step(n, sr);
+
         // Modulation sources.
         let e3 = self.menv[0].tick(&s.menv[0]);
         let e4 = self.menv[1].tick(&s.menv[1]);
@@ -274,7 +301,8 @@ impl Voice {
                 + p[b + osc::SEMI]
                 + p[b + osc::FINE] * 0.01
                 + (md[mtgt::PITCH_ALL] + md[mtgt::PITCH_PART_A + part]) * 24.0
-                + md[mtgt::PITCH_A1 + o] * 24.0;
+                + md[mtgt::PITCH_A1 + o] * 24.0
+                + self.drift[o] * 0.03;
             let base_dt = note_hz(semis) / sr;
             let d = (p[b + osc::DETUNE] + detune_mod).clamp(0.0, 1.0);
             let detune = 1.2 * d * d + 0.04 * d;
@@ -317,7 +345,8 @@ impl Voice {
             fvol[f] = (v * bal.0, v * bal.1);
             if p[b + filt::ON] >= 0.5 {
                 let semis = (md[mtgt::CUTOFF_1 + f] + md[mtgt::CUTOFF_ALL]) * 60.0
-                    + p[b + filt::KEY] * (self.pos - 60.0);
+                    + p[b + filt::KEY] * (self.pos - 60.0)
+                    + self.drift[4] * 0.3;
                 let hz = (p[b + filt::CUTOFF] * (semis * (1.0 / 12.0)).exp2())
                     .clamp(20.0, (0.45 * sr).min(20_000.0));
                 let res = (p[b + filt::RES] + md[mtgt::RESONANCE_1 + f] + md[mtgt::RESONANCE_ALL])
@@ -410,5 +439,30 @@ mod tests {
             .sum::<f32>()
             / n as f32;
         assert!(mean.abs() > 1e-3, "{mean}");
+    }
+
+    #[test]
+    fn the_drift_is_slow_bounded_and_different_for_every_voice() {
+        let (mut a, mut b) = (Voice::new(1), Voice::new(2));
+        let mut prev = a.drift;
+        let (mut worst_step, mut peak) = (0.0f32, 0.0f32);
+        let mut differ = 0.0f32;
+        for _ in 0..(48_000 * 20 / 16) {
+            a.drift_step(16, 48_000.0);
+            b.drift_step(16, 48_000.0);
+            for k in 0..5 {
+                worst_step = worst_step.max((a.drift[k] - prev[k]).abs());
+                peak = peak.max(a.drift[k].abs());
+                differ = differ.max((a.drift[k] - b.drift[k]).abs());
+            }
+            prev = a.drift;
+        }
+        assert!(peak <= 1.0 + 1e-6, "{peak}");
+        assert!(peak > 0.3, "it must actually move: {peak}");
+        // 16 samples at a 0.4 s time constant: no step bigger than a thousandth.
+        assert!(worst_step < 1.5e-3, "{worst_step}");
+        assert!(differ > 0.3, "two voices drift alike: {differ}");
+        // In cents: the pitch drift is at most 3 of them.
+        assert!(peak * 0.03 * 100.0 <= 3.0 + 1e-3);
     }
 }

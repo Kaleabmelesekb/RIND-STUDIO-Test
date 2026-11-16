@@ -2194,3 +2194,19 @@ fn a_group_with_its_bus_and_the_members_outputs_survives_a_save_and_load() {
         assert_eq!(c.output_bus, bus.bus_id, "channel {id}");
     }
 }
+
+#[test]
+fn markers_survive_a_save_and_load_and_a_song_without_any_writes_no_chunk() {
+    let mut song = Song::default();
+    let plain = crate::flm::write(&song).unwrap();
+    assert!(!plain.windows(4).any(|w| w == b"RMRK"));
+    for tick in [512, 0, 1280] {
+        song.toggle_marker(tick);
+    }
+    song.markers[1].name = "Verse".into();
+    let bytes = crate::flm::write(&song).unwrap();
+    assert!(bytes.windows(4).any(|w| w == b"RMRK"));
+    let back = crate::flm::read(&bytes).unwrap();
+    assert_eq!(back.markers, song.markers);
+    assert!(back.file.unknown_chunks.is_empty());
+}

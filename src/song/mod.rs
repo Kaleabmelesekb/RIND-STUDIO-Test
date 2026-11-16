@@ -8,6 +8,7 @@ mod drum_kit;
 mod file;
 pub mod group;
 mod lane;
+pub mod marker;
 pub mod plugin;
 pub mod points;
 mod rack;
@@ -236,6 +237,8 @@ pub struct Song {
     pub master_below: Option<i32>,
     /// The track groups ([`group`]): the playlist folds a group into its head row. Kept in the `RGRP` chunk.
     pub groups: Vec<TrackGroup>,
+    /// The markers ([`marker`]), sorted by tick, one to a tick. Kept in the `RMRK` chunk.
+    pub markers: Vec<marker::Marker>,
 }
 
 impl Default for Song {
@@ -251,6 +254,7 @@ impl Default for Song {
             file: SongFileState::default(),
             master_below: None,
             groups: Vec::new(),
+            markers: Vec::new(),
         }
     }
 }

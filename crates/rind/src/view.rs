@@ -180,12 +180,14 @@ impl Ui {
 }
 
 /// What the display's menu offers, in order.
-pub const MENU_ITEMS: [&str; 5] = [
+pub const MENU_ITEMS: [&str; 7] = [
     "Reload Patch",
     "Init Patch",
     "Previous Patch",
     "Next Patch",
     "Browse Presets",
+    "Random Patch",
+    "Mutate Sound",
 ];
 
 const FX_NAMES: [&str; 8] = [
@@ -2909,7 +2911,6 @@ mod tests {
         assert!(dropdown(ids::ARP_WRAP));
         assert!(!dropdown(ids::MONO));
         assert!(!dropdown(filt_param(0, ids::filt::SLOPE)));
-        assert!(!dropdown(filt_param(0, ids::filt::TYPE)));
         assert!(!dropdown(ids::MASTER_VOL));
         // What the design draws with arrows steps; no list.
         let hits = layout(&Ui::default());

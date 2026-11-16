@@ -235,6 +235,26 @@ impl PianoRoll {
                     grid.row(ui, &pair, covered, &mut ops);
                 }
 
+                grid.section(ui, "Arrange");
+                for pair in [
+                    [
+                        (MoreOp::Arp(true), "Arp Up"),
+                        (MoreOp::Arp(false), "Arp Down"),
+                    ],
+                    [
+                        (MoreOp::Invert(true), "Invert Up"),
+                        (MoreOp::Invert(false), "Invert Down"),
+                    ],
+                ] {
+                    grid.row(ui, &pair, covered, &mut ops);
+                }
+                grid.row(
+                    ui,
+                    &[(MoreOp::Dedupe, "Remove Duplicates")],
+                    covered,
+                    &mut ops,
+                );
+
                 grid.section(ui, "Transpose");
                 let steps = [
                     (MoreOp::Shift(-12), "-12"),

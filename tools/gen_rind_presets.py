@@ -15,7 +15,7 @@ import rind_genres  # noqa: E402
 BASE = dict(
     w1=1, v1=1, d1=0.2, o1=0, w2=1, v2=0, d2=0.2, o2=0, s2=0, l2=0.75, st=0.5,
     a=0.003, d=0.6, s=1.0, r=0.25,
-    ft=0, fs=1, cut=12000.0, res=0.1, drv=0.0, key=0.0,
+    ft=3, fs=1, cut=12000.0, res=0.1, drv=0.0, key=0.0,
     fe=0.0, ea=0.003, ed=0.4, es=0.5, er=0.3,
     lw=0, lr=2.0, lt=0, la=0.0, vib=0.0,
     mono=0, porta=0.0,
