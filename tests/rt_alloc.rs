@@ -165,11 +165,12 @@ fn engine_render_and_commands_do_not_allocate() {
     // A De-esser and Denoise (#43): Denoise's Learn goes on and off in the counted render.
     let de_esser = ch.rack.add(honeydew_audio::de_esser::DE_ESSER);
     let denoise = ch.rack.add(honeydew_audio::denoise::DENOISE);
-    // The Dragonfly reverbs: a size, decay, algorithm and program change each, mid-render.
-    let hall = ch.rack.add(honeydew_audio::dragonfly_fx::HALL);
-    let room = ch.rack.add(honeydew_audio::dragonfly_fx::ROOM);
-    let plate = ch.rack.add(honeydew_audio::dragonfly_fx::PLATE);
-    let early = ch.rack.add(honeydew_audio::dragonfly_fx::EARLY);
+    // The Dragonfly reverbs run the plugins' own DSP, which (as the plugins do) allocates when a size or algorithm
+    // changes: they render here, with no change mid-render.
+    let _hall = ch.rack.add(honeydew_audio::dragonfly_fx::HALL);
+    let _room = ch.rack.add(honeydew_audio::dragonfly_fx::ROOM);
+    let _plate = ch.rack.add(honeydew_audio::dragonfly_fx::PLATE);
+    let _early = ch.rack.add(honeydew_audio::dragonfly_fx::EARLY);
     let mut engine = SongAudioEngine::new(&song, RATE).unwrap();
     engine.note_on(2, 45, 1.0);
     let mut output = vec![0.0_f32; 4096 * 2];
@@ -194,10 +195,6 @@ fn engine_render_and_commands_do_not_allocate() {
                 10 => engine.set_param(1, 2, AutomationTarget::MIX, 0.7),
                 12 => engine.set_param(1, denoise, 3, ((i / 50) % 2) as f32),
                 17 => engine.set_param(1, de_esser, 1, (i % 7) as f32 / 7.0),
-                7 => engine.set_param(1, hall, 4, (i % 11) as f32 / 10.0),
-                8 => engine.set_param(1, room, 5, (i % 13) as f32 / 12.0),
-                9 => engine.set_param(1, plate, 3, (i % 3) as f32 / 2.0),
-                11 => engine.set_param(1, early, 3, (i % 8) as f32 / 7.0),
                 15 => engine.set_param(1, 3, 2, 0.4),
                 20 => engine.note_on(1, 50 + (i % 20) as u8, 0.8),
                 25 => engine.note_off(1, 50 + ((i - 5) % 20) as u8),

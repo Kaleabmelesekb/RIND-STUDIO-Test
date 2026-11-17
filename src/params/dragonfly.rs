@@ -1,6 +1,6 @@
 //! The Dragonfly reverbs ([`honeydew_audio::dragonfly_fx`]), Honeydew's own effects after Michael Willis and Rob van
-//! den Berg's Dragonfly Reverb plugins (GPL-3.0-or-later): each one's params and value texts, in the engine's order
-//! and laws. The plugins' own units show: %, m, ms, Hz, kHz, s.
+//! den Berg's Dragonfly Reverb plugins (GPL-3.0-or-later): each one's params, in the plugin's own order, names,
+//! ranges and units.
 
 use honeydew_audio::dragonfly_fx::{self as d, Law, Spec, early, hall, plate, room};
 
@@ -13,21 +13,6 @@ const fn param(spec: &Spec, default: f32, items: &'static [&'static str]) -> P {
             spec.name,
             default,
             Display::linear(spec.min, spec.max, spec.decimals, spec.unit),
-        ),
-        Law::Exp => P::cont(
-            spec.name,
-            default,
-            Display::exp(spec.min, spec.max, spec.decimals, spec.unit),
-        ),
-        Law::Freq => P::cont(
-            spec.name,
-            default,
-            Display::Freq {
-                min: spec.min,
-                max: spec.max,
-                hz_decimals: 0,
-                khz_decimals: 1,
-            },
         ),
         Law::Menu => P::menu(spec.name, default, items),
     }
@@ -58,32 +43,32 @@ static EARLY_PARAMS: [P; early::PARAMS] =
 
 pub static HALL: ModuleSpec = ModuleSpec::effect(
     d::HALL,
-    "Dragonfly Hall",
-    "Dragonfly Hall",
+    "Dragonfly Hall Reverb",
+    "Dragonfly Hall Reverb",
     false,
     &HALL_PARAMS,
     &[],
 );
 pub static ROOM: ModuleSpec = ModuleSpec::effect(
     d::ROOM,
-    "Dragonfly Room",
-    "Dragonfly Room",
+    "Dragonfly Room Reverb",
+    "Dragonfly Room Reverb",
     false,
     &ROOM_PARAMS,
     &[],
 );
 pub static PLATE: ModuleSpec = ModuleSpec::effect(
     d::PLATE,
-    "Dragonfly Plate",
-    "Dragonfly Plate",
+    "Dragonfly Plate Reverb",
+    "Dragonfly Plate Reverb",
     false,
     &PLATE_PARAMS,
     &[],
 );
 pub static EARLY: ModuleSpec = ModuleSpec::effect(
     d::EARLY,
-    "Dragonfly Early",
-    "Dragonfly Early",
+    "Dragonfly Early Reflections",
+    "Dragonfly Early Reflections",
     false,
     &EARLY_PARAMS,
     &[],

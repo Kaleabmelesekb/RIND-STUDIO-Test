@@ -371,17 +371,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Dragonfly Reverb (Dragonfly Hall, Room, Plate and Early Reflections)
 
-- Source: Dragonfly Reverb by Michael Willis and Rob van den Berg (<https://github.com/michaelwillis/dragonfly-reverb>):
-  the plugins' algorithm structure, parameter laws and factory programs, ported to Rust in `crates/audio/src/dragonfly/`
-  and `crates/audio/src/dragonfly_fx.rs`.
-- Which in turn use Freeverb3 by Teru Kamogashira (<https://www.nongnu.org/freeverb3/>, GPL-2.0-or-later): the
-  `zrev2`, `progenitor2`, `nrev`, `nrevb`, `strev` and `earlyref` reverbs and their delay, allpass, filter and noise
-  parts, and zita-rev1 by Fons Adriaensen (GPL-2.0-or-later): the feedback-delay-network feel of the Hall.
-- Copyright (C) Michael Willis, Rob van den Berg, Teru Kamogashira and Fons Adriaensen.
-- License: GPL-3.0-or-later (Dragonfly Reverb) and GPL-2.0-or-later (Freeverb3, zita-rev1), both compatible with
-  Honeydew's own GPL-3.0-or-later ([`LICENSE`](LICENSE)); every file keeps its credit in its header.
-- Modified: a Rust port of the algorithms, with the plugins' parameters normalised to 0 … 1 for Honeydew's rack and
-  no allocation on the audio thread.
+- Source: Dragonfly Reverb by Michael Willis and Rob van den Berg (<https://github.com/michaelwillis/dragonfly-reverb>),
+  vendored unchanged in `vendor/dragonfly-reverb/` (see its `README.md`): each plugin's `DSP.cpp`, its parameters and
+  factory programs, and the Freeverb3 code under them. Not included: DPF, the plugin framework and OpenGL window.
+- Includes Freeverb3 by Teru Kamogashira (<https://www.nongnu.org/freeverb3/>, GPL-2.0-or-later) and the reverb designs
+  of Fons Adriaensen's zita-rev1 and Jon Dattorro, Jezar's Freeverb and CCRMA's NRev, as the plugins credit them.
+- Copyright (C) Michael Willis, Rob van den Berg, Teru Kamogashira and the other authors of the files.
+- License: GPL-3.0-or-later (Dragonfly Reverb) and GPL-2.0-or-later (Freeverb3), both compatible with Honeydew's own
+  GPL-3.0-or-later ([`LICENSE`](LICENSE)); every file keeps its own notice.
+- Modified: not the DSP. We add `bridge.cpp` (a C face) and two small stand-in headers for DPF's, and Rind Studio's
+  panels and presets restate each plugin's parameters and programs.
 
 ## Lemon Studio's plugins (Lemon Trio, Lemon Sampler and Lemon Parametric EQ)
 

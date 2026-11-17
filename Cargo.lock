@@ -1982,6 +1982,7 @@ dependencies = [
 name = "honeydew-audio"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "cpal",
  "crossbeam-channel",
  "ogg",

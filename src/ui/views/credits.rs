@@ -35,7 +35,7 @@ fn effects() -> String {
 }
 /// The credit of the four Dragonfly reverbs (`crates/audio/src/dragonfly`).
 const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Dragonfly Reverb by Michael Willis and Rob van den Berg \
-                         (GPL-3.0-or-later), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
+                         (GPL-3.0-or-later, their DSP unchanged), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
                          Kamogashira and zita-rev1 by Fons Adriaensen";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";

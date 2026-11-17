@@ -1,6 +1,6 @@
 //! The Dragonfly reverbs (`honeydew_audio::dragonfly_fx`), UIHeight 7 U: Honeydew's own panels, a tab strip over pages
-//! of knobs, after the plugins' own knob groups. The plugins are Michael Willis and Rob van den Berg's Dragonfly
-//! Reverb (GPL-3.0-or-later).
+//! of knobs, with each plugin's own knobs, names and order. The plugins are Michael Willis and Rob van den Berg's Dragonfly
+//! Reverb (GPL-3.0-or-later); their own OpenGL window needs a desktop GL context, so these panels stand in for it.
 
 use honeydew_audio::dragonfly_fx::{early as e, hall as h, plate as p, room as r};
 
@@ -11,9 +11,9 @@ pub(in crate::panels) fn hall() -> Panel {
     Panel::new(vstack([
         tabs(1, "MIX · SPACE · TONE").h(Size::U(1.25)),
         hstack([
-            knob(2, "Dry").p(h::DRY),
-            knob(3, "Early").p(h::EARLY),
-            knob(4, "Late").p(h::LATE),
+            knob(2, "Dry Level").p(h::DRY_LEVEL),
+            knob(3, "Early Level").p(h::EARLY_LEVEL),
+            knob(4, "Late Level").p(h::LATE_LEVEL),
             knob(5, "Early Send").p(h::EARLY_SEND),
             knob(6, "Width").p(h::WIDTH),
             knob(7, "Predelay").p(h::PREDELAY),
@@ -45,10 +45,10 @@ pub(in crate::panels) fn room() -> Panel {
     Panel::new(vstack([
         tabs(1, "MIX · SPACE · TONE").h(Size::U(1.25)),
         hstack([
-            knob(2, "Dry").p(r::DRY),
-            knob(3, "Early").p(r::EARLY),
+            knob(2, "Dry Level").p(r::DRY_LEVEL),
+            knob(3, "Early Level").p(r::EARLY_LEVEL),
             knob(4, "Early Send").p(r::EARLY_SEND),
-            knob(5, "Late").p(r::LATE),
+            knob(5, "Late Level").p(r::LATE_LEVEL),
             knob(6, "Width").p(r::WIDTH),
             knob(7, "Predelay").p(r::PREDELAY),
         ])
@@ -79,8 +79,8 @@ pub(in crate::panels) fn plate() -> Panel {
         tabs(1, "MIX · TONE").h(Size::U(1.25)),
         hstack([
             vstack([list(2, "Simple · Nested · Tank", Bar::Left).p(p::ALGORITHM)]).w(Size::U(3.5)),
-            knob(3, "Dry").p(p::DRY),
-            knob(4, "Wet").p(p::WET),
+            knob(3, "Dry Level").p(p::DRY_LEVEL),
+            knob(4, "Wet Level").p(p::WET_LEVEL),
             knob(5, "Width").p(p::WIDTH),
             knob(6, "Predelay").p(p::PREDELAY),
             knob(7, "Decay").p(p::DECAY),
@@ -105,8 +105,8 @@ pub(in crate::panels) fn early() -> Panel {
                 .items_per_column(8)
                 .h(Size::U(1.25))])
             .w(Size::U(4.0)),
-            knob(3, "Dry").p(e::DRY),
-            knob(4, "Wet").p(e::WET),
+            knob(3, "Dry Level").p(e::DRY_LEVEL),
+            knob(4, "Wet Level").p(e::WET_LEVEL),
         ])
         .show(Show::Tab(0)),
         hstack([
