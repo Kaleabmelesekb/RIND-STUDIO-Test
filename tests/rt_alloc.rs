@@ -165,6 +165,12 @@ fn engine_render_and_commands_do_not_allocate() {
     // A De-esser and Denoise (#43): Denoise's Learn goes on and off in the counted render.
     let de_esser = ch.rack.add(honeydew_audio::de_esser::DE_ESSER);
     let denoise = ch.rack.add(honeydew_audio::denoise::DENOISE);
+    // The Dragonfly reverbs run the plugins' own DSP, which (as the plugins do) allocates when a size or algorithm
+    // changes: they render here, with no change mid-render.
+    let _hall = ch.rack.add(honeydew_audio::dragonfly_fx::HALL);
+    let _room = ch.rack.add(honeydew_audio::dragonfly_fx::ROOM);
+    let _plate = ch.rack.add(honeydew_audio::dragonfly_fx::PLATE);
+    let _early = ch.rack.add(honeydew_audio::dragonfly_fx::EARLY);
     let mut engine = SongAudioEngine::new(&song, RATE).unwrap();
     engine.note_on(2, 45, 1.0);
     let mut output = vec![0.0_f32; 4096 * 2];

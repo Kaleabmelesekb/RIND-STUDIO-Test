@@ -369,6 +369,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - Modified: none in `vendor/lemon-studio/os-engine/src/effects/`, a copy of upstream's files
   (`tools/sync-lemon-effects.sh` updates them). `src/params/lemon.rs` starts with a `Modified for Honeydew` line.
 
+## Dragonfly Reverb (Dragonfly Hall, Room, Plate and Early Reflections)
+
+- Source: Dragonfly Reverb by Michael Willis and Rob van den Berg (<https://github.com/michaelwillis/dragonfly-reverb>),
+  vendored unchanged in `vendor/dragonfly-reverb/` (see its `README.md`): each plugin's `DSP.cpp`, its parameters and
+  factory programs, and the Freeverb3 code under them. Not included: DPF, the plugin framework and OpenGL window.
+- Includes Freeverb3 by Teru Kamogashira (<https://www.nongnu.org/freeverb3/>, GPL-2.0-or-later) and the reverb designs
+  of Fons Adriaensen's zita-rev1 and Jon Dattorro, Jezar's Freeverb and CCRMA's NRev, as the plugins credit them.
+- Copyright (C) Michael Willis, Rob van den Berg, Teru Kamogashira and the other authors of the files.
+- License: GPL-3.0-or-later (Dragonfly Reverb) and GPL-2.0-or-later (Freeverb3), both compatible with Honeydew's own
+  GPL-3.0-or-later ([`LICENSE`](LICENSE)); every file keeps its own notice.
+- Modified: not the DSP. We add `bridge.cpp` (a C face) and two small stand-in headers for DPF's, and Rind Studio's
+  panels and presets restate each plugin's parameters and programs.
+
 ## Lemon Studio's plugins (Lemon Trio, Lemon Sampler and Lemon Parametric EQ)
 
 - Source: Lemon Studio (<https://github.com/ItsAlphaNeon/Lemon-Studio>), at the commit `vendor/lemon-studio/README.md`

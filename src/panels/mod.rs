@@ -473,6 +473,10 @@ pub fn panel_for(type_id: u16) -> Option<&'static Panel> {
             (honeydew_audio::modulator::MODULATOR, fx::modulator::panel()),
             (honeydew_audio::de_esser::DE_ESSER, fx::de_esser::panel()),
             (honeydew_audio::denoise::DENOISE, fx::denoise::panel()),
+            (honeydew_audio::dragonfly_fx::HALL, fx::dragonfly::hall()),
+            (honeydew_audio::dragonfly_fx::ROOM, fx::dragonfly::room()),
+            (honeydew_audio::dragonfly_fx::PLATE, fx::dragonfly::plate()),
+            (honeydew_audio::dragonfly_fx::EARLY, fx::dragonfly::early()),
         ];
         fx.chain(inst).chain(lemon).collect()
     });

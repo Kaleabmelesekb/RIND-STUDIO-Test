@@ -230,7 +230,17 @@ const SECTIONS: [(Option<&str>, &[Entry]); 7] = [
     ),
     (
         Some("ECHO"),
-        &[M(32), M(35), M(lemon::REVERB), M(18), M(16)],
+        &[
+            M(32),
+            M(35),
+            M(lemon::REVERB),
+            M(honeydew_audio::dragonfly_fx::HALL),
+            M(honeydew_audio::dragonfly_fx::ROOM),
+            M(honeydew_audio::dragonfly_fx::PLATE),
+            M(honeydew_audio::dragonfly_fx::EARLY),
+            M(18),
+            M(16),
+        ],
     ),
     (
         Some("LEVEL"),

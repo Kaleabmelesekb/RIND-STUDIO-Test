@@ -8,6 +8,7 @@ mod comb;
 pub mod de_esser;
 pub mod denoise;
 pub mod device;
+pub mod dragonfly_fx;
 pub mod drums;
 pub mod dw_sampler;
 pub mod dwp;
@@ -109,6 +110,10 @@ pub fn effect_info(id: u16) -> Option<EffectInfo> {
         modulator::MODULATOR => ("Modulator", modulator::PARAMS),
         de_esser::DE_ESSER => ("De-esser", de_esser::PARAMS),
         denoise::DENOISE => ("Denoise", denoise::PARAMS),
+        dragonfly_fx::HALL => ("Dragonfly Hall Reverb", dragonfly_fx::hall::PARAMS),
+        dragonfly_fx::ROOM => ("Dragonfly Room Reverb", dragonfly_fx::room::PARAMS),
+        dragonfly_fx::PLATE => ("Dragonfly Plate Reverb", dragonfly_fx::plate::PARAMS),
+        dragonfly_fx::EARLY => ("Dragonfly Early Reflections", dragonfly_fx::early::PARAMS),
         _ => return None,
     };
     Some(EffectInfo {
@@ -274,6 +279,10 @@ pub trait ExternalEffect: Send {
     }
     /// Clears its tails and delay lines (ResetSound).
     fn reset(&mut self);
+    /// The engine's sample rate is now `sample_rate`; an effect that runs at the rate it was made for ignores it.
+    fn set_sample_rate(&mut self, sample_rate: f32) {
+        let _ = sample_rate;
+    }
     /// A controller plugin's output (0…1) as its last block left it, which its link sets its target to; `None` for
     /// any other effect, or before its first output.
     fn control(&self) -> Option<f32> {
@@ -281,9 +290,14 @@ pub trait ExternalEffect: Send {
     }
 }
 
+/// The block an effect of the engine's own built as an external one is made for (longer ones run in parts).
+const OWN_BLOCK: usize = 2048;
+
 /// An external effect and its dry copy, for the common params' mix.
 struct External {
     effect: Box<dyn ExternalEffect>,
+    /// The engine's own effect ([`AudioEffect::new`]), not the host's: an edit's engine takes it over.
+    owned: bool,
     dry_left: Vec<f32>,
     dry_right: Vec<f32>,
 }
@@ -526,6 +540,23 @@ impl AudioEffect {
                     Processor::Denoise(Box::new(state)),
                 )
             }
+            // The original Dragonfly DSP, run as an effect of its own that the engine swaps in an edit like any other.
+            dragonfly_fx::HALL | dragonfly_fx::ROOM | dragonfly_fx::PLATE | dragonfly_fx::EARLY => {
+                let (dragonfly, defaults) = dragonfly_fx::Dragonfly::new(id, sample_rate)
+                    .ok_or(EffectError::UnsupportedEffect(id))?;
+                let mut effect = Self::external(
+                    id,
+                    sample_rate,
+                    Box::new(dragonfly),
+                    defaults.len(),
+                    OWN_BLOCK,
+                )?;
+                effect.params = defaults.to_vec();
+                if let Some(external) = &mut effect.external {
+                    external.owned = true;
+                }
+                return Ok(effect);
+            }
             _ => return Err(EffectError::UnsupportedEffect(id)),
         };
         let mut effect = Self {
@@ -568,6 +599,7 @@ impl AudioEffect {
             probe: analysis::Probe::new(id, sample_rate),
             external: Some(External {
                 effect,
+                owned: false,
                 dry_left: vec![0.0; max_block.max(1)],
                 dry_right: vec![0.0; max_block.max(1)],
             }),
@@ -576,7 +608,9 @@ impl AudioEffect {
 
     /// An [`ExternalEffect`]'s module ([`Self::external`]).
     pub fn is_external(&self) -> bool {
-        self.external.is_some()
+        self.external
+            .as_ref()
+            .is_some_and(|external| !external.owned)
     }
 
     pub fn type_id(&self) -> u16 {
@@ -605,6 +639,9 @@ impl AudioEffect {
         }
         if sample_rate != self.sample_rate {
             self.sample_rate = sample_rate;
+            if let Some(external) = &mut self.external {
+                external.effect.set_sample_rate(sample_rate);
+            }
             // ponytail: the Analyzer's settings go back to a new module's here; no host changes the rate of a built
             // effect yet (the engine rebuilds and re-applies them), carry them over if one does.
             self.probe = analysis::Probe::new(self.id, sample_rate);

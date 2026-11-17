@@ -8,6 +8,7 @@ mod channel;
 mod de_esser;
 mod denoise;
 mod display;
+mod dragonfly;
 mod dynamic_eq;
 mod effects;
 mod effects_24_51;
@@ -31,6 +32,8 @@ pub use de_esser::MODULE as DE_ESSER;
 pub use denoise::MODULE as DENOISE;
 pub(crate) use display::clamp01;
 pub use display::{At, Display, Fmt, Sign, TextCx, menu_index, menu_value};
+/// The Dragonfly reverbs, Honeydew's own effects (`honeydew_audio::dragonfly_fx`).
+pub use dragonfly::MODULES as DRAGONFLY_MODULES;
 /// The Dynamic EQ, Honeydew's own effect (`honeydew_audio::dynamic_eq`).
 pub use dynamic_eq::MODULE as DYNAMIC_EQ;
 pub(crate) use effects_24_51::ARP_RHYTHM_PATTERNS;
@@ -309,13 +312,14 @@ pub fn instruments() -> impl Iterator<Item = &'static ModuleSpec> {
 }
 
 /// The module with type id `id` (effect, note effect, instrument, a plugin module, one of Lemon Studio's effects, the
-/// Dynamic EQ, the Modulator, the De-esser or Denoise), or `None` for ids that are not registered.
+/// Dynamic EQ, the Modulator, the De-esser, Denoise or a Dragonfly reverb), or `None` for ids that are not registered.
 pub fn module_spec(id: u16) -> Option<&'static ModuleSpec> {
     modules()
         .chain(instruments())
         .chain(&PLUGINS)
         .chain(&LEMON_MODULES)
         .chain([&DYNAMIC_EQ, &MODULATOR, &DE_ESSER, &DENOISE])
+        .chain(DRAGONFLY_MODULES)
         .find(|m| m.id == id)
 }
 
