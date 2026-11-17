@@ -6,7 +6,7 @@ use honeydew::sample_cache::SampleCache;
 use honeydew::song::{ChannelKind, ModuleInstance, Song};
 use honeydew_audio::dynamic_eq::{self, band};
 use honeydew_audio::lemon::{self, dynamics, norm, reverb};
-use honeydew_audio::{de_esser, denoise};
+use honeydew_audio::{de_esser, denoise, dragonfly_fx};
 
 /// A song with a Lemon Reverb between two of the song format's own effects and a Lemon Limiter on the master, off
 /// their defaults.
@@ -63,6 +63,16 @@ fn a_saved_song_and_a_rack_preset_keep_them_where_fl_studio_mobile_skips_them() 
     rack.get_mut(id).unwrap().params[de_esser::MODE] = 1.0;
     let id = rack.add(denoise::DENOISE);
     rack.get_mut(id).unwrap().params[denoise::REDUCTION] = 0.6;
+    // And the four Dragonfly reverbs, each with a param off its default.
+    for (type_id, param) in [
+        (dragonfly_fx::HALL, dragonfly_fx::hall::SIZE),
+        (dragonfly_fx::ROOM, dragonfly_fx::room::DECAY),
+        (dragonfly_fx::PLATE, dragonfly_fx::plate::ALGORITHM),
+        (dragonfly_fx::EARLY, dragonfly_fx::early::PROGRAM),
+    ] {
+        let id = rack.add(type_id);
+        rack.get_mut(id).unwrap().params[param] = 0.9;
+    }
     let bytes = honeydew::flm::write(&song).unwrap();
     // Each one's `RMOd` is inside an `HDPm`, which a reader that does not know its type skips, never the rack's own.
     let rmods: Vec<usize> = (bytes.windows(4).enumerate())
@@ -71,7 +81,7 @@ fn a_saved_song_and_a_rack_preset_keep_them_where_fl_studio_mobile_skips_them() 
         })
         .map(|(i, _)| i)
         .collect();
-    assert_eq!(rmods.len(), 5);
+    assert_eq!(rmods.len(), 9);
     assert!(rmods.iter().all(|&i| &bytes[i - 16..i - 12] == b"HDPm"));
     // Read back, and written again byte for byte (as a live session's checkpoints require).
     let back = honeydew::flm::read(&bytes).unwrap();

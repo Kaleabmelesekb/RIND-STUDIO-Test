@@ -33,6 +33,10 @@ fn effects() -> String {
         names.join(", ")
     )
 }
+/// The credit of the four Dragonfly reverbs (`crates/audio/src/dragonfly`).
+const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Dragonfly Reverb by Michael Willis and Rob van den Berg \
+                         (GPL-3.0-or-later), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
+                         Kamogashira and zita-rev1 by Fons Adriaensen";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -81,6 +85,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         &format!("{APP_NAME}:"),
         LOGO,
         &effects(),
+        DRAGONFLY,
         THIRD_PARTY,
         "",
         SOUNDS,
@@ -226,6 +231,7 @@ mod tests {
         let text = rendered(Some(INDEX), "credits-listed");
         for want in [
             LOGO,
+            "Dragonfly Reverb by Michael Willis and Rob van den Berg",
             "License MIT:",
             "MuseScore_General by S. Christian Collins",
             "Full notice in CREDITS.txt",

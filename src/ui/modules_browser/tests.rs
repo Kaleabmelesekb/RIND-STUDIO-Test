@@ -2,7 +2,7 @@ use super::*;
 
 /// The Modules browser's list: `Paste`, `Rack Preset`, `Instrument`, then the sections. The NOTE EFFECT section's five entries are
 /// all the note effects of the registry. Lemon Reverb and Lemon Limiter are Honeydew's own (`honeydew_audio::lemon`), as is
-/// the Dynamic EQ, the De-esser and Denoise, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
+/// the Dynamic EQ, the De-esser, Denoise and the four Dragonfly reverbs, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
 /// 0.4.9's effects and Citrus, Lemon Drum Sampler and Lemon Slicer its built-in plugins (`crate::plugins::builtin`), and Rind Honeydew's own (`crates/rind`), a
 /// Lemon plugin after its counterpart, the others by name.
 const SPEC: &[(&str, &[&str])] = &[
@@ -33,6 +33,10 @@ const SPEC: &[(&str, &[&str])] = &[
             "Reverb",
             "Reverb 2",
             "Lemon Reverb",
+            "Dragonfly Hall",
+            "Dragonfly Room",
+            "Dragonfly Plate",
+            "Dragonfly Early",
             "Tape Delay",
             "Trance Delay",
         ],
@@ -166,6 +170,7 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
     let current: Vec<u16> = (params::modules().chain(&params::LEMON_MODULES))
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
         .chain([&params::DE_ESSER, &params::DENOISE])
+        .chain(params::DRAGONFLY_MODULES)
         .filter(|m| !m.legacy)
         .map(|m| m.id)
         .collect();
@@ -932,13 +937,17 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Randomizer",
             "Scale",
             "Arpeggiator",
-            // Honeydew's own: 1002 … 1007, then the built-in plugin.
+            // Honeydew's own: 1002 … 1011, then the built-in plugin.
             "Lemon Reverb",
             "Lemon Limiter",
             "Dynamic EQ",
             "Modulator",
             "De-esser",
             "Denoise",
+            "Dragonfly Hall",
+            "Dragonfly Room",
+            "Dragonfly Plate",
+            "Dragonfly Early",
             "Lemon Balance",
             "Lemon Chorus",
             "Lemon Delay",

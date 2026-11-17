@@ -8,6 +8,8 @@ mod comb;
 pub mod de_esser;
 pub mod denoise;
 pub mod device;
+pub mod dragonfly;
+pub mod dragonfly_fx;
 pub mod drums;
 pub mod dw_sampler;
 pub mod dwp;
@@ -109,6 +111,10 @@ pub fn effect_info(id: u16) -> Option<EffectInfo> {
         modulator::MODULATOR => ("Modulator", modulator::PARAMS),
         de_esser::DE_ESSER => ("De-esser", de_esser::PARAMS),
         denoise::DENOISE => ("Denoise", denoise::PARAMS),
+        dragonfly_fx::HALL => ("Dragonfly Hall", dragonfly_fx::hall::PARAMS),
+        dragonfly_fx::ROOM => ("Dragonfly Room", dragonfly_fx::room::PARAMS),
+        dragonfly_fx::PLATE => ("Dragonfly Plate", dragonfly_fx::plate::PARAMS),
+        dragonfly_fx::EARLY => ("Dragonfly Early Reflections", dragonfly_fx::early::PARAMS),
         _ => return None,
     };
     Some(EffectInfo {
@@ -526,6 +532,38 @@ impl AudioEffect {
                     Processor::Denoise(Box::new(state)),
                 )
             }
+            dragonfly_fx::HALL => {
+                let state =
+                    dragonfly_fx::HallState::new(&dragonfly_fx::hall::DEFAULTS, sample_rate);
+                (
+                    dragonfly_fx::hall::DEFAULTS.to_vec(),
+                    Processor::DragonflyHall(Box::new(state)),
+                )
+            }
+            dragonfly_fx::ROOM => {
+                let state =
+                    dragonfly_fx::RoomState::new(&dragonfly_fx::room::DEFAULTS, sample_rate);
+                (
+                    dragonfly_fx::room::DEFAULTS.to_vec(),
+                    Processor::DragonflyRoom(Box::new(state)),
+                )
+            }
+            dragonfly_fx::PLATE => {
+                let state =
+                    dragonfly_fx::PlateState::new(&dragonfly_fx::plate::DEFAULTS, sample_rate);
+                (
+                    dragonfly_fx::plate::DEFAULTS.to_vec(),
+                    Processor::DragonflyPlate(Box::new(state)),
+                )
+            }
+            dragonfly_fx::EARLY => {
+                let state =
+                    dragonfly_fx::EarlyState::new(&dragonfly_fx::early::DEFAULTS, sample_rate);
+                (
+                    dragonfly_fx::early::DEFAULTS.to_vec(),
+                    Processor::DragonflyEarly(Box::new(state)),
+                )
+            }
             _ => return Err(EffectError::UnsupportedEffect(id)),
         };
         let mut effect = Self {
@@ -934,6 +972,10 @@ enum Processor {
     Modulator(Box<modulator::ModulatorState>),
     DeEsser(Box<de_esser::DeEsserState>),
     Denoise(Box<denoise::DenoiseState>),
+    DragonflyHall(Box<dragonfly_fx::HallState>),
+    DragonflyRoom(Box<dragonfly_fx::RoomState>),
+    DragonflyPlate(Box<dragonfly_fx::PlateState>),
+    DragonflyEarly(Box<dragonfly_fx::EarlyState>),
     Monitor,
 }
 
@@ -979,6 +1021,10 @@ impl Processor {
             Self::Modulator(state) => state.refresh(params, sample_rate),
             Self::DeEsser(state) => state.refresh(params, sample_rate),
             Self::Denoise(state) => state.refresh(params, sample_rate),
+            Self::DragonflyHall(state) => state.refresh(params, sample_rate),
+            Self::DragonflyRoom(state) => state.refresh(params, sample_rate),
+            Self::DragonflyPlate(state) => state.refresh(params, sample_rate),
+            Self::DragonflyEarly(state) => state.refresh(params, sample_rate),
             Self::Monitor => {}
         }
     }
@@ -1057,6 +1103,10 @@ impl Processor {
             Self::Modulator(state) => state.process_frame(l, r, (l, r)),
             Self::DeEsser(state) => state.process_frame(l, r),
             Self::Denoise(state) => state.process_frame(l, r),
+            Self::DragonflyHall(state) => state.process_frame(l, r),
+            Self::DragonflyRoom(state) => state.process_frame(l, r),
+            Self::DragonflyPlate(state) => state.process_frame(l, r),
+            Self::DragonflyEarly(state) => state.process_frame(l, r),
             Self::Monitor => (l, r),
         }
     }
@@ -1117,6 +1167,10 @@ impl Processor {
             Self::Modulator(state) => state.reset(),
             Self::DeEsser(state) => state.reset(),
             Self::Denoise(state) => state.reset(),
+            Self::DragonflyHall(state) => state.reset(),
+            Self::DragonflyRoom(state) => state.reset(),
+            Self::DragonflyPlate(state) => state.reset(),
+            Self::DragonflyEarly(state) => state.reset(),
             Self::Monitor => {}
         }
     }

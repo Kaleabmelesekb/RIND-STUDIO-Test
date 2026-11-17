@@ -160,6 +160,10 @@ pub fn ui_height(type_id: u16) -> Option<f32> {
         honeydew_audio::dynamic_eq::DYNAMIC_EQ => 11.0,
         honeydew_audio::modulator::MODULATOR => 8.5,
         honeydew_audio::de_esser::DE_ESSER | honeydew_audio::denoise::DENOISE => 7.5,
+        honeydew_audio::dragonfly_fx::HALL
+        | honeydew_audio::dragonfly_fx::ROOM
+        | honeydew_audio::dragonfly_fx::PLATE
+        | honeydew_audio::dragonfly_fx::EARLY => 7.0,
         _ => return None,
     })
 }

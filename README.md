@@ -82,6 +82,8 @@ Plugin settings are saved with the project, and their controls can be automated.
 
 **Built-in plugins, on every platform:** Lemon Studio's Lemon Trio and Lemon Sampler are under SYNTH, and Lemon Parametric EQ under FILTER. Their own controls show right in the rack card, on the web and Android too. If you have them installed separately, Honeydew uses the built-in ones. On the web, Lemon Sampler's time stretching only resamples.
 
+**Dragonfly reverbs:** Dragonfly Hall, Room, Plate and Early Reflections, under ECHO in the Modules browser, work on every platform, Android included. Each has the original plugin's knobs and its factory programs as presets (Hall 25, Room 25, Plate 8, Early Reflections 8).
+
 **Built-in effects:** Lemon Studio's small effects (Lemon Soft Clipper, Fast Distortion, Balance, Stereo Enhancer, Transient Processor, Chorus, Stereo Shaper, Filter, Flanger and Phaser), Lemon Delay, Lemon Vocoder, the multiband maximiser Press and the pattern filter Pulp Filter, in their sections of the Modules browser. Pulp Filter's patterns follow the song's tempo and position. Lemon Vocoder's carrier is the channel its card's `Sidechain` menu picks.
 **Controllers:** Lemon Peak Controller (a peak follower and LFO) and Lemon Formula Controller (a formula over time and its knobs), under MISC, make no sound of their own: their output drives a param of the song. Touch the param to drive (any automatable control, on any channel), then pick `Link recent control` in the controller card's ≡ menu; `Clear target` unlinks it. While the song plays the param follows the output, smoothed, and its control shows it. The link is saved with the song.
 
@@ -198,6 +200,7 @@ Honeydew is an independent project, not affiliated with or endorsed by Image-Lin
 - **Code:** [GPL-3.0-or-later](LICENSE). Copyright (c) 2026 The Honeydew contributors.
 - **Plugin hosting, FLP support, Lemon Reverb, Lemon Limiter, Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Citrus, Lemon Drum Sampler and Lemon Slicer:** from Lemon Studio by ItsAlphaNeon; see [Code from Lemon Studio](#code-from-lemon-studio) below.
 - **Lemon Studio's small effects, Lemon Delay, Lemon Vocoder, Press and Pulp Filter:** from Lemon Studio by ItsAlphaNeon too.
+- **Dragonfly Hall, Room, Plate and Early Reflections:** Dragonfly Reverb by Michael Willis and Rob van den Berg ([GPL-3.0-or-later](https://github.com/michaelwillis/dragonfly-reverb)), on Freeverb3 by Teru Kamogashira and zita-rev1 by Fons Adriaensen; see `THIRD_PARTY_NOTICES.md`.
 - **Font:** Open Sans SemiCondensed SemiBold, SIL Open Font License 1.1 ([`assets/fonts/OFL.txt`](assets/fonts/OFL.txt)).
 - **Icon:** a derivative of "Melon" by afitrose, licensed as Free for commercial use WITH ATTRIBUTION.
 - **Sounds:** the bundled instruments, drum kits, one-shots, effects, loops and waveforms come from the sources below. Full notices are in the app under SETTINGS → Sound credits.
