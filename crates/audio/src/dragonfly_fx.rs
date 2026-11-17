@@ -221,8 +221,24 @@ pub mod room {
 
     pub const PARAMS: usize = 18;
     pub const DEFAULTS: [f32; PARAMS] = [
-        1.0, 0.8, 0.1, 0.2, 0.2, 0.166667, 0.5, 0.08, 0.30103, 0.7, 0.16, 0.4, 1.0, 0.830482,
-        0.808165, 0.5, 0.816189, 0.02,
+        1.0,
+        0.8,
+        0.1,
+        0.2,
+        0.2,
+        0.166667,
+        0.5,
+        0.08,
+        std::f32::consts::LOG10_2,
+        0.7,
+        0.16,
+        0.4,
+        1.0,
+        0.830482,
+        0.808165,
+        0.5,
+        0.816189,
+        0.02,
     ];
     pub const DRY: usize = 1;
     pub const EARLY: usize = 2;
@@ -268,7 +284,18 @@ pub mod plate {
     use super::Spec;
 
     pub const PARAMS: usize = 10;
-    pub const DEFAULTS: [f32; PARAMS] = [1.0, 0.8, 0.2, 0.5, 0.5, 0.0, 0.30103, 1.0, 1.0, 0.92511];
+    pub const DEFAULTS: [f32; PARAMS] = [
+        1.0,
+        0.8,
+        0.2,
+        0.5,
+        0.5,
+        0.0,
+        std::f32::consts::LOG10_2,
+        1.0,
+        1.0,
+        0.92511,
+    ];
     pub const DRY: usize = 1;
     pub const WET: usize = 2;
     pub const ALGORITHM: usize = 3;
