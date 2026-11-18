@@ -357,6 +357,9 @@ pub struct Dragonfly {
     #[cfg(not(target_arch = "wasm32"))]
     dsp: *mut c_void,
     specs: &'static [Spec],
+    /// The plugin value last sent to each param: the plugin rebuilds parts of its reverb on every set (even to the
+    /// same value), so a re-applied value is not forwarded.
+    sent: Vec<f64>,
     /// The input the DSP reads while it writes the block in place.
     in_left: Vec<f32>,
     in_right: Vec<f32>,
@@ -389,6 +392,7 @@ impl Dragonfly {
             #[cfg(not(target_arch = "wasm32"))]
             dsp: unsafe { (api.new)(f64::from(sample_rate)) },
             specs,
+            sent: vec![f64::NAN; specs.len()],
             in_left: vec![0.0; CHUNK],
             in_right: vec![0.0; CHUNK],
         };
@@ -405,10 +409,15 @@ impl ExternalEffect for Dragonfly {
         let Some(spec) = index.checked_sub(1).and_then(|i| self.specs.get(i)) else {
             return;
         };
+        let plugin_value = spec.value(value) as f32;
+        if self.sent[index - 1] == f64::from(plugin_value) {
+            return;
+        }
+        self.sent[index - 1] = f64::from(plugin_value);
         #[cfg(not(target_arch = "wasm32"))]
         // SAFETY: `dsp` is live until drop; the index is one of the plugin's own.
         unsafe {
-            (self.api.set)(self.dsp, (index - 1) as u32, spec.value(value) as f32)
+            (self.api.set)(self.dsp, (index - 1) as u32, plugin_value)
         };
     }
 
