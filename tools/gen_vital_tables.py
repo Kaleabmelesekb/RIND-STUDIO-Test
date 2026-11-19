@@ -16,6 +16,7 @@ Run from the repository root (it runs rustfmt on what it writes)."""
 
 import math
 import re
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,18 @@ EXCLUDED = {
 }
 
 SUB_WAVEFORMS = ["Sine", "Saturated Sine", "Triangle", "Square", "Pulse", "Saw"]
+
+
+def f32_repr(x: float) -> str:
+    """The shortest decimal that reads back as the same f32 (Rust's `excessive_precision` lint wants no more)."""
+    want = struct.unpack("f", struct.pack("f", x))[0]
+    for digits in range(1, 10):
+        text = f"{want:.{digits}g}"  # the f32's own value, rounded: the closest of the shortest, as Rust prints it
+        if struct.unpack("f", struct.pack("f", float(text)))[0] == want:
+            break
+    if "e" in text:
+        text = repr(float(text))
+    return text if any(c in text for c in ".e") else text + ".0"
 
 
 def rust_str(s: str) -> str:
@@ -124,7 +137,7 @@ def display(p):
     name = p["name"]
 
     def fmt(x):
-        return repr(float(x))
+        return f32_repr(float(x))
 
     def decimals(span):
         span = abs(span)
@@ -283,7 +296,7 @@ def main():
                     reg.append(f"    P::menu({rust_str(label)}, menu_value({index}, {len(items)}), {ident}),")
             else:
                 norm = (default - p["min"]) / span if span else 0.0
-                reg.append(f"    P::cont({rust_str(label)}, {norm!r}, {display(p)}),")
+                reg.append(f"    P::cont({rust_str(label)}, {f32_repr(norm)}, {display(p)}),")
         elif e["kind"] == "wavetable":
             reg.append(f"    P::menu({rust_str(e['name'])}, 0.0, &WAVETABLES),")
         elif e["kind"] == "source":

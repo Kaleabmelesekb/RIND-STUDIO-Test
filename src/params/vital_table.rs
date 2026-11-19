@@ -357,7 +357,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 1 Detune Range",
-        0.041666666666666664,
+        0.041666668,
         Display::linear(0.0, 48.0, 2, ""),
     ),
     P::cont(
@@ -474,7 +474,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 1 Unison Detune",
-        0.44721399999999994,
+        0.447214,
         Display::power(0.0, 100.0, 2, 1, " %"),
     ),
     P::cont(
@@ -549,7 +549,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 2 Detune Range",
-        0.041666666666666664,
+        0.041666668,
         Display::linear(0.0, 48.0, 2, ""),
     ),
     P::cont(
@@ -666,7 +666,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 2 Unison Detune",
-        0.44721399999999994,
+        0.447214,
         Display::power(0.0, 100.0, 2, 1, " %"),
     ),
     P::cont(
@@ -762,7 +762,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 3 Detune Range",
-        0.041666666666666664,
+        0.041666668,
         Display::linear(0.0, 48.0, 2, ""),
     ),
     P::cont(
@@ -908,7 +908,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Oscillator 3 Unison Detune",
-        0.44721399999999994,
+        0.447214,
         Display::power(0.0, 100.0, 2, 1, " %"),
     ),
     P::cont(
@@ -1026,8 +1026,8 @@ pub static PARAMS: [P; 579] = [
         "Filter 1 Cutoff",
         0.40625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -1036,7 +1036,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("Filter 1 FILTER Input", 0.0),
     P::cont(
         "Filter 1 Formant Resonance",
-        0.7857142857142858,
+        0.78571427,
         Display::linear(30.0, 100.0, 2, " %"),
     ),
     P::cont(
@@ -1100,8 +1100,8 @@ pub static PARAMS: [P; 579] = [
         "Filter 2 Cutoff",
         0.40625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -1110,7 +1110,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("Filter 2 FILTER Input", 0.0),
     P::cont(
         "Filter 2 Formant Resonance",
-        0.7857142857142858,
+        0.78571427,
         Display::linear(30.0, 100.0, 2, " %"),
     ),
     P::cont(
@@ -1166,8 +1166,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 1 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 1 Attack Power",
@@ -1176,8 +1176,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 1 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 1 Decay Power",
@@ -1186,8 +1186,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 1 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 1 Release Power",
@@ -1198,17 +1198,17 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 1 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 1 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 2 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 2 Attack Power",
@@ -1217,8 +1217,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 2 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 2 Decay Power",
@@ -1227,8 +1227,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 2 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 2 Release Power",
@@ -1239,17 +1239,17 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 2 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 2 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 3 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 3 Attack Power",
@@ -1258,8 +1258,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 3 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 3 Decay Power",
@@ -1268,8 +1268,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 3 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 3 Release Power",
@@ -1280,17 +1280,17 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 3 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 3 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 4 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 4 Attack Power",
@@ -1299,8 +1299,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 4 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 4 Decay Power",
@@ -1309,8 +1309,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 4 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 4 Release Power",
@@ -1321,17 +1321,17 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 4 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 4 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 5 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 5 Attack Power",
@@ -1340,8 +1340,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 5 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 5 Decay Power",
@@ -1350,8 +1350,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 5 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 5 Release Power",
@@ -1362,17 +1362,17 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 5 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 5 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 6 Attack",
-        0.0628568545504999,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.06285685,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 6 Attack Power",
@@ -1381,8 +1381,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 6 Decay",
-        0.42044718762876193,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.4204472,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 6 Decay Power",
@@ -1391,8 +1391,8 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Envelope 6 Release",
-        0.23023687994551,
-        Display::power(0.0, 32.00031052706535, 4, 2, " secs"),
+        0.23023687,
+        Display::power(0.0, 32.00031, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 6 Release Power",
@@ -1403,12 +1403,12 @@ pub static PARAMS: [P; 579] = [
     P::cont(
         "Envelope 6 Delay",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont(
         "Envelope 6 Hold",
         0.0,
-        Display::power(0.0, 3.9999596965015236, 4, 2, " secs"),
+        Display::power(0.0, 3.9999597, 4, 2, " secs"),
     ),
     P::cont("LFO 1 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
     P::cont("LFO 1 Fade In", 0.0, Display::linear(0.0, 8.0, 2, " secs")),
@@ -1468,7 +1468,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 1 Smooth Mode", 1.0),
     P::cont(
         "LFO 1 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 2 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1529,7 +1529,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 2 Smooth Mode", 1.0),
     P::cont(
         "LFO 2 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 3 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1590,7 +1590,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 3 Smooth Mode", 1.0),
     P::cont(
         "LFO 3 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 4 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1651,7 +1651,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 4 Smooth Mode", 1.0),
     P::cont(
         "LFO 4 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 5 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1712,7 +1712,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 5 Smooth Mode", 1.0),
     P::cont(
         "LFO 5 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 6 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1773,7 +1773,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 6 Smooth Mode", 1.0),
     P::cont(
         "LFO 6 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 7 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1834,7 +1834,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 7 Smooth Mode", 1.0),
     P::cont(
         "LFO 7 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont("LFO 8 Delay", 0.0, Display::linear(0.0, 4.0, 2, " secs")),
@@ -1895,7 +1895,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("LFO 8 Smooth Mode", 1.0),
     P::cont(
         "LFO 8 Smooth Time",
-        0.17857142857142858,
+        0.17857143,
         Display::exp(0.0009765625, 16.0, 2, " secs"),
     ),
     P::cont(
@@ -2126,31 +2126,31 @@ pub static PARAMS: [P; 579] = [
         "Chorus Filter Cutoff",
         0.40625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
     ),
     P::cont(
         "Chorus Delay 1",
-        0.22956103339194792,
-        Display::exp(0.9765625, 19.999947179131613, 2, " ms"),
+        0.22956103,
+        Display::exp(0.9765625, 19.999947, 2, " ms"),
     ),
     P::cont(
         "Chorus Delay 2",
-        0.6886831001758438,
-        Display::exp(0.9765625, 19.999947179131613, 2, " ms"),
+        0.6886831,
+        Display::exp(0.9765625, 19.999947, 2, " ms"),
     ),
     P::cont("Chorus Mix", 0.5, Display::linear(0.0, 100.0, 1, " %")),
     P::cont(
         "Chorus Feedback",
-        0.7105263157894738,
+        0.7105263,
         Display::linear(-95.0, 95.0, 1, " %"),
     ),
     P::cont(
         "Chorus Frequency",
-        0.3333333333333333,
+        0.33333334,
         Display::Freq {
             min: 0.015625,
             max: 8.0,
@@ -2197,7 +2197,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Compressor Band Gain",
-        0.6950000000000001,
+        0.695,
         Display::linear(-30.0, 30.0, 2, " dB"),
     ),
     P::cont("Band Lower Ratio", 0.9, Display::linear(-1.0, 1.0, 2, "")),
@@ -2219,7 +2219,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Compressor High Gain",
-        0.7716666666666666,
+        0.77166665,
         Display::linear(-30.0, 30.0, 2, " dB"),
     ),
     P::cont("High Lower Ratio", 0.9, Display::linear(-1.0, 1.0, 2, "")),
@@ -2236,7 +2236,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Compressor Low Gain",
-        0.7716666666666666,
+        0.77166665,
         Display::linear(-30.0, 30.0, 2, " dB"),
     ),
     P::cont("Low Lower Ratio", 0.9, Display::linear(-1.0, 1.0, 2, "")),
@@ -2268,8 +2268,8 @@ pub static PARAMS: [P; 579] = [
         "Delay Filter Cutoff",
         0.40625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2277,7 +2277,7 @@ pub static PARAMS: [P; 579] = [
     P::cont("Delay Filter Spread", 1.0, Display::linear(0.0, 1.0, 2, "")),
     P::cont(
         "Delay Frequency",
-        0.36363636363636365,
+        0.36363637,
         Display::Freq {
             min: 0.25,
             max: 512.0,
@@ -2305,7 +2305,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Delay Frequency 2",
-        0.36363636363636365,
+        0.36363637,
         Display::Freq {
             min: 0.25,
             max: 512.0,
@@ -2339,8 +2339,8 @@ pub static PARAMS: [P; 579] = [
         "Distortion Filter Cutoff",
         0.5625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2373,8 +2373,8 @@ pub static PARAMS: [P; 579] = [
         "EQ Band Cutoff",
         0.5625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2389,8 +2389,8 @@ pub static PARAMS: [P; 579] = [
         "EQ High Cutoff",
         0.71875,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2406,8 +2406,8 @@ pub static PARAMS: [P; 579] = [
         "EQ Low Cutoff",
         0.25,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2431,8 +2431,8 @@ pub static PARAMS: [P; 579] = [
         "Filter fx Cutoff",
         0.40625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2441,7 +2441,7 @@ pub static PARAMS: [P; 579] = [
     P::toggle("Filter fx FILTER Input", 0.0),
     P::cont(
         "Filter fx Formant Resonance",
-        0.7857142857142858,
+        0.78571427,
         Display::linear(30.0, 100.0, 2, " %"),
     ),
     P::cont(
@@ -2538,8 +2538,8 @@ pub static PARAMS: [P; 579] = [
         "Flanger Center",
         0.4375,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2548,8 +2548,8 @@ pub static PARAMS: [P; 579] = [
         "Phaser Center",
         0.5625,
         Display::Freq {
-            min: 12.978271799373287,
-            max: 21096.16364242367,
+            min: 12.9782715,
+            max: 21096.164,
             hz_decimals: 0,
             khz_decimals: 2,
         },
@@ -2558,7 +2558,7 @@ pub static PARAMS: [P; 579] = [
     P::cont("Phaser Feedback", 0.5, Display::linear(0.0, 100.0, 1, " %")),
     P::cont(
         "Phaser Frequency",
-        0.2857142857142857,
+        0.2857143,
         Display::Freq {
             min: 0.03125,
             max: 4.0,
@@ -2597,7 +2597,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Reverb Chorus Frequency",
-        0.5454545454545454,
+        0.54545456,
         Display::exp(0.00390625, 8.0, 2, " Hz"),
     ),
     P::cont(
@@ -2613,7 +2613,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Reverb High Gain",
-        0.8333333333333334,
+        0.8333333,
         Display::linear(-6.0, 0.0, 2, " dB"),
     ),
     P::cont(
@@ -2639,7 +2639,7 @@ pub static PARAMS: [P; 579] = [
     P::menu("Oversampling", menu_value(1, 4), &["1x", "2x", "4x", "8x"]),
     P::cont(
         "Pitch Bend Range",
-        0.041666666666666664,
+        0.041666668,
         Display::Steps {
             min: 0,
             count: 49,
@@ -2648,7 +2648,7 @@ pub static PARAMS: [P; 579] = [
     ),
     P::cont(
         "Polyphony",
-        0.22580645161290322,
+        0.22580644,
         Display::Steps {
             min: 1,
             count: 32,
@@ -2680,7 +2680,7 @@ pub static PARAMS: [P; 579] = [
         0.5,
         Display::linear(-100.0, 100.0, 1, " cents"),
     ),
-    P::cont("Volume", 0.7396559739655975, Display::Custom(volume_text)),
+    P::cont("Volume", 0.739656, Display::Custom(volume_text)),
     P::cont(
         "Voice Transpose",
         0.5,
