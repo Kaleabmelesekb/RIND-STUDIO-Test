@@ -78,8 +78,9 @@ fn vital() {
         build.include(root.join(dir));
     }
     // Vital's SIMD: SSE2 on x86 (the default of 64-bit), NEON on ARM, which 32-bit ARM must be asked for.
+    // Its 32-bit ARM has no vector divide, which Vital's own `NEON_ARM32` switch replaces by a reciprocal.
     if arch == "arm" {
-        build.flag("-mfpu=neon");
+        build.flag("-mfpu=neon").define("NEON_ARM32", None);
     }
     if arch == "x86" {
         build.flag("-msse2");

@@ -25,6 +25,8 @@ mod spec_rows;
 mod step_tests;
 #[cfg(test)]
 mod tests;
+mod vital;
+mod vital_table;
 
 pub use channel::{CHANNEL_PARAMS, COMMON_PARAMS, DRUM_SLOT_PARAMS};
 /// The De-esser and Denoise, Honeydew's own effects (`honeydew_audio::de_esser`, `honeydew_audio::denoise`).
@@ -44,6 +46,8 @@ pub(crate) use instruments::GMSYNTH_WAVESHAPES;
 pub use lemon::MODULES as LEMON_MODULES;
 /// The Modulator, Honeydew's own effect (`honeydew_audio::modulator`).
 pub use modulator::MODULE as MODULATOR;
+/// Vital, Honeydew's own instrument (`honeydew_audio::vital`).
+pub use vital::MODULE as VITAL_MODULE;
 
 /// What a module does with the signal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -320,6 +324,7 @@ pub fn module_spec(id: u16) -> Option<&'static ModuleSpec> {
         .chain(&LEMON_MODULES)
         .chain([&DYNAMIC_EQ, &MODULATOR, &DE_ESSER, &DENOISE])
         .chain(DRAGONFLY_MODULES)
+        .chain([&vital::MODULE])
         .find(|m| m.id == id)
 }
 

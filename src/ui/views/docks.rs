@@ -1273,11 +1273,7 @@ fn ellipsis(
 /// The Modules browser's rows for `tab`: its instruments (`Instruments`) or its effects and note effects (`Effects`),
 /// each with its section header while one of its entries is listed.
 fn of_tab(tab: Tab, all: &[Row]) -> Vec<Row> {
-    let instrument = |e: Entry| match e {
-        Entry::Synth(_) => true,
-        Entry::Plugin(p) => p.instrument,
-        _ => false,
-    };
+    let instrument = |e: Entry| e.is_instrument();
     let mut out = Vec::new();
     let mut head = None;
     for &row in all {

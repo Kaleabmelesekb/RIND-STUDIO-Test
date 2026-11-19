@@ -478,7 +478,8 @@ pub fn panel_for(type_id: u16) -> Option<&'static Panel> {
             (honeydew_audio::dragonfly_fx::PLATE, fx::dragonfly::plate()),
             (honeydew_audio::dragonfly_fx::EARLY, fx::dragonfly::early()),
         ];
-        fx.chain(inst).chain(lemon).collect()
+        let vital = inst::vital::panel().map(|panel| (honeydew_audio::vital::VITAL, panel));
+        fx.chain(inst).chain(lemon).chain(vital).collect()
     });
     PANELS.iter().find(|(id, _)| *id == type_id).map(|(_, p)| p)
 }

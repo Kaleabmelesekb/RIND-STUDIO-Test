@@ -52,6 +52,21 @@ fn the_banks_hold_the_planned_presets_per_category() {
 }
 
 #[test]
+fn the_vital_bank_holds_its_nineteen_presets() {
+    assert_eq!(
+        counts(bank(honeydew_audio::vital::VITAL)),
+        [
+            ("Bass", 4),
+            ("FX", 2),
+            ("Keys", 2),
+            ("Lead", 4),
+            ("Pad", 4),
+            ("Pluck", 3)
+        ]
+    );
+}
+
+#[test]
 fn every_param_name_resolves_to_exactly_one_index_and_every_value_is_normalized() {
     for (t, bank) in banks() {
         let spec = module_spec(t).expect("a module");
@@ -122,7 +137,7 @@ fn each_preset_reads_back_through_the_preset_loader_and_fits_its_module() {
             read += 1;
         }
     }
-    assert_eq!(read, 12 + 11 + 8 + 14 + 10 + 75 + 66);
+    assert_eq!(read, 12 + 11 + 8 + 14 + 10 + 75 + 66 + 19);
 }
 
 /// Each module folder lists its categories, or (Transistor Bass) its presets, as the picker's root shows them after

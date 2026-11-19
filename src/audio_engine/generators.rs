@@ -73,6 +73,10 @@ fn instrument(
             let bar = time_sig.bar_beats();
             crate::plugins::instrument(channel, module, sample_rate, bar, super::BLOCK_FRAMES)
         }
+        // Vital's own engine, Honeydew's own instrument.
+        honeydew_audio::vital::VITAL => {
+            Some(Box::new(honeydew_audio::vital::Vital::new(sample_rate)))
+        }
         _ => None,
     }
 }
