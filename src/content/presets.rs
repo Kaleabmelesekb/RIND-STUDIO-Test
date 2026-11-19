@@ -30,6 +30,7 @@ mod dragonfly;
 mod effects;
 mod gm_synth;
 mod three_osc;
+mod vital;
 
 use super::{Entry, PRESETS, ROOT};
 use crate::flm;
@@ -58,6 +59,7 @@ fn banks() -> impl Iterator<Item = (u16, &'static [Preset])> {
         .chain(once((39, three_osc::BANK)))
         .chain(effects::BANKS.iter().copied())
         .chain(dragonfly::BANKS.iter().copied())
+        .chain(vital::BANKS.iter().copied())
 }
 
 /// The param `name` names in `spec`, as [`ModuleInstance::param`] indexes it: `#n` (digits only), or the one param or

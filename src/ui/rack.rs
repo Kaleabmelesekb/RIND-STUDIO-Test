@@ -158,6 +158,7 @@ pub fn ui_height(type_id: u16) -> Option<f32> {
         crate::song::plugin::PLUGIN_INSTRUMENT | crate::song::plugin::PLUGIN_EFFECT => 8.0,
         honeydew_audio::lemon::REVERB | honeydew_audio::lemon::LIMITER => 7.0,
         honeydew_audio::dynamic_eq::DYNAMIC_EQ => 11.0,
+        honeydew_audio::vital::VITAL => 12.0,
         honeydew_audio::modulator::MODULATOR => 8.5,
         honeydew_audio::de_esser::DE_ESSER | honeydew_audio::denoise::DENOISE => 7.5,
         honeydew_audio::dragonfly_fx::HALL
@@ -184,7 +185,7 @@ pub(crate) fn instrument(type_id: u16) -> Option<SynthKind> {
 /// The keys instrument module `module` plays, `None` for an effect. A plugin instrument plays every key.
 pub(crate) fn key_range(module: &ModuleInstance) -> Option<(i8, i8)> {
     match module.type_id {
-        crate::song::plugin::PLUGIN_INSTRUMENT => Some((0, 127)),
+        crate::song::plugin::PLUGIN_INSTRUMENT | honeydew_audio::vital::VITAL => Some((0, 127)),
         t => instrument(t).map(|_| (module.file.key_low, module.file.key_high)),
     }
 }

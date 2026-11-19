@@ -37,6 +37,9 @@ fn effects() -> String {
 const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Dragonfly Reverb by Michael Willis and Rob van den Berg \
                          (GPL-3.0-or-later, their DSP unchanged), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
                          Kamogashira and zita-rev1 by Fons Adriaensen";
+/// The credit of Vital (`vendor/vital`).
+const VITAL: &str = "Vital: Vital by Matt Tytel (GPL-3.0-or-later, its sound engine unchanged), https://github.com/mtytel/vital, with \
+                     nlohmann/json (MIT) and kissfft (BSD-3-Clause)";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -86,6 +89,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         LOGO,
         &effects(),
         DRAGONFLY,
+        VITAL,
         THIRD_PARTY,
         "",
         SOUNDS,
@@ -232,6 +236,7 @@ mod tests {
         for want in [
             LOGO,
             "Dragonfly Reverb by Michael Willis and Rob van den Berg",
+            "Vital by Matt Tytel",
             "License MIT:",
             "MuseScore_General by S. Christian Collins",
             "Full notice in CREDITS.txt",
