@@ -172,6 +172,7 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
         .chain([&params::DE_ESSER, &params::DENOISE])
         .chain(params::DRAGONFLY_MODULES)
+        .chain([&params::VITAL_MODULE])
         .filter(|m| !m.legacy)
         .map(|m| m.id)
         .collect();

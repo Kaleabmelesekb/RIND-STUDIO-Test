@@ -26,11 +26,14 @@ mod tests {
     fn the_params_are_the_engines_table_after_enable() {
         assert_eq!(PARAMS.len(), v::PARAMS);
         for (entry, spec) in v::TABLE.iter().zip(PARAMS.iter().skip(1)) {
-            if entry.menu > 0 {
-                let ParamKind::Menu { items } = &spec.kind else {
-                    panic!("{} is not a menu", spec.name);
-                };
-                assert_eq!(items.len(), entry.menu, "{}", spec.name);
+            if matches!(entry.role, v::Role::Wavetable(_)) {
+                continue; // a menu of the bridge's wavetables, which the engine's table does not count
+            }
+            match spec.kind {
+                // Vital's two-item menus are the host's toggles.
+                ParamKind::Toggle => assert!([0, 2].contains(&entry.menu), "{}", spec.name),
+                ParamKind::Menu { items } => assert_eq!(items.len(), entry.menu, "{}", spec.name),
+                _ => assert!(entry.menu == 0, "{} is not a menu", spec.name),
             }
         }
     }
