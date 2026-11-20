@@ -396,6 +396,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   `src/common/load_save.cpp`) and `tables/` (the parameter list, written from the running engine). Vital ships no
   factory presets or wavetable files with its source: the twelve wavetables are built with its own classes, and the
   presets (`Presets/Vital`) are Honeydew's own.
+- On Android the real interface is included too (`vendor/vital-ui/`, see its `README.md`): Vital's own window code
+  (`src/interface`, unchanged apart from GLES precision and error output), built on JUCE 6.0.5 as Vital patches it,
+  with a windowless platform layer of ours (`juce_headless_Windowing.cpp`, `juce_OpenGL_headless.h`: an EGL pbuffer
+  rendered into a texture the rack shows) and small bionic/Android patches to JUCE's core. JUCE
+  (<https://juce.com>, Raw Material Software) is used under the GPL-3.0 terms of its licence, as Vital itself is.
+  `vendor/vital-ui/LICENSE-Vital` is Vital's licence text.
+- Includes FreeType (`vendor/freetype/`, <https://freetype.org>), for the fonts, under the FreeType License
+  (`FTL.TXT`; dual-licensed with the GPLv2, `GPLv2.TXT`); this product includes software developed by the FreeType
+  Project.
 
 ## Lemon Studio's plugins (Lemon Trio, Lemon Sampler and Lemon Parametric EQ)
 

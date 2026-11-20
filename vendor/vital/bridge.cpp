@@ -6,6 +6,13 @@
 
 #include "JuceHeader.h"
 
+#ifdef RIND_VITAL_UI
+// The Android build: the engine is the one inside Vital's `SynthBase`, so that Vital's own interface (vendor/vital-ui)
+// edits the synth the app plays. Everything below keeps its C face; only where the engine lives and how connections
+// and presets are made differ (marked RIND_VITAL_UI).
+#include "rind_gui.h"
+#endif
+
 #include "load_save.h"
 #include "line_generator.h"
 #include "sound_engine.h"
@@ -19,16 +26,28 @@
 
 #include <cmath>
 #include <cstring>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
 
 struct Core {
-  std::unique_ptr<vital::SoundEngine> engine;
+  vital::SoundEngine* engine = nullptr;
+  WavetableCreator* creators[vital::kNumOscillators] = {};
+#ifdef RIND_VITAL_UI
+  std::unique_ptr<RindSynth> synth;
+  std::atomic<int> state_version{0};  // bumped when the app changes more than a value, so an open interface follows
+  unsigned long long key = 0;
+  std::unordered_map<std::string, int> index_by_name;
+#else
+  std::unique_ptr<vital::SoundEngine> owned_engine;
   Tuning tuning;
-  std::unique_ptr<WavetableCreator> creators[vital::kNumOscillators];
+  std::unique_ptr<WavetableCreator> owned_creators[vital::kNumOscillators];
+#endif
   vital::control_map controls;
   std::vector<const vital::ValueDetails*> details;  // by index, with the control behind it
   std::vector<vital::Value*> values;
@@ -62,6 +81,19 @@ vital::modulation_change make_change(Core& c, vital::ModulationConnection* conne
   return change;
 }
 
+#ifdef RIND_VITAL_UI
+void clear_modulations(Core& c) { c.synth->clearModulationsNow(); }
+
+bool connect(Core& c, vital::ModulationConnection* connection) {
+  c.synth->connectModulation(connection);
+  return !connection->source_name.empty();
+}
+
+void init_engine(Core& c) {
+  c.synth->initEngine();
+  c.state_version++;
+}
+#else
 void clear_modulations(Core& c) {
   for (vital::ModulationConnection* connection : c.connected) {
     vital::modulation_change change = make_change(c, connection);
@@ -104,6 +136,7 @@ void init_engine(Core& c) {
     control.second->set(vital::Parameters::getDetails(control.first).default_value);
   c.engine->checkOversampling();
 }
+#endif
 
 
 // ---- wavetables ---------------------------------------------------------------------------------------------------
@@ -186,7 +219,7 @@ double cycle(int kind, double t, double a) {
 }
 
 void build_wavetable(Core& c, int osc, int kind) {
-  WavetableCreator* creator = c.creators[osc].get();
+  WavetableCreator* creator = c.creators[osc];
   if (kind <= 0 || kind >= kWavetableCount) {
     creator->init();
     return;
@@ -218,15 +251,35 @@ void build_wavetable(Core& c, int osc, int kind) {
 
 extern "C" {
 
-void* vital_new(double sample_rate) {
+#ifdef RIND_VITAL_UI
+std::mutex g_registry;
+std::unordered_map<unsigned long long, Core*> g_cores;
+
+Core* core_for_key(unsigned long long key) {
+  auto it = g_cores.find(key);
+  return it == g_cores.end() ? nullptr : it->second;
+}
+#endif
+
+void* vital_new_keyed(double sample_rate, unsigned long long key) {
   auto* c = new Core();
-  c->engine = std::make_unique<vital::SoundEngine>();
+#ifdef RIND_VITAL_UI
+  c->synth = std::make_unique<RindSynth>();
+  c->engine = c->synth->getEngine();
+  for (int i = 0; i < vital::kNumOscillators; ++i)
+    c->creators[i] = c->synth->getWavetableCreator(i);
+  c->key = key;
+#else
+  c->owned_engine = std::make_unique<vital::SoundEngine>();
+  c->engine = c->owned_engine.get();
   c->engine->setTuning(&c->tuning);
   for (int i = 0; i < vital::kNumOscillators; ++i) {
     vital::Wavetable* wavetable = c->engine->getWavetable(i);
-    c->creators[i] = std::make_unique<WavetableCreator>(wavetable);
+    c->owned_creators[i] = std::make_unique<WavetableCreator>(wavetable);
+    c->creators[i] = c->owned_creators[i].get();
     c->creators[i]->init();
   }
+#endif
   c->controls = c->engine->getControls();
   const int count = vital::Parameters::getNumParameters();
   for (int i = 0; i < count; ++i) {
@@ -243,11 +296,33 @@ void* vital_new(double sample_rate) {
     control.second->set(vital::Parameters::getDetails(control.first).default_value);
   c->engine->checkOversampling();
   c->engine->updateAllModulationSwitches();
+#ifdef RIND_VITAL_UI
+  for (size_t i = 0; i < c->details.size(); ++i)
+    c->index_by_name[c->details[i]->name] = static_cast<int>(i);
+  if (key != 0) {
+    const std::lock_guard<std::mutex> guard(g_registry);
+    g_cores[key] = c;
+  }
+#endif
   return c;
 }
 
+void* vital_new(double sample_rate) {
+  return vital_new_keyed(sample_rate, 0);
+}
+
 void vital_free(void* handle) {
-  delete static_cast<Core*>(handle);
+  auto* c = static_cast<Core*>(handle);
+#ifdef RIND_VITAL_UI
+  {
+    const std::lock_guard<std::mutex> guard(g_registry);
+    auto it = g_cores.find(c->key);
+    if (c->key != 0 && it != g_cores.end() && it->second == c)
+      g_cores.erase(it);
+    rind_gui_close(c->synth.get());
+  }
+#endif
+  delete c;
 }
 
 void vital_set_sample_rate(void* handle, double sample_rate) {
@@ -282,6 +357,9 @@ void vital_set_wavetable(void* handle, int osc, int kind) {
   if (osc < 0 || osc >= vital::kNumOscillators)
     return;
   build_wavetable(*static_cast<Core*>(handle), osc, kind);
+#ifdef RIND_VITAL_UI
+  static_cast<Core*>(handle)->state_version++;
+#endif
 }
 
 // ---- parameters, in the order of Vital's own list -------------------------------------------------------------
@@ -365,7 +443,7 @@ void vital_mod_wheel(void* handle, float value) {  // 0 .. 1
 }
 
 void vital_sustain(void* handle, int on) {
-  auto* e = static_cast<Core*>(handle)->engine.get();
+  auto* e = static_cast<Core*>(handle)->engine;
   if (on)
     e->sustainOnRange(0, vital::kNumMidiChannels - 1);
   else
@@ -440,6 +518,25 @@ int vital_mod_set_slot(void* handle, int slot, const char* source, const char* d
   if (slot < 0 || slot >= vital::kMaxModulationConnections)
     return 0;
   vital::ModulationConnection* connection = c->engine->getModulationBank().atIndex(slot);
+#ifdef RIND_VITAL_UI
+  const bool unchanged = connection->source_name == (source ? source : "") &&
+                         connection->destination_name == (destination ? destination : "");
+  if (unchanged)
+    return connection->source_name.empty() ? 0 : 1;
+  c->synth->disconnectModulation(connection);
+  connection->source_name = "";
+  connection->destination_name = "";
+  c->state_version++;
+  if (source == nullptr || destination == nullptr || source[0] == 0 || destination[0] == 0)
+    return 0;
+  if (c->engine->getModulationSource(source) == nullptr ||
+      c->engine->getMonoModulationDestination(destination) == nullptr) {
+    return 0;
+  }
+  connection->source_name = source;
+  connection->destination_name = destination;
+  return connect(*c, connection) ? 1 : 0;
+#endif
   for (size_t i = 0; i < c->connected.size(); ++i) {
     if (c->connected[i] == connection) {
       vital::modulation_change change = make_change(*c, connection);
@@ -464,6 +561,9 @@ int vital_mod_set_slot(void* handle, int slot, const char* source, const char* d
 
 void vital_mod_clear(void* handle) {
   clear_modulations(*static_cast<Core*>(handle));
+#ifdef RIND_VITAL_UI
+  static_cast<Core*>(handle)->state_version++;
+#endif
 }
 
 // ---- presets ------------------------------------------------------------------------------------------------------
@@ -483,6 +583,16 @@ int vital_load_json(void* handle, const char* text, size_t len) {
   if (LoadSave::compareVersionStrings(feature, String(ProjectInfo::versionString).upToLastOccurrenceOf(".", false, true)) > 0)
     return 2;
 
+#ifdef RIND_VITAL_UI
+  try {
+    if (!c->synth->loadState(data))
+      return 2;
+  } catch (const std::exception&) {
+    return 1;
+  }
+  c->state_version++;
+  return 0;
+#endif
   c->engine->allSoundsOff();
   const json& settings = data["settings"];
   clear_modulations(*c);
@@ -553,6 +663,11 @@ void vital_render(void* handle, float* left, float* right, unsigned frames) {
   unsigned done = 0;
   while (done < frames) {
     const int n = static_cast<int>(std::min<unsigned>(frames - done, vital::kMaxBufferSize));
+#ifdef RIND_VITAL_UI
+    c->synth->renderBlock(left + done, right + done, n);
+    done += static_cast<unsigned>(n);
+    continue;
+#endif
     c->engine->process(n);
     const vital::mono_float* out = reinterpret_cast<const vital::mono_float*>(c->engine->output(0)->buffer);
     for (int i = 0; i < n; ++i) {
@@ -562,5 +677,103 @@ void vital_render(void* handle, float* left, float* right, unsigned frames) {
     done += static_cast<unsigned>(n);
   }
 }
+
+#ifdef RIND_VITAL_UI
+// ---- Vital's own interface ------------------------------------------------------------------------------------------
+//
+// The synth of the module `key` (the app's channel and instance ids) is found in the registry the instruments fill: the
+// engine is rebuilt now and then, and the interface follows to whichever synth holds the key.
+
+#define WITH_CORE(key, fallback)                           \
+  const std::lock_guard<std::mutex> guard(g_registry);     \
+  Core* c = core_for_key(key);                             \
+  if (c == nullptr)                                        \
+    return fallback;
+
+// 1 when the interface is open for `key` at `width` x `height` pixels.
+int vital_gui_open(unsigned long long key, int width, int height) {
+  WITH_CORE(key, 0)
+  return rind_gui_open(c->synth.get(), &c->state_version, width, height) ? 1 : 0;
+}
+
+void vital_gui_close(unsigned long long key) {
+  WITH_CORE(key, )
+  rind_gui_close(c->synth.get());
+}
+
+int vital_gui_is_open(unsigned long long key) {
+  WITH_CORE(key, 0)
+  return rind_gui_is_open(c->synth.get()) ? 1 : 0;
+}
+
+void vital_gui_resize(unsigned long long key, int width, int height) {
+  WITH_CORE(key, )
+  rind_gui_resize(c->synth.get(), width, height);
+}
+
+// A touch: `buttons` is 16 while a finger is down (JUCE's left button flag), else 0.
+void vital_gui_pointer(unsigned long long key, int type, float x, float y, int buttons, float pressure, long long ms) {
+  WITH_CORE(key, )
+  rind_gui_pointer(c->synth.get(), type, x, y, buttons, pressure, ms);
+}
+
+void vital_gui_wheel(unsigned long long key, float x, float y, float dx, float dy, long long ms) {
+  WITH_CORE(key, )
+  rind_gui_wheel(c->synth.get(), x, y, dx, dy, ms);
+}
+
+void vital_gui_key(unsigned long long key, int special, unsigned text_char, int modifiers) {
+  WITH_CORE(key, )
+  rind_gui_key(c->synth.get(), special, text_char, modifiers);
+}
+
+int vital_gui_wants_text(unsigned long long key) {
+  WITH_CORE(key, 0)
+  return rind_gui_wants_text(c->synth.get()) ? 1 : 0;
+}
+
+// Copies the newest frame (RGBA) into `dst` if there is a newer one than the last taken: its id, else 0.
+unsigned long long vital_gui_take_frame(unsigned long long key, unsigned char* dst, unsigned long long capacity,
+                                        int* width, int* height) {
+  WITH_CORE(key, 0)
+  return rind_gui_take_frame(c->synth.get(), dst, capacity, width, height);
+}
+
+// What the interface changed since the last call, as Vital's parameter numbers and values.
+int vital_gui_changes(unsigned long long key, int* indices, float* values, int capacity) {
+  WITH_CORE(key, 0)
+  std::vector<std::pair<std::string, float>> changes;
+  c->synth->takeGuiChanges(changes);
+  int n = 0;
+  for (auto& change : changes) {
+    auto it = c->index_by_name.find(change.first);
+    if (it == c->index_by_name.end() || n >= capacity)
+      continue;
+    indices[n] = it->second;
+    values[n] = change.second;
+    ++n;
+  }
+  return n;
+}
+
+// The modulation slots as the interface has them: `source\0destination\0` for each of the 64; the bytes written, or 0.
+int vital_gui_slots(unsigned long long key, char* out, int capacity) {
+  WITH_CORE(key, 0)
+  std::string packed;
+  if (!rind_gui_slots(c->synth.get(), packed) || static_cast<int>(packed.size()) > capacity)
+    return 0;
+  std::memcpy(out, packed.data(), packed.size());
+  return static_cast<int>(packed.size());
+}
+
+void vital_gui_set_fps(int fps) {
+  rind_gui_set_fps(fps);
+}
+
+// The folder Vital keeps its presets, wavetables and settings in (its `~/.config/vital`, `~/Documents/Vital`).
+void vital_set_home(const char* path) {
+  setenv("HOME", path, 1);
+}
+#endif
 
 }  // extern "C"
