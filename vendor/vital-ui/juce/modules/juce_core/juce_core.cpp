@@ -40,8 +40,10 @@
 #include <cctype>
 #include <cstdarg>
 
-#if ! JUCE_ANDROID
+#if ! JUCE_ANDROID && ! defined (__ANDROID__)
  #include <sys/timeb.h>
+ #include <cwctype>
+#else
  #include <cwctype>
 #endif
 
