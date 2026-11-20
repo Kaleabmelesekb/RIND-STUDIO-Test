@@ -234,7 +234,7 @@
  #include <sched.h>
  #include <signal.h>
  #include <stddef.h>
- #include <sys/dir.h>
+ #include <dirent.h>
  #include <sys/file.h>
  #include <sys/ioctl.h>
  #include <sys/mman.h>
