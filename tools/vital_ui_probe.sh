@@ -25,7 +25,7 @@ $vital/src/unity_build/synthesis.cpp $ui/juce/config/BinaryData.cpp $ui/rind_gui
 out=$(mktemp -d)
 compile() {
   u=$1; log=$out/$(basename "$u").log
-  if "$bin/$triple-clang++" -std=c++14 -O1 -w -fexceptions -frtti -ffast-math -fno-strict-aliasing $extra $defs $inc $mode "$u" -o "$out/$(basename "$u").o" >"$log" 2>&1; then echo "ok    $(basename "$u")"; else echo "FAIL  $(basename "$u")"; fi
+  if "$bin/$triple-clang++" -std=c++14 -fPIC -O1 -w -fexceptions -frtti -ffast-math -fno-strict-aliasing $extra $defs $inc $mode "$u" -o "$out/$(basename "$u").o" >"$log" 2>&1; then echo "ok    $(basename "$u")"; else echo "FAIL  $(basename "$u")"; fi
 }
 export -f compile; export out bin triple extra defs inc mode
 echo "$units" | tr ' ' '\n' | grep -v '^$' | xargs -P "$(nproc)" -I{} bash -c 'compile {}' | sort
@@ -35,7 +35,7 @@ fails=$(grep -l "error" "$out"/*.log 2>/dev/null | wc -l)
 # FreeType (C): the files crates/audio/build.rs builds
 fts=0
 for f in base/ftbase base/ftbbox base/ftbitmap base/ftdebug base/ftfstype base/ftgasp base/ftglyph base/ftinit base/ftmm base/ftstroke base/ftsynth base/ftsystem truetype/truetype sfnt/sfnt smooth/smooth cff/cff psaux/psaux pshinter/pshinter psnames/psmodule raster/raster; do
-  "$bin/$triple-clang" -O1 -w $extra -DFT2_BUILD_LIBRARY '-DFT_CONFIG_MODULES_H=<ftmodule.h>' -I$ft -I$ft/include $mode "$ft/src/$f.c" -o "$out/ft_$(echo $f | tr / _).o" 2>>"$out/ft.err" || fts=1
+  "$bin/$triple-clang" -fPIC -O1 -w $extra -DFT2_BUILD_LIBRARY '-DFT_CONFIG_MODULES_H=<ftmodule.h>' -I$ft -I$ft/include $mode "$ft/src/$f.c" -o "$out/ft_$(echo $f | tr / _).o" 2>>"$out/ft.err" || fts=1
 done
 # With FULL=1 the objects are linked into a shared library that may leave nothing undefined: what the app would otherwise
 # fail to load for on a phone.
