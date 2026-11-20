@@ -28,7 +28,7 @@ CriticalSection::CriticalSection() noexcept
     pthread_mutexattr_t atts;
     pthread_mutexattr_init (&atts);
     pthread_mutexattr_settype (&atts, PTHREAD_MUTEX_RECURSIVE);
-   #if ! JUCE_ANDROID
+   #if ! JUCE_ANDROID && ! defined (__ANDROID__)
     pthread_mutexattr_setprotocol (&atts, PTHREAD_PRIO_INHERIT);
    #endif
     pthread_mutex_init (&lock, &atts);
@@ -913,7 +913,7 @@ void Thread::killThread()
 {
     if (threadHandle.get() != nullptr)
     {
-       #if JUCE_ANDROID
+       #if JUCE_ANDROID || defined (__ANDROID__)
         jassertfalse; // pthread_cancel not available!
        #else
         pthread_cancel ((pthread_t) threadHandle.get());
@@ -1305,7 +1305,7 @@ private:
 
     static void* timerThread (void* param)
     {
-       #if ! JUCE_ANDROID
+       #if ! JUCE_ANDROID && ! defined (__ANDROID__)
         int dummy;
         pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, &dummy);
        #endif

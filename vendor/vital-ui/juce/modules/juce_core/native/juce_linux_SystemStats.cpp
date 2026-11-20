@@ -131,6 +131,7 @@ String SystemStats::getComputerName()
     return {};
 }
 
+#if ! defined (__ANDROID__)
 static String getLocaleValue (nl_item key)
 {
     auto oldLocale = ::setlocale (LC_ALL, "");
@@ -138,9 +139,15 @@ static String getLocaleValue (nl_item key)
     ::setlocale (LC_ALL, oldLocale);
     return result;
 }
+#endif
 
+#if defined (__ANDROID__)
+String SystemStats::getUserLanguage()     { return "en"; }   // (bionic has no locale identification items)
+String SystemStats::getUserRegion()       { return "US"; }
+#else
 String SystemStats::getUserLanguage()     { return getLocaleValue (_NL_IDENTIFICATION_LANGUAGE); }
 String SystemStats::getUserRegion()       { return getLocaleValue (_NL_IDENTIFICATION_TERRITORY); }
+#endif
 String SystemStats::getDisplayLanguage()  { return getUserLanguage() + "-" + getUserRegion(); }
 
 //==============================================================================
