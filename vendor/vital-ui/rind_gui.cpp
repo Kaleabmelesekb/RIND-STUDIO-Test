@@ -100,6 +100,7 @@ struct Host {
   uint64_t frame_id = 0;
   uint64_t taken_id = 0;
   RindSynth* frame_owner = nullptr;
+  std::atomic<bool> wants_text{false};
   std::string slots;  // refreshed by the GUI thread
   RindSynth* slots_owner = nullptr;
   juce::uint32 slots_at = 0;
@@ -170,6 +171,7 @@ void tick() {
   if (!h.editor || !h.synth)
     return;
   Editor& editor = *h.editor;
+  h.wants_text = dynamic_cast<juce::TextEditor*>(juce::Component::getCurrentlyFocusedComponent()) != nullptr;
   const juce::uint32 now_ms = juce::Time::getMillisecondCounter();
   if (now_ms - h.slots_at > 120) {
     h.slots_at = now_ms;
@@ -340,15 +342,41 @@ void rind_gui_wheel(RindSynth* synth, float x, float y, float dx, float dy, long
   });
 }
 
-void rind_gui_key(RindSynth* synth, int key_code, unsigned text_char, int modifiers) {
+// `special` is 0 for a character (`text_char`), else 1 + the order of honeydew_audio::vital::gui::Key.
+void rind_gui_key(RindSynth* synth, int special, unsigned text_char, int modifiers) {
   Host& h = host();
   if (!h.started)
     return;
   post([=, &h] {
-    if (h.synth == synth && h.editor)
-      if (auto* peer = h.editor->getPeer())
-        peer->handleKeyPress(juce::KeyPress(key_code, juce::ModifierKeys(modifiers), static_cast<juce::juce_wchar>(text_char)));
+    if (h.synth != synth || !h.editor)
+      return;
+    auto* peer = h.editor->getPeer();
+    if (peer == nullptr)
+      return;
+    static const int kSpecial[] = {0,
+                                   juce::KeyPress::backspaceKey,
+                                   juce::KeyPress::deleteKey,
+                                   juce::KeyPress::returnKey,
+                                   juce::KeyPress::escapeKey,
+                                   juce::KeyPress::leftKey,
+                                   juce::KeyPress::rightKey,
+                                   juce::KeyPress::upKey,
+                                   juce::KeyPress::downKey,
+                                   juce::KeyPress::tabKey,
+                                   juce::KeyPress::homeKey,
+                                   juce::KeyPress::endKey};
+    if (special > 0 && special < static_cast<int>(sizeof(kSpecial) / sizeof(kSpecial[0]))) {
+      peer->handleKeyPress(juce::KeyPress(kSpecial[special], juce::ModifierKeys(modifiers), 0));
+    } else if (text_char != 0) {
+      peer->handleKeyPress(juce::KeyPress(static_cast<int>(text_char), juce::ModifierKeys(modifiers),
+                                          static_cast<juce::juce_wchar>(text_char)));
+    }
   });
+}
+
+bool rind_gui_wants_text(RindSynth* synth) {
+  Host& h = host();
+  return h.wants_text.load() && h.frame_owner == synth;
 }
 
 // The newest frame (RGBA, top row first) if it is newer than the last one taken: its id, else 0.

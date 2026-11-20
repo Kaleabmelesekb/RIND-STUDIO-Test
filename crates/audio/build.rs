@@ -133,6 +133,7 @@ const FREETYPE: &[&str] = &[
     "base/ftsynth.c",
     "base/ftsystem.c",
     "cff/cff.c",
+    "gzip/ftgzip.c",
     "psaux/psaux.c",
     "pshinter/pshinter.c",
     "psnames/psmodule.c",

@@ -62,7 +62,8 @@ bool rind_gui_is_open(RindSynth* synth);
 void rind_gui_resize(RindSynth* synth, int width, int height);
 void rind_gui_pointer(RindSynth* synth, int type, float x, float y, int buttons, float pressure, long long ms);
 void rind_gui_wheel(RindSynth* synth, float x, float y, float dx, float dy, long long ms);
-void rind_gui_key(RindSynth* synth, int key_code, unsigned text_char, int modifiers);
+void rind_gui_key(RindSynth* synth, int special, unsigned text_char, int modifiers);
+bool rind_gui_wants_text(RindSynth* synth);
 unsigned long long rind_gui_take_frame(RindSynth* synth, unsigned char* dst, unsigned long long capacity, int* width,
                                        int* height);
 void rind_gui_set_fps(int fps);

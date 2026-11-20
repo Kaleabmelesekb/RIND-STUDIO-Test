@@ -34,7 +34,7 @@ grep -h "error" "$out"/*.log | sort | uniq -c | sort -rn | head -80
 fails=$(grep -l "error" "$out"/*.log 2>/dev/null | wc -l)
 # FreeType (C): the files crates/audio/build.rs builds
 fts=0
-for f in base/ftbase base/ftbbox base/ftbitmap base/ftdebug base/ftfstype base/ftgasp base/ftglyph base/ftinit base/ftmm base/ftstroke base/ftsynth base/ftsystem truetype/truetype sfnt/sfnt smooth/smooth cff/cff psaux/psaux pshinter/pshinter psnames/psmodule raster/raster; do
+for f in base/ftbase base/ftbbox base/ftbitmap base/ftdebug base/ftfstype base/ftgasp base/ftglyph base/ftinit base/ftmm base/ftstroke base/ftsynth base/ftsystem gzip/ftgzip truetype/truetype sfnt/sfnt smooth/smooth cff/cff psaux/psaux pshinter/pshinter psnames/psmodule raster/raster; do
   "$bin/$triple-clang" -fPIC -O1 -w $extra -DFT2_BUILD_LIBRARY '-DFT_CONFIG_MODULES_H=<ftmodule.h>' -I$ft -I$ft/include $mode "$ft/src/$f.c" -o "$out/ft_$(echo $f | tr / _).o" 2>>"$out/ft.err" || fts=1
 done
 # With FULL=1 the objects are linked into a shared library that may leave nothing undefined: what the app would otherwise

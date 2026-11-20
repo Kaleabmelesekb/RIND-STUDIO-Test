@@ -722,9 +722,14 @@ void vital_gui_wheel(unsigned long long key, float x, float y, float dx, float d
   rind_gui_wheel(c->synth.get(), x, y, dx, dy, ms);
 }
 
-void vital_gui_key(unsigned long long key, int key_code, unsigned text_char, int modifiers) {
+void vital_gui_key(unsigned long long key, int special, unsigned text_char, int modifiers) {
   WITH_CORE(key, )
-  rind_gui_key(c->synth.get(), key_code, text_char, modifiers);
+  rind_gui_key(c->synth.get(), special, text_char, modifiers);
+}
+
+int vital_gui_wants_text(unsigned long long key) {
+  WITH_CORE(key, 0)
+  return rind_gui_wants_text(c->synth.get()) ? 1 : 0;
 }
 
 // Copies the newest frame (RGBA) into `dst` if there is a newer one than the last taken: its id, else 0.
