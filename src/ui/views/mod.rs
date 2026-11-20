@@ -63,7 +63,6 @@ pub mod instrument_builder;
 pub mod versions;
 // A Lemon plugin's editor full screen (#68).
 pub mod lemon_editor;
-pub mod vital_editor;
 
 /// What fills the editor area, between the top of the screen and the transport bar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -178,8 +177,6 @@ pub enum Overlay {
     /// The editor of the built-in Lemon plugin module with instance id `module` on `channel`, full screen (#68, its rack
     /// card's full screen button).
     LemonEditor { channel: usize, module: i32 },
-    /// Vital's own interface full screen, from its rack card's full screen button.
-    VitalEditor { channel: usize, module: i32 },
     /// The window of module `module` on `channel` (a Device Rack card's pop-out): its card alone, centred over the screen
     /// as a synth's editor is, closing with its X, a tap outside it or Escape.
     DeviceEditor { channel: usize, module: i32 },
@@ -578,8 +575,6 @@ pub struct Slots {
     pub versions: versions::State,
     /// The full screen Lemon editor's texture and pointer.
     pub lemon_editor: lemon_editor::State,
-    /// The full screen Vital interface's texture and finger.
-    pub vital_editor: vital_editor::State,
 }
 
 impl Slots {
@@ -698,9 +693,7 @@ impl Slots {
         preset_picker::land_close_grands(state, rack, ui.ctx(), app, asking);
         let top = overlays.len().saturating_sub(1);
         self.rack.full = overlays.iter().find_map(|o| match o {
-            Overlay::LemonEditor { channel, module } | Overlay::VitalEditor { channel, module } => {
-                Some((*channel, *module))
-            }
+            Overlay::LemonEditor { channel, module } => Some((*channel, *module)),
             _ => None,
         });
         let above = (overlays.iter())
@@ -858,9 +851,6 @@ impl Slots {
             // Hidden while what it opened (the sample picker) or a message shows over it.
             Overlay::LemonEditor { channel, module } => {
                 top.then(|| lemon_editor::show(&mut self.lemon_editor, ui, app, *channel, *module))?
-            }
-            Overlay::VitalEditor { channel, module } => {
-                top.then(|| vital_editor::show(&mut self.vital_editor, ui, app, *channel, *module))?
             }
             Overlay::DeviceEditor { channel, module } => {
                 let held = self.roll_clip(*channel);

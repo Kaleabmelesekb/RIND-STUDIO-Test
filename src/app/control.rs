@@ -492,7 +492,6 @@ impl HoneydewApp {
                 "lane_kind": format!("{:?}", ch.lanes[0].kind).to_lowercase(),
                 "instrument": ch.rack.modules.iter().filter(|m| {
                     m.type_id == crate::song::plugin::PLUGIN_INSTRUMENT
-                        || m.type_id == honeydew_audio::vital::VITAL
                         || SynthKind::ALL.iter().any(|s| s.type_id() == m.type_id)
                 }).map(|m| m.title()).collect::<Vec<_>>(),
                 "drum_pads": ch.drum_kit.as_ref().map(|kit| kit.slots.iter()

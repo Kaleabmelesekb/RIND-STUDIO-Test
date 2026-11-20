@@ -9,7 +9,6 @@ pub(crate) mod soundfont_player;
 mod super_saw;
 pub(crate) mod three_osc;
 mod transistor_bass;
-pub(in crate::panels) mod vital;
 
 modules! {
     0 => mini_synth,

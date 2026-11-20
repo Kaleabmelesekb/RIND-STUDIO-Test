@@ -24,7 +24,6 @@ const SPEC: &[(&str, &[&str])] = &[
             "SoundFont Player",
             "SuperSaw",
             "Transistor Bass",
-            "Vital",
         ],
     ),
     (
@@ -172,7 +171,6 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
         .chain([&params::DE_ESSER, &params::DENOISE])
         .chain(params::DRAGONFLY_MODULES)
-        .chain([&params::VITAL_MODULE])
         .filter(|m| !m.legacy)
         .map(|m| m.id)
         .collect();
@@ -231,7 +229,6 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
             "Lemon Drum Sampler",
             "Lemon Slicer",
             "Rind",
-            "Vital",
         ];
         let notes = [
             "NOTE EFFECT",
@@ -896,8 +893,6 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Slicer",
             "3x Osc",
             "SoundFont Player",
-            // Honeydew's own instrument, Vital (1012), after the numbered ones.
-            "Vital",
             // The built-in plugins, which have no type id of their own: by name.
             "Citrus",
             "Lemon Drum Sampler",

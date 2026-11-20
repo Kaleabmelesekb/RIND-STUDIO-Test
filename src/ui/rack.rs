@@ -71,7 +71,6 @@ pub(crate) mod lemon_card;
 mod plugin_card;
 #[cfg(test)]
 mod tests;
-pub(crate) mod vital_card;
 
 // Sizes in U unless noted.
 /// The header at the top, its 2 px border included: in a full-screen rack, and in a side one.
@@ -159,7 +158,6 @@ pub fn ui_height(type_id: u16) -> Option<f32> {
         crate::song::plugin::PLUGIN_INSTRUMENT | crate::song::plugin::PLUGIN_EFFECT => 8.0,
         honeydew_audio::lemon::REVERB | honeydew_audio::lemon::LIMITER => 7.0,
         honeydew_audio::dynamic_eq::DYNAMIC_EQ => 11.0,
-        honeydew_audio::vital::VITAL => 12.0,
         honeydew_audio::modulator::MODULATOR => 8.5,
         honeydew_audio::de_esser::DE_ESSER | honeydew_audio::denoise::DENOISE => 7.5,
         honeydew_audio::dragonfly_fx::HALL
@@ -186,7 +184,7 @@ pub(crate) fn instrument(type_id: u16) -> Option<SynthKind> {
 /// The keys instrument module `module` plays, `None` for an effect. A plugin instrument plays every key.
 pub(crate) fn key_range(module: &ModuleInstance) -> Option<(i8, i8)> {
     match module.type_id {
-        crate::song::plugin::PLUGIN_INSTRUMENT | honeydew_audio::vital::VITAL => Some((0, 127)),
+        crate::song::plugin::PLUGIN_INSTRUMENT => Some((0, 127)),
         t => instrument(t).map(|_| (module.file.key_low, module.file.key_high)),
     }
 }
@@ -1229,8 +1227,6 @@ pub struct RackActions {
     pub builder: Option<i32>,
     /// Issue #68: a Lemon card's full screen button: show the editor of the module with this instance id full screen.
     pub lemon_full: Option<i32>,
-    /// Vital's full screen button: show the interface of the module with this instance id full screen.
-    pub vital_full: Option<i32>,
     /// A device strip card's pop-out button: show the module with this instance id in its own window on the screen.
     pub device_window: Option<i32>,
 }
@@ -1379,8 +1375,6 @@ pub struct RackPanel {
     plugin_cards: HashMap<(usize, i32), plugin_card::PluginCard>,
     /// Each built-in Lemon plugin's card: its editor's texture and the pointer's state.
     lemon_cards: HashMap<(usize, i32), lemon_card::LemonCard>,
-    /// Each Vital card's interface texture and finger (Android: Vital's own interface).
-    vital_cards: HashMap<(usize, i32), vital_card::VitalCard>,
     /// The card column's width and the U, in device pixels, as last laid out: a Lemon card's height follows its width.
     column: (f32, f32),
     /// The pointer was over a Lemon card's editor last frame: the wheel is the editor's, not the rack's.
@@ -1467,15 +1461,6 @@ impl RackPanel {
                 let size = lemon_card::shown_size(card, b);
                 2.0 + (lemon_card::body_height(size, column - 4.0) + 1.0) / u
             }
-            _ if module.type_id == honeydew_audio::vital::VITAL
-                && !module.minimized
-                && u > 0.0
-                && vital_card::drawn(self.vital_cards.get(&(self.channel, module.instance_id))) =>
-            {
-                // Vital's own interface at the card's width, its aspect kept (the same 4 px and 1 px as above).
-                let card = self.vital_cards.get(&(self.channel, module.instance_id));
-                2.0 + (vital_card::body_height(card, column - 4.0) + 1.0) / u
-            }
             _ => card_height(module),
         }
     }
@@ -1507,18 +1492,6 @@ impl RackPanel {
         }
         self.panels.retain(|&(ch, id, ty), _| {
             ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
-        });
-        // A Vital card whose module is gone lets its interface go.
-        self.vital_cards.retain(|&(ch, id), _| {
-            let kept = ch != index
-                || channel
-                    .rack
-                    .get(id)
-                    .is_some_and(|m| m.type_id == honeydew_audio::vital::VITAL);
-            if !kept {
-                vital_card::release(channel.id, id);
-            }
-            kept
         });
     }
 
@@ -2447,11 +2420,7 @@ impl RackPanel {
             actions.picker = Some(PresetTarget::Module(id));
         }
         if edits.full {
-            if module.type_id == honeydew_audio::vital::VITAL {
-                actions.vital_full = Some(id);
-            } else {
-                actions.lemon_full = Some(id);
-            }
+            actions.lemon_full = Some(id);
         }
         if edits.window {
             actions.device_window = Some(id);
@@ -2545,9 +2514,7 @@ impl RackPanel {
             _ => None,
         };
         // Issue #68: a Lemon card showing its editor has the full screen button in that cell.
-        let vital = module.type_id == honeydew_audio::vital::VITAL && vital_card::available();
-        let full =
-            vital || (lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some());
+        let full = lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some();
         // The Device Rack's strip gives every other card with a panel a pop-out too: the module in a window of its own.
         let own_window = self.strip
             && self.only.is_none()
@@ -2695,21 +2662,6 @@ impl RackPanel {
             self.lemon_wheel |= lemon_card::over(state);
             if running {
                 edits.sample = lemon_card::wants_file(state);
-                return edits;
-            }
-        }
-        if shown && module.type_id == honeydew_audio::vital::VITAL && vital_card::available() {
-            let content = content_rect(card * ppp, self.card_height(module), u) / ppp;
-            let state = self.vital_cards.entry((self.channel, id)).or_default();
-            if self.lemon_full == Some((self.channel, id)) {
-                // Full screen has the interface: the card shows its last frame.
-                vital_card::paint(ui, content, state);
-                return edits;
-            }
-            let out = vital_card::show(ui, content, self.channel_id, module, state);
-            self.lemon_wheel |= vital_card::over(state);
-            if out.drawn {
-                edits.changed.extend(out.changed);
                 return edits;
             }
         }

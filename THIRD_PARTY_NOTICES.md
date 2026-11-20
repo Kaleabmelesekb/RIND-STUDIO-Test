@@ -382,30 +382,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - Modified: not the DSP. We add `bridge.cpp` (a C face) and two small stand-in headers for DPF's, and Rind Studio's
   panels and presets restate each plugin's parameters and programs.
 
-## Vital (the Vital instrument)
-
-- Source: Vital by Matt Tytel (<https://github.com/mtytel/vital>), vendored in `vendor/vital/` (see its `README.md`):
-  the sound engine (`src/synthesis`, `src/common`), the parts of its interface code the engine includes, and its license.
-  Not included: Vital's window, its preset browser and its JUCE plugin shell.
-- Includes nlohmann/json (<https://github.com/nlohmann/json>, MIT) and kissfft (<https://github.com/mborgerding/kissfft>,
-  BSD-3-Clause), as Vital carries them in `third_party/`; each keeps its license text.
-- Copyright (C) 2013-2022 Matt Tytel, and the authors of the files.
-- License: GPL-3.0-or-later, the license of Honeydew itself ([`LICENSE`](LICENSE)); `vendor/vital/LICENSE` is Vital's.
-- Modified: not the engine. We add `shim/` (a small stand-in for the parts of JUCE the engine touches), `bridge.cpp` (a C
-  face for the Rust module), `engine.cpp` (the unity translation unit), `load_save_subset.cpp` (three helpers copied from
-  `src/common/load_save.cpp`) and `tables/` (the parameter list, written from the running engine). Vital ships no
-  factory presets or wavetable files with its source: the twelve wavetables are built with its own classes, and the
-  presets (`Presets/Vital`) are Honeydew's own.
-- On Android the real interface is included too (`vendor/vital-ui/`, see its `README.md`): Vital's own window code
-  (`src/interface`, unchanged apart from GLES precision and error output), built on JUCE 6.0.5 as Vital patches it,
-  with a windowless platform layer of ours (`juce_headless_Windowing.cpp`, `juce_OpenGL_headless.h`: an EGL pbuffer
-  rendered into a texture the rack shows) and small bionic/Android patches to JUCE's core. JUCE
-  (<https://juce.com>, Raw Material Software) is used under the GPL-3.0 terms of its licence, as Vital itself is.
-  `vendor/vital-ui/LICENSE-Vital` is Vital's licence text.
-- Includes FreeType (`vendor/freetype/`, <https://freetype.org>), for the fonts, under the FreeType License
-  (`FTL.TXT`; dual-licensed with the GPLv2, `GPLv2.TXT`); this product includes software developed by the FreeType
-  Project.
-
 ## Lemon Studio's plugins (Lemon Trio, Lemon Sampler and Lemon Parametric EQ)
 
 - Source: Lemon Studio (<https://github.com/ItsAlphaNeon/Lemon-Studio>), at the commit `vendor/lemon-studio/README.md`

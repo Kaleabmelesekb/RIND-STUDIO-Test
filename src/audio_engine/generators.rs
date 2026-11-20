@@ -73,20 +73,6 @@ fn instrument(
             let bar = time_sig.bar_beats();
             crate::plugins::instrument(channel, module, sample_rate, bar, super::BLOCK_FRAMES)
         }
-        // Vital's own engine, Honeydew's own instrument.
-        honeydew_audio::vital::VITAL => {
-            // The engine registers under its channel and module, where Vital's own interface (Android) finds it; one
-            // that renders offline is nobody's to edit, and does not.
-            let key = if crate::plugins::is_rendering() {
-                0
-            } else {
-                honeydew_audio::vital::key(channel.id, module.instance_id)
-            };
-            Some(Box::new(honeydew_audio::vital::Vital::with_key(
-                sample_rate,
-                key,
-            )))
-        }
         _ => None,
     }
 }
