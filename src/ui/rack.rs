@@ -71,6 +71,7 @@ pub(crate) mod lemon_card;
 mod plugin_card;
 #[cfg(test)]
 mod tests;
+mod vital_card;
 
 // Sizes in U unless noted.
 /// The header at the top, its 2 px border included: in a full-screen rack, and in a side one.
@@ -1376,6 +1377,8 @@ pub struct RackPanel {
     plugin_cards: HashMap<(usize, i32), plugin_card::PluginCard>,
     /// Each built-in Lemon plugin's card: its editor's texture and the pointer's state.
     lemon_cards: HashMap<(usize, i32), lemon_card::LemonCard>,
+    /// Each Vital card's interface texture and finger (Android: Vital's own interface).
+    vital_cards: HashMap<(usize, i32), vital_card::VitalCard>,
     /// The card column's width and the U, in device pixels, as last laid out: a Lemon card's height follows its width.
     column: (f32, f32),
     /// The pointer was over a Lemon card's editor last frame: the wheel is the editor's, not the rack's.
@@ -1462,6 +1465,15 @@ impl RackPanel {
                 let size = lemon_card::shown_size(card, b);
                 2.0 + (lemon_card::body_height(size, column - 4.0) + 1.0) / u
             }
+            _ if module.type_id == honeydew_audio::vital::VITAL
+                && !module.minimized
+                && u > 0.0
+                && vital_card::drawn(self.vital_cards.get(&(self.channel, module.instance_id))) =>
+            {
+                // Vital's own interface at the card's width, its aspect kept (the same 4 px and 1 px as above).
+                let card = self.vital_cards.get(&(self.channel, module.instance_id));
+                2.0 + (vital_card::body_height(card, column - 4.0) + 1.0) / u
+            }
             _ => card_height(module),
         }
     }
@@ -1493,6 +1505,18 @@ impl RackPanel {
         }
         self.panels.retain(|&(ch, id, ty), _| {
             ch != index || channel.rack.get(id).is_some_and(|m| m.type_id == ty)
+        });
+        // A Vital card whose module is gone lets its interface go.
+        self.vital_cards.retain(|&(ch, id), _| {
+            let kept = ch != index
+                || channel
+                    .rack
+                    .get(id)
+                    .is_some_and(|m| m.type_id == honeydew_audio::vital::VITAL);
+            if !kept {
+                vital_card::release(channel.id, id);
+            }
+            kept
         });
     }
 
@@ -2663,6 +2687,16 @@ impl RackPanel {
             self.lemon_wheel |= lemon_card::over(state);
             if running {
                 edits.sample = lemon_card::wants_file(state);
+                return edits;
+            }
+        }
+        if shown && module.type_id == honeydew_audio::vital::VITAL && vital_card::available() {
+            let content = content_rect(card * ppp, self.card_height(module), u) / ppp;
+            let state = self.vital_cards.entry((self.channel, id)).or_default();
+            let out = vital_card::show(ui, content, self.channel_id, module, state);
+            self.lemon_wheel |= vital_card::over(state);
+            if out.drawn {
+                edits.changed.extend(out.changed);
                 return edits;
             }
         }

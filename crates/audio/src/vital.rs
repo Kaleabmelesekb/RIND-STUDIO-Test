@@ -132,7 +132,27 @@ pub fn slot_indices(slot: usize) -> Option<(usize, usize)> {
         }
         slots
     });
-    BY_SLOT.get(slot).copied().filter(|&(a, b)| a != 0 && b != 0)
+    BY_SLOT
+        .get(slot)
+        .copied()
+        .filter(|&(a, b)| a != 0 && b != 0)
+}
+
+/// The menu index of the modulation source Vital calls `name`: 0 is none (an empty or unknown name), then [`SOURCES`]
+/// in order.
+pub fn source_index(name: &str) -> usize {
+    SOURCES
+        .iter()
+        .position(|s| s.to_str() == Ok(name))
+        .map_or(0, |i| i + 1)
+}
+
+/// The menu index of the modulation destination Vital calls `name`: 0 is none, then [`DESTINATIONS`] in order.
+pub fn destination_index(name: &str) -> usize {
+    DESTINATIONS
+        .iter()
+        .position(|d| d.to_str() == Ok(name))
+        .map_or(0, |i| i + 1)
 }
 
 /// The host index (p1…) of the param Vital calls `name`.
@@ -636,7 +656,12 @@ pub mod gui {
                 .split(|&b| b == 0)
                 .map(|name| String::from_utf8_lossy(name).into_owned());
             let slots: Vec<_> = (0..super::SLOTS)
-                .map(|_| (names.next().unwrap_or_default(), names.next().unwrap_or_default()))
+                .map(|_| {
+                    (
+                        names.next().unwrap_or_default(),
+                        names.next().unwrap_or_default(),
+                    )
+                })
                 .collect();
             Some(slots)
         }
@@ -954,6 +979,19 @@ mod tests {
             assert_eq!(TABLE[destination - 1].role, Role::Destination(slot as u8));
         }
         assert_eq!(slot_indices(SLOTS), None);
+    }
+
+    #[test]
+    fn menu_names_find_their_index() {
+        assert_eq!(source_index(""), 0);
+        assert_eq!(source_index("no such source"), 0);
+        assert_eq!(destination_index(""), 0);
+        for (i, source) in SOURCES.iter().enumerate() {
+            assert_eq!(source_index(source.to_str().unwrap()), i + 1);
+        }
+        for (i, destination) in DESTINATIONS.iter().enumerate() {
+            assert_eq!(destination_index(destination.to_str().unwrap()), i + 1);
+        }
     }
 
     #[test]

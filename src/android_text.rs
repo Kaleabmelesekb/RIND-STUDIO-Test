@@ -148,11 +148,17 @@ pub fn edit(response: &mut Response, value: &mut String, limit: usize) {
         return;
     }
     editor.last_focus = Some(response.id);
-    let serial = editor.start(response.id, &ctx);
+    open(editor, response.id, &ctx, value);
+}
+
+/// Starts the native dialog for `field` with `value` in it; `editor` is the locked [`EDITOR`].
+#[cfg(target_os = "android")]
+fn open(mut editor: std::sync::MutexGuard<'_, Editor>, field: Id, ctx: &Context, value: &str) {
+    let serial = editor.start(field, ctx);
     drop(editor);
     let result = crate::android::with_activity(|env, activity| {
         // The app thread stays attached to the VM, so release this local reference after every dialog call.
-        let text = env.auto_local(env.new_string(value.as_str())?);
+        let text = env.auto_local(env.new_string(value)?);
         env.call_method(
             activity,
             "editText",
@@ -169,6 +175,62 @@ pub fn edit(response: &mut Response, value: &mut String, limit: usize) {
         eprintln!("Could not open text editor: {err}");
         EDITOR.lock().unwrap().complete(serial, None);
     }
+}
+
+/// A text field that is not an egui one (Vital's own interface) asks for the keyboard: the dialog opens for `field`
+/// with `value` in it, unless one is open. Call [`keep`] every frame the field still wants it, and [`answer`] for the
+/// result.
+#[cfg(target_os = "android")]
+pub fn ask(ctx: &Context, field: Id, value: &str) {
+    let editor = EDITOR.lock().unwrap();
+    if editor.active.is_none() {
+        open(editor, field, ctx, value);
+    }
+}
+
+/// `field`'s dialog stays open this frame.
+#[cfg(target_os = "android")]
+pub fn keep(field: Id) {
+    let mut editor = EDITOR.lock().unwrap();
+    if editor
+        .active
+        .as_ref()
+        .is_some_and(|(_, id, _)| *id == field)
+    {
+        editor.seen = true;
+    }
+}
+
+/// `field`'s dialog result: `Some(Some(text))` accepted, `Some(None)` cancelled, `None` still open (or not its).
+#[cfg(target_os = "android")]
+pub fn answer(field: Id) -> Option<Option<String>> {
+    EDITOR.lock().unwrap().take(field)
+}
+
+/// Whether `field`'s dialog is open.
+#[cfg(target_os = "android")]
+pub fn is_open(field: Id) -> bool {
+    let editor = EDITOR.lock().unwrap();
+    editor
+        .active
+        .as_ref()
+        .is_some_and(|(_, id, _)| *id == field)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn ask(_: &eframe::egui::Context, _: eframe::egui::Id, _: &str) {}
+
+#[cfg(not(target_os = "android"))]
+pub fn keep(_: eframe::egui::Id) {}
+
+#[cfg(not(target_os = "android"))]
+pub fn answer(_: eframe::egui::Id) -> Option<Option<String>> {
+    None
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn is_open(_: eframe::egui::Id) -> bool {
+    false
 }
 
 #[cfg(target_os = "android")]
