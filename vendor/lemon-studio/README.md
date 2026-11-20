@@ -44,7 +44,7 @@ compiled in with their `linked` feature (no exported entry points) and hosted th
 tables (`src/plugins/builtin.rs`). Their editors draw into the rack cards (`embed`, below). From upstream, at its own
 commit:
 
-- Plugins commit: `e357d8509a7d8fb04ce0642d549d32f19757709b`
+- Plugins commit: `3c4fb2e503e0568e62342d4f43885a2da7c246da`
 
 - `plugins/lemon-3x-osc`, `plugins/lemon-sampler` and `plugins/lemon-parametric-eq-2`: their `src/` (no examples).
 - Since 0.4.9, effects: `plugins/lemon-small-fx` (the plugin, parameters and editor Lemon Studio's small

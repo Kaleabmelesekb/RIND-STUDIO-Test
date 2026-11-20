@@ -53,6 +53,10 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     lemon_vocoder,
     press,
     pulp_filter,
+    // From Lemon Studio since its 0.4.9 effects: the visualizer, the SoundFont player and the additive synthesizer.
+    lemon_drop,
+    lemon_soundfont,
+    smith,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -81,6 +85,9 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.openstudio.citrus", b"LemonStudioCitrs"),
     ("org.openstudio.lemon-drum-sampler", b"LemonStudioDrums"),
     ("org.openstudio.lemon-slicer", b"LemonStudioSlicr"),
+    ("org.openstudio.lemon-drop", b"LemonStudioDrops"),
+    ("org.openstudio.lemon-soundfont", b"LemonStudioSFont"),
+    ("org.openstudio.smith", b"LemonStudioSmith"),
 ];
 
 /// The editor size of a plugin that reports none.
@@ -350,6 +357,30 @@ mod tests {
             .map(|(n, u, c)| (*n, u.as_str(), c.clone()))
             .collect();
         assert_eq!(added, want);
+        // Lemon Drop, Lemon SoundFont Player and Smith, last.
+        assert_eq!(
+            got[23..],
+            [
+                (
+                    "Lemon Drop",
+                    "clap:org.openstudio.lemon-drop",
+                    Some(*b"LemonStudioDrops"),
+                    (lemon_drop::view::W, lemon_drop::view::H)
+                ),
+                (
+                    "Lemon SoundFont Player",
+                    "clap:org.openstudio.lemon-soundfont",
+                    Some(*b"LemonStudioSFont"),
+                    (lemon_soundfont::view::W, lemon_soundfont::view::H)
+                ),
+                (
+                    "Smith",
+                    "clap:org.openstudio.smith",
+                    Some(*b"LemonStudioSmith"),
+                    (smith::view::W, smith::view::H)
+                ),
+            ]
+        );
         for &(name, _, _, size) in &got[9..] {
             assert!(
                 size != super::FALLBACK_SIZE && size.0 > 0 && size.1 > 0,
