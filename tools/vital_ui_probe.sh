@@ -32,10 +32,16 @@ echo "$units" | tr ' ' '\n' | grep -v '^$' | xargs -P "$(nproc)" -I{} bash -c 'c
 echo "---- errors ----"
 grep -h "error" "$out"/*.log | sort | uniq -c | sort -rn | head -80
 fails=$(grep -l "error" "$out"/*.log 2>/dev/null | wc -l)
-# FreeType (C)
+# FreeType (C): the files crates/audio/build.rs builds
 fts=0
-for f in base/ftbase base/ftinit base/ftsystem truetype/truetype sfnt/sfnt smooth/smooth cff/cff psaux/psaux pshinter/pshinter psnames/psmodule raster/raster; do
-  "$bin/$triple-clang" -O1 -w $extra -DFT2_BUILD_LIBRARY '-DFT_CONFIG_MODULES_H=<ftmodule.h>' -I$ft -I$ft/include $mode "$ft/src/$f.c" -o "$out/ft.o" 2>>"$out/ft.err" || fts=1
+for f in base/ftbase base/ftbbox base/ftbitmap base/ftdebug base/ftfstype base/ftgasp base/ftglyph base/ftinit base/ftmm base/ftstroke base/ftsynth base/ftsystem truetype/truetype sfnt/sfnt smooth/smooth cff/cff psaux/psaux pshinter/pshinter psnames/psmodule raster/raster; do
+  "$bin/$triple-clang" -O1 -w $extra -DFT2_BUILD_LIBRARY '-DFT_CONFIG_MODULES_H=<ftmodule.h>' -I$ft -I$ft/include $mode "$ft/src/$f.c" -o "$out/ft_$(echo $f | tr / _).o" 2>>"$out/ft.err" || fts=1
 done
+# With FULL=1 the objects are linked into a shared library that may leave nothing undefined: what the app would otherwise
+# fail to load for on a phone.
+if [ "${FULL:-0}" = 1 ] && [ $fails = 0 ] && [ $fts = 0 ]; then
+  echo "---- link ----"
+  "$bin/$triple-clang++" -shared -o "$out/libvital_ui.so" "$out"/*.o -Wl,--no-undefined -lEGL -lGLESv3 -llog -ldl -lm -latomic 2>"$out/link.err" || { echo "LINK FAILED"; sed 's/^.*undefined symbol/undefined symbol/' "$out/link.err" | sort | uniq -c | sort -rn | head -40; fails=1; }
+fi
 [ $fts = 1 ] && { echo "FreeType errors:"; head -20 "$out/ft.err"; }
 exit $(( fails > 0 || fts > 0 ))

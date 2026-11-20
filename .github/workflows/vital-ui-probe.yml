@@ -28,4 +28,4 @@ jobs:
       - name: Compile
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.0.13004108"
-          tools/vital_ui_probe.sh ${{ matrix.abi }}
+          FULL=1 tools/vital_ui_probe.sh ${{ matrix.abi }}
