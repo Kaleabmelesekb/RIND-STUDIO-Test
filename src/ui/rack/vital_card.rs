@@ -52,6 +52,82 @@ const FAILED: u8 = 2;
 /// The interface's key (the engine registry's) that has the one interface: 0 for none.
 static CURRENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// A native crash while the interface starts or runs would take the app down at every start of a song with Vital in it.
+/// So the interface counts the sessions it was armed in that did not last [`CONFIRM_S`] of frames; two such sessions in a
+/// row (the same build) and the module's own panel is the card instead. A session that lasts clears the count.
+#[cfg(target_os = "android")]
+mod guard {
+    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Seconds of frames after which a session is known good.
+    pub const CONFIRM_S: f64 = 20.0;
+    const MAX_FAILED: u32 = 2;
+
+    fn path() -> Option<std::path::PathBuf> {
+        crate::android::data_dir().map(|d| d.join("vital-ui.guard"))
+    }
+
+    fn build() -> String {
+        const SHA: &str = match option_env!("GITHUB_SHA") {
+            Some(sha) => sha,
+            None => "",
+        };
+        format!("{} {SHA}", env!("CARGO_PKG_VERSION"))
+    }
+
+    /// The sessions of this build that were armed and never confirmed.
+    fn failed() -> u32 {
+        let text = path().and_then(|p| std::fs::read_to_string(p).ok());
+        let Some(text) = text else { return 0 };
+        let (line, count) = text.rsplit_once('\n').unwrap_or(("", "0"));
+        if line == build() {
+            count.trim().parse().unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    fn write(count: u32) {
+        if let Some(p) = path() {
+            let _ = std::fs::write(p, format!("{}\n{count}", build()));
+        }
+    }
+
+    /// Whether to leave the interface off this session.
+    pub fn disabled() -> bool {
+        static OFF: OnceLock<bool> = OnceLock::new();
+        *OFF.get_or_init(|| failed() >= MAX_FAILED)
+    }
+
+    /// The interface is about to start (the first time in this session).
+    pub fn arm() {
+        static ARMED: AtomicBool = AtomicBool::new(false);
+        if !ARMED.swap(true, Ordering::Relaxed) {
+            write(failed() + 1);
+        }
+    }
+
+    /// A frame came at `now`: after [`CONFIRM_S`] of them the session is good.
+    pub fn frame(now: f64) {
+        static FIRST: OnceLock<f64> = OnceLock::new();
+        static DONE: AtomicBool = AtomicBool::new(false);
+        let first = *FIRST.get_or_init(|| now);
+        if now - first >= CONFIRM_S && !DONE.swap(true, Ordering::Relaxed) {
+            write(0);
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+mod guard {
+    pub fn disabled() -> bool {
+        false
+    }
+    pub fn arm() {}
+    pub fn frame(_: f64) {}
+}
+
 /// A Vital card's own state: the interface's texture and the finger's.
 #[derive(Default)]
 pub(crate) struct VitalCard {
@@ -108,13 +184,13 @@ pub(super) fn body_height(card: Option<&VitalCard>, width: f32) -> f32 {
 
 /// Whether this build can show Vital's interface at all.
 pub(super) fn available() -> bool {
-    gui::AVAILABLE
+    gui::AVAILABLE && !guard::disabled()
 }
 
 /// Whether the card body is Vital's interface (its aspect): not once the interface has failed to start so often that
 /// the module's own panel stands in.
 pub(super) fn drawn(card: Option<&VitalCard>) -> bool {
-    gui::AVAILABLE && card.is_none_or(|c| c.tries < GIVE_UP || c.texture.is_some())
+    available() && card.is_none_or(|c| c.tries < GIVE_UP || c.texture.is_some())
 }
 
 /// Whether the pointer or a finger is on the interface: the rack's wheel is then the interface's.
@@ -141,7 +217,7 @@ pub(crate) fn show(
         drawn: false,
         changed: Vec::new(),
     };
-    if !gui::AVAILABLE {
+    if !available() {
         return none;
     }
     let ctx = ui.ctx().clone();
@@ -254,6 +330,7 @@ pub(crate) fn show(
                 }
             }
             card.size = (w, h);
+            guard::frame(now);
         }
     } else if card.shown {
         gui::set_fps(FPS_HIDDEN);
@@ -335,6 +412,7 @@ fn begin_open(card: &mut VitalCard, key: u64, want: (u32, u32), now: f64) {
             }
         });
     }
+    guard::arm();
     let state = Arc::new(AtomicU8::new(PENDING));
     card.opening = Some(state.clone());
     card.asked = want;
