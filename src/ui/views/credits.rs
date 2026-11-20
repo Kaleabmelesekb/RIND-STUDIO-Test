@@ -24,9 +24,7 @@ const PLUGIN_HOSTS: &str = "VST3, VST2 and CLAP plugin hosting: Lemon Studio by 
 /// built-in Lemon plugins (`crate::plugins::builtin`).
 fn effects() -> String {
     let mut names = vec!["Lemon Reverb", "Lemon Limiter"];
-    // Rind is Honeydew's own, not Lemon Studio's (`crates/rind`).
-    let lemon = (crate::plugins::builtin::all().iter()).filter(|b| b.clap_id() != rind::CLAP_ID);
-    names.extend(lemon.map(|b| b.name));
+    names.extend(crate::plugins::builtin::all().iter().map(|b| b.name));
     let last = names.pop().unwrap_or_default();
     format!(
         "{} and {last}: Lemon Studio by ItsAlphaNeon (GPL-3.0-or-later), https://github.com/ItsAlphaNeon/Lemon-Studio",
@@ -37,9 +35,6 @@ fn effects() -> String {
 const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Dragonfly Reverb by Michael Willis and Rob van den Berg \
                          (GPL-3.0-or-later, their DSP unchanged), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
                          Kamogashira and zita-rev1 by Fons Adriaensen";
-/// The credit of Vital (`vendor/vital`).
-const VITAL: &str = "Vital: Vital by Matt Tytel (GPL-3.0-or-later, its sound engine unchanged), https://github.com/mtytel/vital, with \
-                     nlohmann/json (MIT) and kissfft (BSD-3-Clause)";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -89,7 +84,6 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         LOGO,
         &effects(),
         DRAGONFLY,
-        VITAL,
         THIRD_PARTY,
         "",
         SOUNDS,
@@ -236,7 +230,6 @@ mod tests {
         for want in [
             LOGO,
             "Dragonfly Reverb by Michael Willis and Rob van den Berg",
-            "Vital by Matt Tytel",
             "License MIT:",
             "MuseScore_General by S. Christian Collins",
             "Full notice in CREDITS.txt",

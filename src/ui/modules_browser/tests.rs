@@ -3,7 +3,7 @@ use super::*;
 /// The Modules browser's list: `Paste`, `Rack Preset`, `Instrument`, then the sections. The NOTE EFFECT section's five entries are
 /// all the note effects of the registry. Lemon Reverb and Lemon Limiter are Honeydew's own (`honeydew_audio::lemon`), as is
 /// the Dynamic EQ, the De-esser, Denoise and the four Dragonfly reverbs, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
-/// 0.4.9's effects and Citrus, Lemon Drum Sampler and Lemon Slicer its built-in plugins (`crate::plugins::builtin`), and Rind Honeydew's own (`crates/rind`), a
+/// 0.4.9's effects and Citrus, Lemon Drum Sampler, Lemon Slicer, Lemon SoundFont Player, Smith and Lemon Drop its built-in plugins (`crate::plugins::builtin`), a
 /// Lemon plugin after its counterpart, the others by name.
 const SPEC: &[(&str, &[&str])] = &[
     ("", &["Paste", "Rack Preset", "Instrument"]),
@@ -17,14 +17,14 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Sampler",
             "GMSynth",
             "Lemon Drum Sampler",
+            "Lemon SoundFont Player",
             "MiniSynth",
-            "Rind",
             "Slicer",
             "Lemon Slicer",
+            "Smith",
             "SoundFont Player",
             "SuperSaw",
             "Transistor Bass",
-            "Vital",
         ],
     ),
     (
@@ -88,6 +88,7 @@ const SPEC: &[(&str, &[&str])] = &[
             "Flanger",
             "Lemon Flanger",
             "Lemon Balance",
+            "Lemon Drop",
             "Lemon Formula Controller",
             "Lemon Peak Controller",
             "Lemon Stereo Enhancer",
@@ -172,7 +173,6 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
         .chain([&params::DE_ESSER, &params::DENOISE])
         .chain(params::DRAGONFLY_MODULES)
-        .chain([&params::VITAL_MODULE])
         .filter(|m| !m.legacy)
         .map(|m| m.id)
         .collect();
@@ -230,8 +230,8 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
             "Citrus",
             "Lemon Drum Sampler",
             "Lemon Slicer",
-            "Rind",
-            "Vital",
+            "Lemon SoundFont Player",
+            "Smith",
         ];
         let notes = [
             "NOTE EFFECT",
@@ -896,15 +896,14 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Slicer",
             "3x Osc",
             "SoundFont Player",
-            // Honeydew's own instrument, Vital (1012), after the numbered ones.
-            "Vital",
             // The built-in plugins, which have no type id of their own: by name.
             "Citrus",
             "Lemon Drum Sampler",
             "Lemon Sampler",
             "Lemon Slicer",
+            "Lemon SoundFont Player",
             "Lemon Trio",
-            "Rind",
+            "Smith",
             // Effects: 3 … 46, then the note effects 47 … 51.
             "Equalizer",
             "MultiFX",
@@ -956,6 +955,7 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Balance",
             "Lemon Chorus",
             "Lemon Delay",
+            "Lemon Drop",
             "Lemon Fast Distortion",
             "Lemon Filter",
             "Lemon Flanger",

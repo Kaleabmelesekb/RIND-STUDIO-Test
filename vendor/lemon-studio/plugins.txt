@@ -25,6 +25,9 @@ lemon-peak-controller
 citrus
 lemon-drum-sampler
 lemon-slicer
+lemon-drop
+lemon-soundfont
+smith
 os-engine/src/clock.rs
 os-engine/src/envelope.rs
 os-engine/src/laws.rs

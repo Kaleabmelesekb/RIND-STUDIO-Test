@@ -56,8 +56,6 @@ pub(crate) struct LemonCard {
     pressed: Option<Button>,
     /// That press is a finger's other than the pointer's ([`other_finger`]): its id and the pass it was last seen in.
     finger: Option<(u64, u64)>,
-    /// Rind's card ([`touch_fingers`]): the fingers down on it, each with the pass it was last seen in.
-    fingers: Vec<(u64, u64)>,
     /// The pointer's last position, and whether it was over the editor.
     last: Pos2,
     over: bool,
@@ -143,14 +141,9 @@ pub(crate) fn show(
     let k = card.size.0 as f32 / rect.width();
     let modal = embed::modal(editor);
     if modal.is_none() && card.size.0 > 0 {
-        // Rind takes every finger of its own (a chord while a wheel is held); the other editors the pointer and one more.
-        let multi = plugin.clap_id() == rind::CLAP_ID;
-        if multi {
-            touch_fingers(ui, card, &response, rect, k);
-        } else {
-            other_finger(ui, card, &response, rect, k);
-        }
-        forward(ui, card, rect, k, response.hovered(), multi);
+        // The pointer and one more finger.
+        other_finger(ui, card, &response, rect, k);
+        forward(ui, card, rect, k, response.hovered());
     } else {
         // The press that asked is the modal's (its answer delivers it again, with its release): the next press is new.
         (card.pressed, card.finger) = (None, None);
@@ -270,53 +263,6 @@ fn mods(m: Modifiers) -> (bool, bool, bool) {
     (m.ctrl || m.mac_cmd, m.shift, m.alt)
 }
 
-/// Every finger on Rind's editor, by itself ([`rind::touch`]): a press, its moves and its lift, whatever the other
-/// fingers and the pointer do. The editor wakes to take them. A focus loss or a frame without the card lifts them all.
-fn touch_fingers(ui: &Ui, card: &mut LemonCard, response: &Response, rect: Rect, k: f32) {
-    use rind::touch::{self, Touch};
-    let (editor, pass) = (card.editor, ui.ctx().cumulative_pass_nr());
-    let px = |p: Pos2| ((p.x - rect.left()) * k, (p.y - rect.top()) * k);
-    let mut sent = false;
-    let mut send = |t: Touch| {
-        touch::send(editor as u64, t);
-        sent = true;
-    };
-    if card.fingers.iter().any(|f| f.1 + 1 != pass) || ui.input(focus_lost) {
-        for (id, _) in card.fingers.drain(..) {
-            send(Touch::Up { id });
-        }
-    }
-    for f in fingers(ui, response.id) {
-        let held = |card: &LemonCard, id| card.fingers.iter().any(|f| f.0 == id);
-        match f {
-            Finger::Down(id, at) if id != MOUSE && !held(card, id) => {
-                let (x, y) = px(at);
-                let now = ui.input(|i| i.time);
-                let dbl = (card.click)
-                    .is_some_and(|(t, p)| now - t < DOUBLE_S && p.distance(at) < DOUBLE_PT);
-                card.click = (!dbl).then_some((now, at));
-                send(Touch::Down { id, x, y, dbl });
-                card.fingers.push((id, pass));
-            }
-            Finger::Move(id, at) if held(card, id) => {
-                let (x, y) = px(at);
-                send(Touch::Move { id, x, y });
-            }
-            Finger::Up(id, _) if held(card, id) => {
-                send(Touch::Up { id });
-                card.fingers.retain(|f| f.0 != id);
-            }
-            _ => {}
-        }
-    }
-    for f in &mut card.fingers {
-        f.1 = pass;
-    }
-    if sent {
-        embed::input(editor, Input::Tick, (false, false, false));
-    }
-}
-
 /// Issue #68: a finger other than the pointer's (egui's pointer follows the first finger down only) presses, moves and
 /// lifts as the pointer does while no press holds the editor, so that a knob turns while another finger plays keys; the
 /// pointer waits meanwhile ([`forward`]). A focus loss or a frame without the card lifts it.
@@ -371,7 +317,7 @@ fn other_finger(ui: &Ui, card: &mut LemonCard, response: &Response, rect: Rect, 
 
 /// This frame's pointer input to the editor shown in `rect` (`k` editor pixels per point); `hovered`: the pointer is
 /// on it, with nothing over it. Nothing while another finger holds the editor ([`other_finger`]).
-fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool, multi: bool) {
+fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool) {
     let editor = card.editor;
     if card.finger.is_some() {
         return;
@@ -379,11 +325,8 @@ fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool, mul
     let px = |p: Pos2| ((p.x - rect.left()) * k, (p.y - rect.top()) * k);
     let (events, now, held) = ui.input(|i| (i.events.clone(), i.time, i.modifiers));
     let send = |e: Input, m: Modifiers| embed::input(editor, e, mods(m));
-    // Rind's fingers go by [`touch_fingers`]: in a frame with touches the pointer events repeat the first one.
-    let touching = multi && events.iter().any(|e| matches!(e, Event::Touch { .. }));
     for event in events {
         match event {
-            Event::PointerMoved(_) | Event::PointerButton { .. } if touching => {}
             Event::PointerMoved(p) => {
                 if card.pressed.is_some() && embed::locked(editor) {
                     let d = (p - card.last) * k;
@@ -914,79 +857,6 @@ mod tests {
             "{moves:?}"
         );
         rig.frame(second(TouchPhase::End, pos2(at.x, 0.0)));
-        assert!(
-            plugins::idle().iter().any(|m| m.gesture == 2),
-            "the lift ends the press"
-        );
-    }
-
-    /// The centre of Rind's first filter's cutoff knob, always on screen (the editor's pixels are points here).
-    fn rind_knob(rig: &mut Rig) -> Pos2 {
-        use rind::view::{self, Kind, Ui};
-        for _ in 0..3 {
-            rig.frame(vec![]);
-        }
-        let knob = (view::layout(&Ui::default()).into_iter())
-            .find(|h| {
-                h.param == rind::ids::FILT_BASE + rind::ids::filt::CUTOFF && h.kind == Kind::Knob
-            })
-            .unwrap();
-        pos2(knob.r.cx(), knob.r.cy())
-    }
-
-    /// Rind's editor (Honeydew's own, `crates/rind`) takes the same touch gestures as the Lemon plugins': a double tap
-    /// puts its knob back at its default, the second tap a few points off the first.
-    #[test]
-    fn a_double_tap_resets_rinds_knob() {
-        let mut rig = Rig::new("Rind");
-        let at = rind_knob(&mut rig);
-        let _ = plugins::idle();
-        rig.frame(finger(TouchPhase::Start, at));
-        let default = (plugins::idle().iter().find(|m| m.gesture == 0))
-            .expect("a press")
-            .value;
-        for y in [at.y - 20.0, at.y - 40.0] {
-            rig.frame(finger(TouchPhase::Move, pos2(at.x, y)));
-        }
-        rig.frame(finger(TouchPhase::End, pos2(at.x, at.y - 40.0)));
-        let last =
-            |moves: &[plugins::PluginMove]| moves.iter().rfind(|m| m.gesture == 1).map(|m| m.value);
-        let moves = plugins::idle();
-        assert!(last(&moves).is_some_and(|v| v != default), "{moves:?}");
-        rig.tap(at);
-        rig.tap(at + vec2(6.0, 3.0));
-        rig.frame(vec![]);
-        assert_eq!(last(&plugins::idle()), Some(default));
-    }
-
-    /// Rind's knob turns under a second finger while the first holds something elsewhere, which then lifts and moves
-    /// nothing in the editor.
-    #[test]
-    fn a_second_finger_turns_rinds_knob() {
-        let mut rig = Rig::new("Rind");
-        let (at, key) = (rind_knob(&mut rig), pos2(790.0, 590.0));
-        let second = |phase, pos| {
-            vec![Event::Touch {
-                device_id: TouchDeviceId(1),
-                id: TouchId(2),
-                phase,
-                pos,
-                force: None,
-            }]
-        };
-        let _ = plugins::idle();
-        rig.frame(finger(TouchPhase::Start, key));
-        rig.frame(second(TouchPhase::Start, at));
-        for y in [at.y - 20.0, at.y - 40.0] {
-            rig.frame(second(TouchPhase::Move, pos2(at.x, y)));
-        }
-        rig.frame(finger(TouchPhase::End, key));
-        let moves = plugins::idle();
-        assert!(
-            moves.iter().any(|m| m.gesture == 1) && !moves.iter().any(|m| m.gesture == 2),
-            "{moves:?}"
-        );
-        rig.frame(second(TouchPhase::End, pos2(at.x, at.y - 40.0)));
         assert!(
             plugins::idle().iter().any(|m| m.gesture == 2),
             "the lift ends the press"

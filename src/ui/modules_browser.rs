@@ -226,7 +226,6 @@ const SECTIONS: [(Option<&str>, &[Entry]); 7] = [
             Entry::Synth(S::SoundFontPlayer),
             Entry::Synth(S::SuperSaw),
             Entry::Synth(S::TransistorBass),
-            M(honeydew_audio::vital::VITAL),
         ],
     ),
     (
@@ -336,7 +335,7 @@ impl Entry {
         match self {
             Self::Paste | Self::RackPreset | Self::Instrument => (0, 0),
             Self::Synth(kind) => (1, kind.type_id()),
-            Self::Module(id) => (if self.is_instrument() { 1 } else { 2 }, id),
+            Self::Module(id) => (2, id),
             Self::Plugin(plugin) => (if plugin.instrument { 1 } else { 2 }, u16::MAX),
         }
     }
@@ -542,24 +541,12 @@ impl Entry {
         }
     }
 
-    /// Whether the entry is an instrument: a [`Entry::Synth`], a plugin instrument, or one of Honeydew's own
-    /// instruments (a [`Entry::Module`] whose registry role is an instrument, as Vital is).
-    pub fn is_instrument(self) -> bool {
-        match self {
-            Self::Synth(_) => true,
-            Self::Plugin(p) => p.instrument,
-            Self::Module(id) => params::module_spec(id).is_some_and(|s| s.role == Role::Instrument),
-            _ => false,
-        }
-    }
-
     /// Whether the entry is listed for a channel that `takes` it: `Instrument` and the instruments only where an
     /// instrument goes, the note effects also on a drum channel.
     fn fits(self, takes: Takes) -> bool {
         let note = |id| params::module_spec(id).is_some_and(|s| s.role == Role::NoteEffect);
         match self {
             Self::Instrument | Self::Synth(_) => takes == Takes::Instruments,
-            Self::Module(id) if self.is_instrument() && id != 0 => takes == Takes::Instruments,
             Self::Module(id) if note(id) => takes >= Takes::NoteEffects,
             Self::Plugin(plugin) if plugin.instrument => takes == Takes::Instruments,
             Self::Module(_) | Self::Plugin(_) | Self::Paste | Self::RackPreset => true,

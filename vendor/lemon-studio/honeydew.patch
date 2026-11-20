@@ -1,7 +1,7 @@
 diff -ruN a/vendor/lemon-studio/lemon-delay/src/editor.rs b/vendor/lemon-studio/lemon-delay/src/editor.rs
 --- a/vendor/lemon-studio/lemon-delay/src/editor.rs
 +++ b/vendor/lemon-studio/lemon-delay/src/editor.rs
-@@ -350,7 +350,8 @@
+@@ -367,7 +367,8 @@
                  let mut m = MenuDef::new(MenuStyle::Context);
                  m.head("Lemon Delay", Cmd::None);
                  m.add(MenuItem::item(&format!("Version {}", env!("CARGO_PKG_VERSION"))).enabled(false), Cmd::None);
@@ -11,6 +11,55 @@ diff -ruN a/vendor/lemon-studio/lemon-delay/src/editor.rs b/vendor/lemon-studio/
                  m
              }
          }
+diff -ruN a/vendor/lemon-studio/lemon-drop/src/editor.rs b/vendor/lemon-studio/lemon-drop/src/editor.rs
+--- a/vendor/lemon-studio/lemon-drop/src/editor.rs
++++ b/vendor/lemon-studio/lemon-drop/src/editor.rs
+@@ -1088,9 +1088,9 @@
+                 self.dirty = true;
+             }
+             // The floating display opens when it should be visible.
+-            #[cfg(target_os = "macos")]
++            #[cfg(all(target_os = "macos", not(feature = "embed")))]
+             crate::float::ensure(&self.logic.params, &self.logic.shared, &self.win);
+-            #[cfg(target_os = "linux")]
++            #[cfg(all(target_os = "linux", not(feature = "embed")))]
+             crate::float::ensure(&self.logic.params, &self.logic.shared, self.scale, self.win.win);
+             if self.logic.hint != self.last_hint {
+                 self.last_hint.clone_from(&self.logic.hint);
+diff -ruN a/vendor/lemon-studio/lemon-drop/src/float_embed.rs b/vendor/lemon-studio/lemon-drop/src/float_embed.rs
+--- a/vendor/lemon-studio/lemon-drop/src/float_embed.rs
++++ b/vendor/lemon-studio/lemon-drop/src/float_embed.rs
+@@ -0,0 +1,7 @@
++// Honeydew (vendored addition): Lemon Drop built into Honeydew has no floating display window; its display is the rack
++// card (`os_plugkit::embed`). `float::close` is all the plugin's `Drop` asks of the module.
++
++use crate::Shared;
++
++/// Nothing floats: there is nothing to close.
++pub fn close(_: &Shared) {}
+diff -ruN a/vendor/lemon-studio/lemon-drop/src/lib.rs b/vendor/lemon-studio/lemon-drop/src/lib.rs
+--- a/vendor/lemon-studio/lemon-drop/src/lib.rs
++++ b/vendor/lemon-studio/lemon-drop/src/lib.rs
+@@ -13,12 +13,16 @@
+ pub mod analysis;
+ pub mod display;
+ pub mod editor;
+-#[cfg(windows)]
++// Honeydew (vendored change): built in (`embed`), the display is the rack card; there is no floating window of its own.
++#[cfg(feature = "embed")]
++#[path = "float_embed.rs"]
+ pub mod float;
+-#[cfg(target_os = "macos")]
++#[cfg(all(windows, not(feature = "embed")))]
++pub mod float;
++#[cfg(all(target_os = "macos", not(feature = "embed")))]
+ #[path = "float_mac.rs"]
+ pub mod float;
+-#[cfg(target_os = "linux")]
++#[cfg(all(target_os = "linux", not(feature = "embed")))]
+ #[path = "float_x11.rs"]
+ pub mod float;
+ pub mod state;
 diff -ruN a/vendor/lemon-studio/lemon-drum-sampler/src/dsp.rs b/vendor/lemon-studio/lemon-drum-sampler/src/dsp.rs
 --- a/vendor/lemon-studio/lemon-drum-sampler/src/dsp.rs
 +++ b/vendor/lemon-studio/lemon-drum-sampler/src/dsp.rs
@@ -145,7 +194,7 @@ diff -ruN a/vendor/lemon-studio/lemon-drum-sampler/src/lib.rs b/vendor/lemon-stu
 diff -ruN a/vendor/lemon-studio/lemon-sampler/src/editor.rs b/vendor/lemon-studio/lemon-sampler/src/editor.rs
 --- a/vendor/lemon-studio/lemon-sampler/src/editor.rs
 +++ b/vendor/lemon-studio/lemon-sampler/src/editor.rs
-@@ -2755,7 +2755,8 @@
+@@ -2802,7 +2802,8 @@
                          let s = self.shared.whole();
                          if let (Some(s), Some(path)) = (s, file_dialog(&self.win, true)) {
                              let path = if path.to_ascii_lowercase().ends_with(".wav") { path } else { format!("{path}.wav") };
@@ -158,7 +207,7 @@ diff -ruN a/vendor/lemon-studio/lemon-sampler/src/editor.rs b/vendor/lemon-studi
 diff -ruN a/vendor/lemon-studio/lemon-sampler/src/lib.rs b/vendor/lemon-studio/lemon-sampler/src/lib.rs
 --- a/vendor/lemon-studio/lemon-sampler/src/lib.rs
 +++ b/vendor/lemon-studio/lemon-sampler/src/lib.rs
-@@ -544,7 +544,8 @@
+@@ -599,7 +599,8 @@
              return;
          }
          let (s, p) = (self.clone(), params.clone());
@@ -350,7 +399,7 @@ diff -ruN a/vendor/lemon-studio/os-engine/src/sample.rs b/vendor/lemon-studio/os
 diff -ruN a/vendor/lemon-studio/os-hostlink/src/lib.rs b/vendor/lemon-studio/os-hostlink/src/lib.rs
 --- a/vendor/lemon-studio/os-hostlink/src/lib.rs
 +++ b/vendor/lemon-studio/os-hostlink/src/lib.rs
-@@ -341,7 +341,10 @@
+@@ -346,7 +346,10 @@
  #[cfg(windows)]
  pub use win::{message, to_host, Link};
  
@@ -362,7 +411,7 @@ diff -ruN a/vendor/lemon-studio/os-hostlink/src/lib.rs b/vendor/lemon-studio/os-
  mod local {
      use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
      use std::sync::{Arc, Mutex, OnceLock, Weak};
-@@ -538,6 +541,8 @@
+@@ -543,6 +546,8 @@
  
  #[cfg(not(windows))]
  pub use local::{set_host_waker, take_host_messages, Link, Peer};
@@ -1080,7 +1129,7 @@ diff -ruN a/vendor/lemon-studio/tesla/src/editor.rs b/vendor/lemon-studio/tesla/
      let _ = std::fs::create_dir_all(&dir);
      let stem = file_stem(title);
      let mut p = dir.join(format!("{stem}.wav"));
-@@ -2536,7 +2538,8 @@
+@@ -2577,7 +2579,8 @@
          if !path.to_ascii_lowercase().ends_with(".wav") {
              path.push_str(".wav");
          }
@@ -1093,7 +1142,7 @@ diff -ruN a/vendor/lemon-studio/tesla/src/editor.rs b/vendor/lemon-studio/tesla/
 diff -ruN a/vendor/lemon-studio/tesla/src/lib.rs b/vendor/lemon-studio/tesla/src/lib.rs
 --- a/vendor/lemon-studio/tesla/src/lib.rs
 +++ b/vendor/lemon-studio/tesla/src/lib.rs
-@@ -608,6 +608,11 @@
+@@ -610,6 +610,11 @@
              s.capturing.store(false, Ordering::Relaxed);
          }
  

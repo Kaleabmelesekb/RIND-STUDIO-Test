@@ -44,7 +44,7 @@ compiled in with their `linked` feature (no exported entry points) and hosted th
 tables (`src/plugins/builtin.rs`). Their editors draw into the rack cards (`embed`, below). From upstream, at its own
 commit:
 
-- Plugins commit: `e357d8509a7d8fb04ce0642d549d32f19757709b`
+- Plugins commit: `3c4fb2e503e0568e62342d4f43885a2da7c246da`
 
 - `plugins/lemon-3x-osc`, `plugins/lemon-sampler` and `plugins/lemon-parametric-eq-2`: their `src/` (no examples).
 - Since 0.4.9, effects: `plugins/lemon-small-fx` (the plugin, parameters and editor Lemon Studio's small
@@ -55,6 +55,9 @@ commit:
 - `plugins/tesla` (Tesla, Lemon's audio editor and recorder, an effect; since 0.4.9): its `src/`.
 - Since 0.4.9, the instruments `plugins/citrus` (Citrus), `plugins/lemon-drum-sampler` (Lemon Drum Sampler)
   and `plugins/lemon-slicer` (Lemon Slicer), their `src/`.
+- Since 2026-11: `plugins/lemon-drop` (Lemon Drop, the audio visualizer; no floating display window built in: its
+  display is the card, `float_embed.rs`), `plugins/lemon-soundfont` (Lemon SoundFont Player) and `plugins/smith`
+  (Smith, the additive synthesizer, built on Citrus).
 - What they use that the hosts did not bring: `crates/os-plugkit`, `os-ui` (with its fonts and icon notice), `os-theme`
   (with its themes), `os-hostlink`, `os-model`, `os-dsp` and `os-paths`, each its `src/`; and from `os-engine`,
   `clock.rs`, `envelope.rs`, `laws.rs` and `sample.rs`, behind the `os-engine` feature `plugins`, which the plugins turn
