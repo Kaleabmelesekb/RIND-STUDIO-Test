@@ -1,5 +1,5 @@
 # A test build of the current branch: a debug-signed Android APK (no secrets, no release tag, no sounds: they download
-# on first run) and Rind's own unit tests. Runs on pushes to `rind/**` branches and by hand (Actions > Android test
+# on first run). Runs on pushes to `rind/**` branches and by hand (Actions > Android test
 # build > Run workflow, then pick the branch). The release workflow is untouched.
 name: Android test build
 
@@ -15,17 +15,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rind-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.91.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: rind-tests
-      - name: Rind unit tests
-        run: cargo test -p rind --locked
-
   apk:
     runs-on: ubuntu-latest
     steps:

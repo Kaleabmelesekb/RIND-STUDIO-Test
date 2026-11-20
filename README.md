@@ -5,7 +5,7 @@
 
 <h1 align="center">Rind Studio</h1>
 <p align="center">A free, open-source music studio modelled on FL Studio Mobile, written in Rust.</p>
-<p align="center">Built for Android, with Rind, a 3,000-patch virtual analog synthesizer.</p>
+<p align="center">Built for Android, with Lemon Studio's plugins built in.</p>
 
 <p align="center"><img src="assets/screenshots/01-playlist-sampler.webp" width="100%" alt="The playlist and a sampler's rack, playing the demo song Edwan - Permich - Tropical"></p>
 <p align="center"><img src="assets/screenshots/02-playlist-supersaw.webp" width="100%" alt="The playlist and a synth's rack, playing the demo song Parrik - Initiated"></p>
@@ -152,7 +152,7 @@ adb pull /sdcard/Android/obb/<package>/       # the OBB, if the app has one
 
 ## Building from source
 
-The Android app is the supported build. The synthesizer's DSP and parameter ranges are documented in [`crates/rind/DSP.md`](crates/rind/DSP.md).
+The Android app is the supported build.
 
 ### Sound library
 
