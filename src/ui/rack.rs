@@ -71,7 +71,7 @@ pub(crate) mod lemon_card;
 mod plugin_card;
 #[cfg(test)]
 mod tests;
-mod vital_card;
+pub(crate) mod vital_card;
 
 // Sizes in U unless noted.
 /// The header at the top, its 2 px border included: in a full-screen rack, and in a side one.
@@ -1229,6 +1229,8 @@ pub struct RackActions {
     pub builder: Option<i32>,
     /// Issue #68: a Lemon card's full screen button: show the editor of the module with this instance id full screen.
     pub lemon_full: Option<i32>,
+    /// Vital's full screen button: show the interface of the module with this instance id full screen.
+    pub vital_full: Option<i32>,
     /// A device strip card's pop-out button: show the module with this instance id in its own window on the screen.
     pub device_window: Option<i32>,
 }
@@ -2445,7 +2447,11 @@ impl RackPanel {
             actions.picker = Some(PresetTarget::Module(id));
         }
         if edits.full {
-            actions.lemon_full = Some(id);
+            if module.type_id == honeydew_audio::vital::VITAL {
+                actions.vital_full = Some(id);
+            } else {
+                actions.lemon_full = Some(id);
+            }
         }
         if edits.window {
             actions.device_window = Some(id);
@@ -2539,7 +2545,9 @@ impl RackPanel {
             _ => None,
         };
         // Issue #68: a Lemon card showing its editor has the full screen button in that cell.
-        let full = lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some();
+        let vital = module.type_id == honeydew_audio::vital::VITAL && vital_card::available();
+        let full =
+            vital || (lemon.is_some() && crate::plugins::lemon_open(self.channel_id, id).is_some());
         // The Device Rack's strip gives every other card with a panel a pop-out too: the module in a window of its own.
         let own_window = self.strip
             && self.only.is_none()
@@ -2693,6 +2701,11 @@ impl RackPanel {
         if shown && module.type_id == honeydew_audio::vital::VITAL && vital_card::available() {
             let content = content_rect(card * ppp, self.card_height(module), u) / ppp;
             let state = self.vital_cards.entry((self.channel, id)).or_default();
+            if self.lemon_full == Some((self.channel, id)) {
+                // Full screen has the interface: the card shows its last frame.
+                vital_card::paint(ui, content, state);
+                return edits;
+            }
             let out = vital_card::show(ui, content, self.channel_id, module, state);
             self.lemon_wheel |= vital_card::over(state);
             if out.drawn {

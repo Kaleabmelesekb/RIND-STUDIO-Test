@@ -385,6 +385,9 @@ fn run(
     if let Some(module) = actions.lemon_full {
         return Some(Nav::Open(Overlay::LemonEditor { channel, module }));
     }
+    if let Some(module) = actions.vital_full {
+        return Some(Nav::Open(Overlay::VitalEditor { channel, module }));
+    }
     actions.close.then_some(Nav::Close)
 }
 

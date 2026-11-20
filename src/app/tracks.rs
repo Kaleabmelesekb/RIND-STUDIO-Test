@@ -1025,6 +1025,7 @@ impl HoneydewApp {
             | Overlay::ModuleSamplePicker { channel, .. }
             | Overlay::InstrumentBuilder { channel, .. }
             | Overlay::LemonEditor { channel, .. }
+            | Overlay::VitalEditor { channel, .. }
             | Overlay::DeviceEditor { channel, .. }
             | Overlay::CcPicker(channel) => rekey(channel),
             // The clip's track.

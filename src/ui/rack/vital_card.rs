@@ -153,6 +153,8 @@ pub(crate) struct VitalCard {
     shown: bool,
     /// The pointer or a finger is on the interface this frame: the rack's wheel is the interface's.
     over: bool,
+    /// Full screen on a portrait screen: the interface is turned a quarter, so that it uses the screen's length.
+    pub(crate) rotate: bool,
 }
 
 impl std::fmt::Debug for VitalCard {
@@ -173,6 +175,57 @@ struct Finger0 {
     right: bool,
 }
 
+/// The largest rect of the interface's aspect (its last frame's) inside `area`, centred: where full screen shows it.
+pub(crate) fn fit(area: Rect, card: &VitalCard) -> Rect {
+    let (w, h) = if card.size.0 > 0 && card.size.1 > 0 {
+        card.size
+    } else {
+        NATIVE
+    };
+    let (w, h) = (w as f32, h as f32);
+    if card.rotate {
+        let k = (area.height() / w).min(area.width() / h);
+        return Rect::from_center_size(area.center(), vec2(h, w) * k);
+    }
+    let k = (area.width() / w).min(area.height() / h);
+    Rect::from_center_size(area.center(), vec2(w, h) * k)
+}
+
+/// The interface's width in points: the body's width, or its height when it is turned.
+fn logical_width(card: &VitalCard, content: Rect) -> f32 {
+    if card.rotate {
+        content.height()
+    } else {
+        content.width()
+    }
+}
+
+/// Where the interface is drawn in `content` (points): the card body at the interface's aspect, or all of `content`
+/// (a [`fit`]) when it is turned.
+fn body(card: &VitalCard, content: Rect) -> Rect {
+    if card.rotate {
+        content
+    } else {
+        let height = body_height(Some(card), content.width());
+        Rect::from_min_size(content.min, vec2(content.width(), height))
+    }
+}
+
+/// The interface's pixel under screen point `p` of its body `rect`; `px`: its pixels per point.
+fn to_ui(rotate: bool, rect: Rect, px: f32, p: Pos2) -> (f32, f32) {
+    if rotate {
+        // Turned clockwise: the interface's left-to-right runs down the screen, its top-to-bottom right to left.
+        ((p.y - rect.top()) * px, (rect.right() - p.x) * px)
+    } else {
+        ((p.x - rect.left()) * px, (p.y - rect.top()) * px)
+    }
+}
+
+/// Whether the interface's text dialog is open: the app's `close` leaves it to cancel.
+pub(crate) fn typing(card: &VitalCard) -> bool {
+    card.typing
+}
+
 /// The card body's height for a frame of `size` at `width` (points), a native-aspect body before one has come.
 pub(super) fn body_height(card: Option<&VitalCard>, width: f32) -> f32 {
     let (w, h) = card
@@ -189,7 +242,7 @@ pub(super) fn available() -> bool {
 
 /// Whether the card body is Vital's interface (its aspect): not once the interface has failed to start so often that
 /// the module's own panel stands in.
-pub(super) fn drawn(card: Option<&VitalCard>) -> bool {
+pub(crate) fn drawn(card: Option<&VitalCard>) -> bool {
     available() && card.is_none_or(|c| c.tries < GIVE_UP || c.texture.is_some())
 }
 
@@ -226,13 +279,14 @@ pub(crate) fn show(
     if card.key != key {
         *card = VitalCard {
             key,
+            rotate: card.rotate,
             ..VitalCard::default()
         };
     }
     let visible = ui.is_rect_visible(content);
 
     // The size the interface is drawn at: the body's width in device pixels, the native aspect, within the frame buffer.
-    let k = (content.width() * ppp / NATIVE.0 as f32).max(0.3);
+    let k = (logical_width(card, content) * ppp / NATIVE.0 as f32).max(0.3);
     let k = k
         .min(2400.0 / NATIVE.0 as f32)
         .min(1500.0 / NATIVE.1 as f32);
@@ -271,8 +325,7 @@ pub(crate) fn show(
     let id = Id::new(("vital gui", key));
     if !open {
         // Not there (yet): the texture it had, if any, else a stand-in, else the module's panel after a few failures.
-        let height = body_height(Some(card), content.width());
-        let rect = Rect::from_min_size(content.min, vec2(content.width(), height));
+        let rect = body(card, content);
         let response = ui.interact(rect, id, Sense::click());
         if card.texture.is_none() {
             if card.tries >= GIVE_UP {
@@ -340,10 +393,9 @@ pub(crate) fn show(
     // Its size follows the card's width, once the change has held a moment.
     resize(card, key, want, now);
 
-    let height = body_height(Some(card), content.width());
-    let rect = Rect::from_min_size(content.min, vec2(content.width(), height));
+    let rect = body(card, content);
     let response = ui.interact(rect, id, Sense::click_and_drag());
-    let px = card.size.0.max(1) as f32 / rect.width();
+    let px = card.size.0.max(1) as f32 / logical_width(card, rect);
     forward(ui, card, key, &response, rect, px, now);
     wheel(ui, card, key, rect, px, now);
     text(&ctx, card, key, id);
@@ -459,7 +511,8 @@ fn forward(
     now: f64,
 ) {
     let ms = (now * 1000.0) as i64;
-    let at = |p: Pos2| ((p.x - rect.left()) * px, (p.y - rect.top()) * px);
+    let rotate = card.rotate;
+    let at = move |p: Pos2| to_ui(rotate, rect, px, p);
     card.over = response.hovered();
     if ui.input(focus_lost)
         && let Some(f) = card.finger.take()
@@ -537,10 +590,10 @@ fn wheel(ui: &Ui, card: &VitalCard, key: u64, rect: Rect, px: f32, now: f64) {
     // JUCE's wheel counts in notches of about 0.1: a notch of 50 points here.
     gui::wheel(
         key,
-        (pos.x - rect.left()) * px,
-        (pos.y - rect.top()) * px,
-        delta.x / 500.0,
-        delta.y / 500.0,
+        to_ui(card.rotate, rect, px, pos).0,
+        to_ui(card.rotate, rect, px, pos).1,
+        if card.rotate { delta.y } else { delta.x } / 500.0,
+        if card.rotate { -delta.x } else { delta.y } / 500.0,
         (now * 1000.0) as i64,
     );
 }
@@ -571,10 +624,30 @@ fn text(ctx: &egui::Context, card: &mut VitalCard, key: u64, id: Id) {
 }
 
 /// The interface's last frame in `rect`.
-fn paint(ui: &Ui, rect: Rect, card: &VitalCard) {
+pub(crate) fn paint(ui: &Ui, rect: Rect, card: &VitalCard) {
     if let Some(t) = &card.texture {
-        let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
-        ui.painter().image(t.id(), rect, uv, Color32::WHITE);
+        if card.rotate {
+            // The frame turned a quarter clockwise: its top-left is the rect's top-right.
+            let corners = [
+                (rect.left_top(), pos2(0.0, 1.0)),
+                (rect.right_top(), pos2(0.0, 0.0)),
+                (rect.right_bottom(), pos2(1.0, 0.0)),
+                (rect.left_bottom(), pos2(1.0, 1.0)),
+            ];
+            let mut mesh = egui::epaint::Mesh::with_texture(t.id());
+            for (pos, uv) in corners {
+                mesh.vertices.push(egui::epaint::Vertex {
+                    pos,
+                    uv,
+                    color: Color32::WHITE,
+                });
+            }
+            mesh.indices.extend([0, 1, 2, 0, 2, 3]);
+            ui.painter().add(egui::Shape::mesh(mesh));
+        } else {
+            let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+            ui.painter().image(t.id(), rect, uv, Color32::WHITE);
+        }
     }
 }
 
