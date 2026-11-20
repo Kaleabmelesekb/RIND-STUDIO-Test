@@ -13,12 +13,16 @@
 pub mod analysis;
 pub mod display;
 pub mod editor;
-#[cfg(windows)]
+// Honeydew (vendored change): built in (`embed`), the display is the rack card; there is no floating window of its own.
+#[cfg(feature = "embed")]
+#[path = "float_embed.rs"]
 pub mod float;
-#[cfg(target_os = "macos")]
+#[cfg(all(windows, not(feature = "embed")))]
+pub mod float;
+#[cfg(all(target_os = "macos", not(feature = "embed")))]
 #[path = "float_mac.rs"]
 pub mod float;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "embed")))]
 #[path = "float_x11.rs"]
 pub mod float;
 pub mod state;

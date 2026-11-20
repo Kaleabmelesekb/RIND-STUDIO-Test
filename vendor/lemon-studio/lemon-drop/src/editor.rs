@@ -1088,9 +1088,9 @@ mod gui {
                 self.dirty = true;
             }
             // The floating display opens when it should be visible.
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(feature = "embed")))]
             crate::float::ensure(&self.logic.params, &self.logic.shared, &self.win);
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(feature = "embed")))]
             crate::float::ensure(&self.logic.params, &self.logic.shared, self.scale, self.win.win);
             if self.logic.hint != self.last_hint {
                 self.last_hint.clone_from(&self.logic.hint);

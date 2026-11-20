@@ -55,6 +55,9 @@ commit:
 - `plugins/tesla` (Tesla, Lemon's audio editor and recorder, an effect; since 0.4.9): its `src/`.
 - Since 0.4.9, the instruments `plugins/citrus` (Citrus), `plugins/lemon-drum-sampler` (Lemon Drum Sampler)
   and `plugins/lemon-slicer` (Lemon Slicer), their `src/`.
+- Since 2026-11: `plugins/lemon-drop` (Lemon Drop, the audio visualizer; no floating display window built in: its
+  display is the card, `float_embed.rs`), `plugins/lemon-soundfont` (Lemon SoundFont Player) and `plugins/smith`
+  (Smith, the additive synthesizer, built on Citrus).
 - What they use that the hosts did not bring: `crates/os-plugkit`, `os-ui` (with its fonts and icon notice), `os-theme`
   (with its themes), `os-hostlink`, `os-model`, `os-dsp` and `os-paths`, each its `src/`; and from `os-engine`,
   `clock.rs`, `envelope.rs`, `laws.rs` and `sample.rs`, behind the `os-engine` feature `plugins`, which the plugins turn
