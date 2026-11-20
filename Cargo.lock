@@ -1926,6 +1926,7 @@ dependencies = [
  "lemon-balance",
  "lemon-chorus",
  "lemon-delay",
+ "lemon-drop",
  "lemon-drum-sampler",
  "lemon-fast-distortion",
  "lemon-filter",
@@ -1937,6 +1938,7 @@ dependencies = [
  "lemon-sampler",
  "lemon-slicer",
  "lemon-soft-clipper",
+ "lemon-soundfont",
  "lemon-stereo-enhancer",
  "lemon-stereo-shaper",
  "lemon-transient-processor",
@@ -1967,6 +1969,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "smith",
  "tesla",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2309,6 +2312,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-drop"
+version = "0.0.1"
+dependencies = [
+ "nih_plug",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "lemon-drum-sampler"
 version = "0.0.1"
 dependencies = [
@@ -2450,6 +2467,21 @@ dependencies = [
  "lemon-small-fx",
  "nih_plug",
  "os-plugkit",
+]
+
+[[package]]
+name = "lemon-soundfont"
+version = "0.0.1"
+dependencies = [
+ "host-rfd",
+ "nih_plug",
+ "os-engine",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4057,6 +4089,24 @@ name = "smallvec"
 version = "1.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
+
+[[package]]
+name = "smith"
+version = "0.0.1"
+dependencies = [
+ "citrus",
+ "miniz_oxide 0.8.9",
+ "nih_plug",
+ "os-dsp",
+ "os-engine",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "smithay-client-toolkit"
