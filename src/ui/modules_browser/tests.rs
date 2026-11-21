@@ -56,6 +56,7 @@ const SPEC: &[(&str, &[&str])] = &[
             "Leveller",
             "Limiter",
             "Lemon Limiter",
+            "ML Tape",
             "Multiband Compressor",
             "Press",
             "Waveshaper",
@@ -93,6 +94,17 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Stereo Enhancer",
             "Lemon Stereo Shaper",
             "Lemon Vocoder",
+            "ML De-Esser",
+            "ML Frequency Shift",
+            "ML Meter",
+            "ML Multiband Delay",
+            "ML Phase",
+            "ML Pitch Shift",
+            "ML Reference",
+            "ML Riser",
+            "ML Split",
+            "ML Tuner",
+            "ML Waveshaper",
             "Modulator",
             "MultiFX",
             "Phaser",
@@ -266,7 +278,7 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
 fn search_keeps_matching_entries_and_hides_empty_sections() {
     assert_eq!(
         names(&rows("delay")),
-        ["ECHO", "Lemon Delay", "Tape Delay", "Trance Delay"]
+        ["ECHO", "Lemon Delay", "Tape Delay", "Trance Delay", "MISC", "ML Multiband Delay"]
     );
     // Case is ignored, on both sides.
     assert_eq!(names(&rows("DeLaY")), names(&rows("delay")));
@@ -968,6 +980,18 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Stereo Shaper",
             "Lemon Transient Processor",
             "Lemon Vocoder",
+            "ML De-Esser",
+            "ML Frequency Shift",
+            "ML Meter",
+            "ML Multiband Delay",
+            "ML Phase",
+            "ML Pitch Shift",
+            "ML Reference",
+            "ML Riser",
+            "ML Split",
+            "ML Tape",
+            "ML Tuner",
+            "ML Waveshaper",
             "Press",
             "Pulp Filter",
             "Tesla",
