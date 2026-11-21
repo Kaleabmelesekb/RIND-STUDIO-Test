@@ -74,6 +74,7 @@ pub fn write(song: &Song) -> Result<Vec<u8>, FlmError> {
     let markers = crate::song::marker::encode(&song.markers);
     if !markers.is_empty() {
         writer.chunk(*b"RMRK", |writer| writer.raw(&markers))?;
+    }
     // Honeydew's sections (#80): an `HDSe` each, `u32` start and end ticks, `f32` hue and `vstr32` name, which a reader
     // that does not know it skips as an unknown chunk.
     for section in &song.sections {
