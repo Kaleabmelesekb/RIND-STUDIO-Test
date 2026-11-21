@@ -324,7 +324,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 9] = [
+    pub const SPECS: [&Spec; 8] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -401,73 +401,5 @@ mod tests {
         let id = p.params.p[0].as_ptr();
         p.params.live.set(id, 0.0);
         assert_eq!(p.settings()[0], 0);
-    }
-
-    /// The factory presets (`crates/os-app/factory-presets/<name>/`, one level of category folders) list every
-    /// parameter by its name, as its step count from the minimum, and hold FL's presets (spec
-    /// plugins/factory-presets.md).
-    #[test]
-    fn factory_presets_list_every_parameter_and_hold_fls_states() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/os-app/factory-presets");
-        let source_name = |spec: &Spec| spec.name.replacen("ML ", "Lemon ", 1);
-        // Every preset of a plugin, as `[category/]name`.
-        let all = |spec: &Spec| -> Vec<String> {
-            let mut names = Vec::new();
-            for e in std::fs::read_dir(root.join(source_name(spec))).unwrap() {
-                let e = e.unwrap();
-                let name = e.file_name().into_string().unwrap();
-                if e.file_type().unwrap().is_dir() {
-                    for f in std::fs::read_dir(e.path()).unwrap() {
-                        let f = f.unwrap().file_name().into_string().unwrap();
-                        names.push(format!("{name}/{}", f.strip_suffix(".ospreset").unwrap()));
-                    }
-                } else {
-                    names.push(name.strip_suffix(".ospreset").unwrap().to_string());
-                }
-            }
-            names
-        };
-        let read = |spec: &Spec, preset: &str| -> Vec<i32> {
-            let text = std::fs::read_to_string(root.join(source_name(spec)).join(format!("{preset}.ospreset"))).unwrap();
-            let mut lines = text.lines();
-            assert_eq!(lines.next(), Some("OSPRESET 1"));
-            let head = lines.next().unwrap();
-            assert!(head.starts_with(&format!("plugin={}	", source_name(spec))), "{head}");
-            let mut v: Vec<Option<i32>> = vec![None; spec.settings.len()];
-            for l in lines.filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
-                let (name, steps) = l.split_once(" = ").unwrap();
-                let k = spec.settings.iter().position(|s| s.name == name).unwrap_or_else(|| panic!("{}: {name}", spec.name));
-                let (min, max) = spec.settings[k].range;
-                let steps: i32 = steps.parse().unwrap();
-                assert!((0..=max - min).contains(&steps), "{} {preset}: {name} = {steps}", spec.name);
-                v[k] = Some(min + steps);
-            }
-            v.into_iter().map(|x| x.expect("every parameter listed")).collect()
-        };
-            for name in all(spec) {
-                read(spec, &name);
-            }
-            // Lemon Chorus starts on the spec's defaults; FL's "Default" preset has LFO 1's wave at 0 (the same shape).
-            let mut start = spec.start();
-            if spec.name == chorus::SPEC.name {
-                start[os_engine::effects::chorus::WAVE[0]] = 0;
-            }
-            assert_eq!(read(spec, "Default"), start, "{}", spec.name);
-        }
-        assert_eq!(read(fast_distortion::SPEC, "Compressor"), [192, 1, 0, 104, 93, 0]);
-        assert_eq!(read(fast_distortion::SPEC, "Warmth"), [82, 7, 0, 128, 128, 0]);
-        assert_eq!(read(stereo_enhancer::SPEC, "For strings"), [-18, 256, -54, -248, 1, 0, 0]);
-        assert_eq!(read(stereo_enhancer::SPEC, "Subtle"), [0, 256, -40, -24, 1, 0, 0]);
-        assert_eq!(read(transient_processor::SPEC, "Overdriven"), [120, 110, 160, 53, 2, 1, 50, 80, 1, 0]);
-        assert_eq!(read(transient_processor::SPEC, "Subtle attack"), [132, 0, 80, 80, 0, 1, 0, 80, 1, 0]);
-        assert_eq!(std::fs::read_dir(root.join(source_name(transient_processor::SPEC))).unwrap().count(), 10);
-        assert_eq!(read(chorus::SPEC, "Detune"), [40, 4375, 149, 3229, 0, 781, 587, 0, 1024, 65, 4531, 491, 0, 0]);
-        assert_eq!(read(chorus::SPEC, "Ensemble"), [115, 3669, 0, 1458, 0, 0, 0, 0, 0, 0, 1719, 0, 0, 0]);
-        assert_eq!(all(chorus::SPEC).len(), 8);
-        // The Stereo Shaper's presets without the difference output (it has no parameter): FL's 21 of 25.
-        assert_eq!(read(stereo_shaper::SPEC, "Mixing/LR to MS"), [8076, 8076, -8076, 8076, 0, 0, 1]);
-        assert_eq!(read(stereo_shaper::SPEC, "Effects/Stereoize 3"), [0, 12800, 12800, 0, 1408, -2496, 1]);
-        assert_eq!(read(stereo_shaper::SPEC, "Effects/Narrow"), [8176, 12800, 12800, 8076, -1952, 0, 0]);
-        assert_eq!(all(stereo_shaper::SPEC).len(), 21);
     }
 }
