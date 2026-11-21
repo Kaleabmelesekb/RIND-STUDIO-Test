@@ -35,22 +35,29 @@ struct Span {
     offset: f64,
     /// Per envelope, its steps (content tick, value) in tick order.
     envelopes: [Vec<(u32, f32)>; 3],
+    /// Its slot's `STR1` mode is on (SYNC): the sample is stretched for the build's tempo.
+    sync: bool,
+    /// Its slot's Speed ratio, which scales the content offset into source time.
+    speed: f64,
 }
 
 impl Clips {
-    /// Adds one block of every clip slot into the channel's buffer, before its rack runs.
-    pub fn render(&mut self, buffer: &mut OwnedStereoBuffer) {
-        for pad in 0..self.sampler.pads() {
-            self.sampler
-                .process(pad, &mut buffer.left, &mut buffer.right);
+    /// Adds one block of every clip slot into the channel's buffer, before its rack runs. `speed`: the live tempo over
+    /// the build's, which a SYNC clip's sample is stretched for. It resamples by it, so it stays on the beat with the
+    /// transport, its pitch moving with the tempo like tape (Honeydew change, #126); SYNC off plays at its native speed.
+    pub fn render(&mut self, buffer: &mut OwnedStereoBuffer, speed: f64) {
+        for (pad, span) in self.spans.iter().enumerate() {
+            let rate = if span.sync { speed } else { 1.0 };
+            (self.sampler).process_at(pad, &mut buffer.left, &mut buffer.right, rate);
         }
     }
 
     /// The seek rule at `frame`, song beat `beat`, while playing: on a channel whose first lane is audio every clip
     /// voice is cut; then each clip with start < frame < end relaunches from content beat
-    /// c = ((beat − start) mod L) + offset (less L once if ≥ L), source time c·60/BPM, after its envelopes take the
-    /// value of their last step strictly before c (none: the slot keeps its value). A clip starting at `frame` starts
-    /// through its own action.
+    /// c = ((beat − start) mod L) + offset (less L once if ≥ L), source time c·r·60/BPM with r the slot's Speed ratio
+    /// (Honeydew change, PR #173: it used to leave r out, so the clip played other audio than its waveform shows),
+    /// after its envelopes take the value of their last step strictly before c (none: the slot keeps its value). A
+    /// clip starting at `frame` starts through its own action.
     pub fn relaunch(&mut self, frame: u64, beat: f64, tempo_bpm: f32) {
         if self.cut {
             self.sampler.reset();
@@ -69,8 +76,8 @@ impl Clips {
                     self.sampler.set_param(pad, index, value);
                 }
             }
-            self.sampler
-                .hit_at(pad, 1.0, 0.5, 1.0, c * 60.0 / f64::from(tempo_bpm));
+            let source = c * span.speed * 60.0 / f64::from(tempo_bpm);
+            self.sampler.hit_at(pad, 1.0, 0.5, 1.0, source);
         }
     }
 
@@ -189,6 +196,8 @@ pub(super) fn build(
             loop_beats: clip.loop_len_beats,
             offset: clip.offset_beats,
             envelopes,
+            sync: slot.file.stretch_mode != 0,
+            speed: speed_ratio(slot.params[SPEED]),
         });
     }
     if pads.is_empty() {
@@ -245,7 +254,8 @@ pub fn fit_audio_clip(clip: &mut Clip, samples: &SampleCache, bpm: f64, b: u32) 
 }
 
 /// The actions of `channel`'s audio clips, pad by pad as [`build`] numbers them:
-/// - at the start, a hit from source time offset·60/BPM (vel 1, centred; Speed does not scale it);
+/// - at the start, a hit from source time offset·r·60/BPM, r the slot's Speed ratio (vel 1, centred; Honeydew change,
+///   PR #173: it used to leave r out, see [`Clips::relaunch`]);
 /// - at start − offset + n·L (n ≥ 1) inside [start, end), a fade then a hit from source time 0;
 /// - at the end (start + visible length), a fade;
 /// - each envelope step, repeated with the content loop inside the visible length.
@@ -257,7 +267,7 @@ pub(super) fn actions(
     actions: &mut Vec<ScheduledAction>,
 ) -> Result<(), EngineError> {
     let ppq = f64::from(PPQ);
-    for (pad, (clip, _)) in clips(&song.channels[channel]).enumerate() {
+    for (pad, (clip, slot)) in clips(&song.channels[channel]).enumerate() {
         let mut push = |beat: f64, action| -> Result<(), EngineError> {
             let frame = beat_frame(beat, sample_rate, tempo_bpm)?;
             actions.push(ScheduledAction {
@@ -277,7 +287,7 @@ pub(super) fn actions(
             start,
             Action::ClipHit {
                 pad,
-                offset: offset * 60.0 / f64::from(tempo_bpm),
+                offset: offset * speed_ratio(slot.params[SPEED]) * 60.0 / f64::from(tempo_bpm),
             },
         )?;
         // At most one repetition a loop pass; `plays` bounded the passes.

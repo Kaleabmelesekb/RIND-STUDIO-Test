@@ -21,10 +21,10 @@ use std::ffi::c_void;
 
 use crate::{ExternalEffect, ProcessContext};
 
-pub const HALL: u16 = 1008;
-pub const ROOM: u16 = 1009;
-pub const PLATE: u16 = 1010;
-pub const EARLY: u16 = 1011;
+pub const HALL: u16 = 1100;
+pub const ROOM: u16 = 1101;
+pub const PLATE: u16 = 1102;
+pub const EARLY: u16 = 1103;
 
 /// How a parameter's normalised value maps to its plugin value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

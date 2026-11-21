@@ -19,8 +19,15 @@
 //!   range), as is its frequency range of the x part.
 //! - The scope's X labels stay relative to the trigger in zoom mode too, where the trigger sits at the selection's
 //!   width × the trigger fraction. Its overlay cycles on a double tap like the generic one.
-//! - The marker's value is the drawn curve's at its x (the scope's the middle of a column's extent); without a curve
-//!   point there (no pitch, no feed) neither dot nor readout shows.
+//! - Contributor feature (PR #87): `Tilt` on the SETTINGS page is the Spectrum's tilt around 1 kHz, in
+//!   dB/octave: White (0), Pink (+3), Default (+4.5, the default), Brown (+6), or `Custom`, which
+//!   reads the `dB/oct` knob beside it continuously from −12 to +12. The Spectrogram's columns and the marker read with
+//!   the same tilt. It takes the place of the two SETTINGS spacers: DC Block and Tilt (and the knob)
+//!   share the first row, Channel, Reactivity and Input Gain the second.
+//! - The marker's value is the drawn curve's at its x (the scope's a column's last sample); without a curve point there
+//!   (no pitch, no feed) neither dot nor readout shows.
+//! - The scope reads the engine's min, max and last sample of each quarter millisecond: a column takes the buckets
+//!   since the previous point's (#108).
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -85,7 +92,18 @@ pub fn panel() -> Option<Panel> {
         ])
         .show(Show::Tab(4)),
         vstack([
-            spacer(13),
+            // The Spectrum's tilt. `Custom` shows its own value knob beside it; the other presets hide it.
+            // Both rows share the width evenly and are equally tall, so the knobs line up.
+            hstack([
+                spinner(16, "DC Block").items(&["On", "Off"]).default(1.0),
+                spinner(TILT, "Tilt").items(&TILT_TEXT).default(2.0),
+                knob(TILT_STEP, "dB/oct")
+                    .default(TILT_STEP_DEFAULT)
+                    .value_fn(tilt_text)
+                    .show(Show::Setting(TILT, 4)),
+            ])
+            .h(Size::U(3.37))
+            .show(Show::Tab(5)),
             hstack([
                 spinner(14, "Channel")
                     .items(&["Left", "Right", "L + R"])
@@ -93,12 +111,10 @@ pub fn panel() -> Option<Panel> {
                 spinner(15, "Reactivity")
                     .items(&["Slow", "Medium", "Fast"])
                     .default(1.0),
-                spinner(16, "DC Block").items(&["On", "Off"]).default(1.0),
                 knob(17, "Input Gain").default(0.5).value_fn(gain),
             ])
-            .h(Size::U(3.5))
+            .h(Size::U(3.37))
             .show(Show::Tab(5)),
-            spacer(18),
         ])
         .show(Show::Tab(5)),
         tabs(
@@ -846,6 +862,40 @@ fn setting(state: &PanelState, n: u32, default: f32) -> f32 {
     state.settings.get(&n).copied().unwrap_or(default)
 }
 
+/// The `Tilt` setting: which tilt preset the Spectrum reads with.
+const TILT: u32 = 18;
+/// The `dB/oct` setting, the `Tilt`'s value while it is `Custom`.
+const TILT_STEP: u32 = 20;
+/// The `Tilt` presets, dB/octave around 1 kHz: white noise reads flat at 0, pink at +3, the default display at +4.5,
+/// brown at +6.
+const TILTS: [f32; 4] = [0.0, 3.0, 4.5, 6.0];
+/// `Tilt`'s items, in its order.
+const TILT_TEXT: [&str; 5] = ["White", "Pink", "Default", "Brown", "Custom"];
+/// `Custom` spans −12…+12 dB/octave; the normalized knob position for the default +4.5.
+const TILT_STEP_DEFAULT: f32 = (4.5 + 12.0) / 24.0;
+
+/// The Spectrum's tilt around 1 kHz in dB/octave: its `Tilt` preset, [`TILTS`]`[2]` (+4.5, the default
+/// display) when unset, or with `Custom` the continuous `dB/oct` value beside it.
+fn custom_tilt(v: f32) -> f32 {
+    let normalized = if v.is_finite() {
+        v.clamp(0.0, 1.0)
+    } else {
+        TILT_STEP_DEFAULT
+    };
+    -12.0 + 24.0 * normalized
+}
+
+fn tilt_text(v: f32) -> String {
+    format!("{:+.1} dB/oct", custom_tilt(v))
+}
+
+fn tilt(state: &PanelState) -> f32 {
+    match setting_item(setting(state, TILT, 2.0)) {
+        4 => custom_tilt(setting(state, TILT_STEP, TILT_STEP_DEFAULT)),
+        i => TILTS[i.min(TILTS.len() - 1)],
+    }
+}
+
 /// The audio's sample rate, 48 kHz without audio.
 fn rate(ui: &Ui) -> f32 {
     match crate::panels::sample_rate(ui) {
@@ -941,8 +991,8 @@ fn spectrum_full(state: &PanelState) -> (Axis, Axis) {
 }
 
 /// The spectrum's level at `f` Hz: its bins (k·rate/2048 Hz) read at a fractional bin, Catmull-Rom with the Log scale
-/// and linearly with Lin, plus the +4.5 dB/octave tilt around 1 kHz.
-fn level_at(bins: &[f32], f: f32, rate: f32, smooth: bool) -> f32 {
+/// and linearly with Lin, plus `tilt` dB/octave around 1 kHz ([`tilt`]).
+fn level_at(bins: &[f32], f: f32, rate: f32, smooth: bool, tilt: f32) -> f32 {
     let x = f * engine::FFT as f32 / rate;
     let i = (x.floor() as isize).clamp(0, bins.len() as isize - 2);
     let t = x - i as f32;
@@ -956,7 +1006,7 @@ fn level_at(bins: &[f32], f: f32, rate: f32, smooth: bool) -> f32 {
     } else {
         b(i) + (b(i + 1) - b(i)) * t
     };
-    v + 4.5 * (f / 1000.0).log2()
+    v + tilt * (f / 1000.0).log2()
 }
 
 /// The Spectrum's curve in P: one point every 2 px, the highest level over the column (narrow peaks survive), held
@@ -971,6 +1021,7 @@ fn spectrum_points(
     rate: f32,
     smooth: bool,
     clamp_top: bool,
+    tilt: f32,
 ) -> Vec<Pos2> {
     columns(p, ppp, 2.0)
         .into_iter()
@@ -979,7 +1030,7 @@ fn spectrum_points(
                 x.value((from - p.left()) / p.width()),
                 x.value((to - p.left()) / p.width()),
             );
-            let mut level = level_at(bins, f1, rate, smooth);
+            let mut level = level_at(bins, f1, rate, smooth, tilt);
             let (k0, k1) = (
                 (f0 * engine::FFT as f32 / rate).ceil() as usize,
                 (f1 * engine::FFT as f32 / rate) as usize,
@@ -987,7 +1038,7 @@ fn spectrum_points(
             for (k, &bin) in bins.iter().enumerate().take(k1 + 1).skip(k0) {
                 let f = k as f32 * rate / engine::FFT as f32;
                 if f >= f0.max(1.0) {
-                    level = level.max(bin + 4.5 * (f / 1000.0).log2());
+                    level = level.max(bin + tilt * (f / 1000.0).log2());
                 }
             }
             let q = y.pos(level).max(0.0);
@@ -1034,7 +1085,7 @@ fn spectrum(
     let mut curve = Vec::new();
     if let Some(view) = graphs.data(View::Spectrum, ui, module) {
         let (ppp, rate) = (cx.m.ppp(), rate(ui));
-        curve = spectrum_points(p, ppp, &x, &y, &view.spectrum, rate, log, true);
+        curve = spectrum_points(p, ppp, &x, &y, &view.spectrum, rate, log, true, tilt(state));
         let look = (ink.gamma_multiply(0.2), ink, 1.0 / ppp);
         fill_and_line(ui.painter(), &curve, p.bottom(), look, |_, _| true);
     }
@@ -1126,7 +1177,17 @@ fn spectrogram(
                 p.bottom() - p.height() * i as f32 / 12.0,
             ),
         );
-        let points = spectrum_points(row, ppp / 4.0, &x, &level, spectrum, rate, log, false);
+        let points = spectrum_points(
+            row,
+            ppp / 4.0,
+            &x,
+            &level,
+            spectrum,
+            rate,
+            log,
+            false,
+            tilt(state),
+        );
         let look = (control, ink.gamma_multiply(1.0 - 0.66 * d), px);
         let below = |a: Pos2, b: Pos2| a.y >= p.top() && b.y >= p.top();
         fill_and_line(ui.painter(), &points, row.bottom(), look, below);
@@ -1159,7 +1220,7 @@ fn trigger_level(state: &PanelState) -> f32 {
 /// latest trigger (a rising edge that arms below 0.99·level and fires at ≥ level) with `post` after it, or once that is
 /// `free` buckets late (0.2 s) the latest `pre` + `post` (free-running).
 fn scope_window(
-    scope: &[(f32, f32)],
+    scope: &[(f32, f32, f32)],
     level: f32,
     pre: usize,
     post: usize,
@@ -1169,7 +1230,7 @@ fn scope_window(
     let (pre, post) = (pre.min(n), post.min(n - pre.min(n)));
     let mut armed = false;
     let mut trigger = None;
-    for (k, &(low, high)) in scope.iter().enumerate().take(n - post) {
+    for (k, &(low, high, _)) in scope.iter().enumerate().take(n - post) {
         if armed && high >= level {
             trigger = Some(k);
             armed = false;
@@ -1185,8 +1246,9 @@ fn scope_window(
 }
 
 /// #5, the Oscilloscope: its selection of 1 s and ±1.5 (0.1 s and ±1.0 at first, then 0.5 s), the trigger at the
-/// trigger fraction of the width (25 %: −25…+75 ms). One point every 2 px: a column's min and max of the samples since
-/// the previous point, a G rect over their extent where it is taller than a pixel, else a 1 px G line.
+/// trigger fraction of the width (25 %: −25…+75 ms). One point every 2 px, at the column's last sample: where the min
+/// and max of the samples since the previous point reach past the two points (by more than a pixel), a G rect from the
+/// previous x to this one over all of them, else a 1 px G line between the points (#108).
 fn oscilloscope(
     ui: &mut Ui,
     cx: &UiCtx,
@@ -1227,11 +1289,18 @@ fn oscilloscope(
         let window = &view.scope[range];
         let (px, painter) = (1.0 / cx.m.ppp(), ui.painter());
         let at = |v: f32| p.bottom() - y.pos(v).clamp(0.0, 1.0) * p.height();
-        let mut last: Option<Pos2> = None;
+        // The last point and the last bucket it read.
+        let mut last: Option<(Pos2, usize)> = None;
+        let end = window.len().saturating_sub(1);
         for (from, to) in columns(p, cx.m.ppp(), 2.0) {
-            let span = |x: f32| ((x - p.left()) / p.width() * window.len() as f32) as usize;
-            let end = window.len().saturating_sub(1);
-            let buckets = &window[span(from.max(p.left())).min(end)..=span(to).min(end)];
+            let span =
+                |x: f32| (((x - p.left()) / p.width() * window.len() as f32) as usize).min(end);
+            // The buckets since the previous point.
+            let first = last.map_or(span(from.max(p.left())), |(_, b)| b + 1);
+            if window.is_empty() || first > span(to) {
+                continue;
+            }
+            let buckets = &window[first..=span(to)];
             let low = buckets.iter().map(|b| b.0).fold(f32::INFINITY, f32::min);
             let high = buckets
                 .iter()
@@ -1240,20 +1309,21 @@ fn oscilloscope(
             if !low.is_finite() || !high.is_finite() {
                 continue;
             }
-            let (top, bottom) = (at(high), at(low));
-            if bottom - top > px {
-                let x0 = last.map_or(to, |l| l.x);
-                painter.rect_filled(
-                    Rect::from_x_y_ranges(x0..=to.max(x0 + px), top..=bottom),
-                    0.0,
-                    ink,
-                );
-            } else if let Some(l) = last {
-                painter.line_segment([l, pos2(to, top)], Stroke::new(px, ink));
+            // This point: the column's last sample.
+            let point = pos2(to, at(buckets[buckets.len() - 1].2));
+            if let Some((l, _)) = last {
+                let (top, bottom) = (l.y.min(point.y), l.y.max(point.y));
+                if at(high) < top - px || at(low) > bottom + px {
+                    // The samples reach past the line's ends: a rect over them and the ends.
+                    let ys = at(high).min(top)..=at(low).max(bottom);
+                    let rect = Rect::from_x_y_ranges(l.x..=to.max(l.x + px), ys);
+                    painter.rect_filled(rect, 0.0, ink);
+                } else {
+                    painter.line_segment([l, point], Stroke::new(px, ink));
+                }
             }
-            let point = pos2(to, (top + bottom) / 2.0);
             curve.push(point);
-            last = Some(point);
+            last = Some((point, first + buckets.len() - 1));
         }
     }
     let marker = Some((|ms, v| format!("{ms:.0} ms : {v:.2}")) as fn(f32, f32) -> String);
@@ -1664,6 +1734,9 @@ pub const REFERENCE: Reference = Reference {
         (15, 1.0),
         (16, 1.0),
         (17, 0.5),
+        // The Spectrum's tilt: the default, and the continuous `dB/oct` value used by `Custom`.
+        (TILT, 2.0),
+        (TILT_STEP, TILT_STEP_DEFAULT),
     ],
     cases: &[
         Case {
@@ -1722,17 +1795,36 @@ pub const REFERENCE: Reference = Reference {
             ..Case::DEFAULT
         },
         Case {
+            name: "SETTINGS · CUSTOM",
+            tab: 5,
+            settings: &[(TILT, 4.0)],
+            rows: &[
+                row(16, Widget::Spinner, "DC Block", [0.0, 0.0, 4.66, 3.37]).items("On · Off"),
+                row(TILT, Widget::Spinner, "Tilt", [4.66, 0.0, 4.67, 3.37])
+                    .items("White · Pink · Default · Brown · Custom"),
+                row(TILT_STEP, Widget::Knob, "dB/oct", [9.33, 0.0, 4.67, 3.37])
+                    .value("+4.5 dB/oct"),
+                row(14, Widget::Spinner, "Channel", [0.0, 3.37, 4.66, 3.37])
+                    .items("Left · Right · L + R"),
+                row(15, Widget::Spinner, "Reactivity", [4.66, 3.37, 4.67, 3.37])
+                    .items("Slow · Medium · Fast"),
+                row(17, Widget::Knob, "Input Gain", [9.33, 3.37, 4.67, 3.37]).value("×1.00"),
+                TABS,
+            ],
+            ..Case::DEFAULT
+        },
+        Case {
             name: "SETTINGS",
             tab: 5,
             rows: &[
-                row(13, Widget::Spacer, "", [0.0, 0.0, 14.0, 1.62]),
-                row(14, Widget::Spinner, "Channel", [0.0, 1.62, 3.5, 3.5])
+                row(16, Widget::Spinner, "DC Block", [0.0, 0.0, 7.0, 3.37]).items("On · Off"),
+                row(TILT, Widget::Spinner, "Tilt", [7.0, 0.0, 7.0, 3.37])
+                    .items("White · Pink · Default · Brown · Custom"),
+                row(14, Widget::Spinner, "Channel", [0.0, 3.37, 4.66, 3.37])
                     .items("Left · Right · L + R"),
-                row(15, Widget::Spinner, "Reactivity", [3.5, 1.62, 3.5, 3.5])
+                row(15, Widget::Spinner, "Reactivity", [4.66, 3.37, 4.67, 3.37])
                     .items("Slow · Medium · Fast"),
-                row(16, Widget::Spinner, "DC Block", [7.0, 1.62, 3.5, 3.5]).items("On · Off"),
-                row(17, Widget::Knob, "Input Gain", [10.5, 1.62, 3.5, 3.5]).value("×1.00"),
-                row(18, Widget::Spacer, "", [0.0, 5.12, 14.0, 1.62]),
+                row(17, Widget::Knob, "Input Gain", [9.33, 3.37, 4.67, 3.37]).value("×1.00"),
                 TABS,
             ],
             ..Case::DEFAULT
@@ -1775,6 +1867,34 @@ mod live {
 
     fn content() -> Rect {
         Rect::from_min_size(pos2(0.0, 0.0), vec2(14.0 * U, 7.99 * U))
+    }
+
+    #[test]
+    fn the_tilt_presets_are_db_per_octave_and_custom_reads_the_step_beside_it() {
+        let state = |settings: &[(u32, f32)]| PanelState {
+            settings: settings.iter().copied().collect(),
+            ..PanelState::default()
+        };
+        // Unset, the card reads with the default +4.5 dB/octave.
+        assert_eq!(tilt(&state(&[])), 4.5);
+        for (item, want) in [(0.0, 0.0), (1.0, 3.0), (2.0, 4.5), (3.0, 6.0)] {
+            assert_eq!(tilt(&state(&[(TILT, item)])), want, "{item}");
+        }
+        // Custom is continuous over the full range, with the default +4.5 as its starting value.
+        assert_eq!(tilt(&state(&[(TILT, 4.0)])), 4.5);
+        for (step, want) in [
+            (0.0, -12.0),
+            (0.25, -6.0),
+            (0.5, 0.0),
+            (0.625, 3.0),
+            (1.0, 12.0),
+        ] {
+            let s = state(&[(TILT, 4.0), (TILT_STEP, step)]);
+            assert_eq!(tilt(&s), want, "{step}");
+        }
+        assert_eq!(tilt_text(0.0), "-12.0 dB/oct");
+        assert_eq!(tilt_text(0.625), "+3.0 dB/oct");
+        assert_eq!(tilt_text(1.0), "+12.0 dB/oct");
     }
 
     /// What view `leaf` on page `tab` draws with `slab` posted, at `ppp`, with `settings`.
@@ -1842,9 +1962,9 @@ mod live {
     fn the_scope_triggers_on_a_rising_edge_or_runs_free() {
         let level = 0.1;
         // Silence, then a step up at bucket 850 (150 ms ago): the window is 825…925.
-        let mut scope = vec![(0.0, 0.0); 1000];
+        let mut scope = vec![(0.0, 0.0, 0.0); 1000];
         for b in &mut scope[850..] {
-            *b = (0.5, 0.5);
+            *b = (0.5, 0.5, 0.5);
         }
         assert_eq!(scope_window(&scope, level, 25, 75, 200), 825..925);
         // The same edge 400 ms ago is more than 0.2 s without a trigger: free-running.
@@ -1852,7 +1972,7 @@ mod live {
         assert_eq!(scope_window(&scope, level, 25, 75, 200), 900..1000);
         // No trigger: the latest 100.
         assert_eq!(
-            scope_window(&[(0.0, 0.0); 1000], level, 25, 75, 200),
+            scope_window(&[(0.0, 0.0, 0.0); 1000], level, 25, 75, 200),
             900..1000
         );
         // That edge (now 400 buckets back) in a 0.5 s view with the trigger at half: 250 before it and 250 after.
@@ -1922,6 +2042,25 @@ mod live {
                     .filter(|s| matches!(s, Shape::Rect(r) if r.fill == Color32::RED))
                     .count()
                     > 20
+            );
+        }
+    }
+
+    /// #108: a slow sine is a 1 px line, not a ribbon of 2 px rects: a column fills only where its samples reach past
+    /// the line's two ends.
+    #[test]
+    fn the_scope_draws_a_line_where_the_samples_stay_between_its_ends() {
+        let data = slab(1.0, tone(20.0, 0.5));
+        for ppp in [1.0, 2.0] {
+            let shapes = drawn(5, 1, &[], &data, ppp);
+            let count = |f: fn(&Shape) -> bool| shapes.iter().filter(|s| f(s)).count();
+            let rects = count(|s| matches!(s, Shape::Rect(r) if r.fill == Color32::RED));
+            let lines = count(
+                |s| matches!(s, Shape::LineSegment { stroke, .. } if stroke.color == Color32::RED),
+            );
+            assert!(
+                lines > 100 && rects < 5,
+                "ppp {ppp}: {lines} lines, {rects} rects"
             );
         }
     }

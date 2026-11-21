@@ -506,6 +506,30 @@ pub fn take_saved() -> Vec<(std::path::PathBuf, Vec<u8>)> {
     SAVED.with_borrow_mut(std::mem::take)
 }
 
+/// Issue #113: a knob's "Create automation clip" picked in this thread's editors since the last call, which Honeydew
+/// answers although no editor joins its strip (`os_hostlink`'s `Automate`): the editor and the parameter's index in the
+/// plugin's list.
+pub fn take_automate() -> Vec<(Parent, usize)> {
+    let asked = os_hostlink::take_automate().into_iter();
+    asked.filter_map(|(id, i)| Some((Parent::try_from(id).ok()?, usize::try_from(i).ok()?))).collect()
+}
+
+/// Issue #117: the files this thread's editors sent to the playlist since the last call (Tesla's `Send to arranger as
+/// audio clip`), which Honeydew answers although no editor joins its strip (`os_hostlink`'s `Audio`), oldest first.
+pub fn take_sent() -> Vec<std::path::PathBuf> {
+    os_hostlink::take_sent().into_iter().map(Into::into).collect()
+}
+
+/// Issue #167: the notes this thread's editors sent since the last call (Tesla's `Convert to score and dump to piano
+/// roll`), which Honeydew answers although no editor joins its strip (`os_hostlink`'s `Notes`): one list a send, oldest
+/// first, each note's start and end in beats from where the notes go.
+pub fn take_scored() -> Vec<Vec<NoteOut>> {
+    os_hostlink::take_scored()
+}
+
+/// A note of [`take_scored`].
+pub use os_hostlink::NoteOut;
+
 /// Whether editor `id` is open.
 pub fn is_open(id: Parent) -> bool {
     get(id).is_some()

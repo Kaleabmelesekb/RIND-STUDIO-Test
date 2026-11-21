@@ -8,6 +8,10 @@
 //!
 //! - The tab sits with its bottom 2 px below the lane's top, or below the editor's bottom while the lane is closed. It
 //!   is clipped to the editor, so it never covers the transport bar, and its visible part takes the touches.
+//! - PR #87: a sideways drag moves the tab along the editor, which is how it is kept off what it covers (the step sequencer's
+//!   row headers, the piano roll's keys); the offset is in U from where the editor opens it and the host keeps it
+//!   (`Settings::graph_tab_shift`, so it is remembered). The tab never leaves the editor's band, nor goes under the
+//!   floating buttons on the screen's right edge (#114), and a drag down or up still sizes the lane.
 //! - The tab's touches win wherever it overlaps what lies under it (a row header cut off at the rows' bottom, whose
 //!   visible part may be a sliver). It holds because the editor interacts the tab last and the tab senses drags: egui
 //!   then gives it every press in its rect, even over a click-only widget thinner than its thin-target rule.
@@ -17,8 +21,8 @@
 //!   `clips::sample`, so the piano roll's, the drum grid's and the step sequencer's hit colours move with it.
 //! - The drum editor's spacer (the rest of the header column, the mixer's c·12 U, while c > 0) shows the current
 //!   row's slot's sample ([`spacer_wave`]) by the audio clip editor's waveform law: the whole source sample fitted to
-//!   the spacer's width (no Speed, stretch or Sample Start), REV mirrored, in the plain opaque channel colour. A slot
-//!   whose sample is missing leaves it empty.
+//!   the spacer's width (no Speed), REV mirrored, in the plain opaque channel colour. A slot whose sample is missing
+//!   leaves it empty. Honeydew change (#175, 0.5.5): it shows the slot's Stretch and Sample Start too.
 //! - The `Show graph editor` / `Close graph editor` shortcuts and the gamepad steps are not wired. `showGraphEditor`
 //!   is bound only to the gamepad's LB+RB+↓, the app reads no gamepad (`keymap.rs` skips those entries), and neither
 //!   built-in keyboard map binds it, so nothing could fire it. The focus system (`ui/focus.rs`) is there: wiring them
@@ -29,22 +33,25 @@
 use std::f64::consts::TAU;
 
 use eframe::egui::{
-    Color32, CornerRadius, Id, Mesh, Painter, Rangef, Rect, Sense, Stroke, StrokeKind, Ui, pos2,
-    vec2,
+    Color32, CornerRadius, Id, Mesh, Painter, Pos2, Rangef, Rect, Sense, Stroke, StrokeKind, Ui,
+    pos2, vec2,
 };
 
 use crate::icons::{IconId, draw_icon};
 use crate::metrics::Metrics;
 use crate::sample_cache::Waveform;
 use crate::song::Event;
+use crate::song::SamplerSlot;
 use crate::theme::{Rgba, ThemeColors};
 use crate::ui::anim;
-use crate::ui::audio_editor::{Wave, add_column, columns, pixel_columns, wave_rows};
+use crate::ui::audio_editor::{Wave, add_column, columns, pixel_columns, stretch_of, wave_rows};
 use crate::ui::automation::value::{Land, ValueSnap};
 use crate::ui::clips::{mix, sample, tint_stops};
+use crate::ui::main_screen::{CLEAR_U, CORNER_W};
 use crate::ui::piano_roll::notes::note;
 use crate::ui::widgets::{Bar, ItemList, item_list_index};
 use crate::ui::{UiCtx, gesture, primary_down_live};
+use honeydew_audio::drums::SAMPLE_START;
 
 /// The height fraction f: its cap and the first open's.
 const F_MAX: f32 = 0.7;
@@ -227,6 +234,20 @@ pub fn v_centred(content: Rect, y: f32, m: &Metrics) -> f32 {
     0.5 + d.signum() * 0.5 * (d.abs() - dz) / (half - dz)
 }
 
+/// Honeydew change (GitHub #127): the x a drum graph lane's drag paints at, the pointer at `p`. It keeps to the
+/// touch-down's column (`lock`, the touch-down) until the finger is past the 0.5 U calm distance sideways and more
+/// across than up or down from it; from then on (`lock` cleared) it follows the finger, painting step by step as before.
+pub fn drum_paint_x(lock: &mut Option<Pos2>, p: Pos2, m: &Metrics) -> f32 {
+    if let Some(from) = *lock {
+        let d = p - from;
+        if d.x.abs() <= m.u(gesture::CALM_U) || d.x.abs() <= d.y.abs() {
+            return from.x;
+        }
+        *lock = None;
+    }
+    p.x
+}
+
 /// The note tint's stops for `content` (see the module doc), the bottom one pulled `pull` of the way toward the
 /// middle one.
 pub fn tint(colors: &ThemeColors, content: Rgba, pull: f32) -> [Rgba; 3] {
@@ -291,6 +312,17 @@ pub struct GraphLane {
     moving: Option<f32>,
     /// When the tab was pressed (egui time), while it is.
     pressed: Option<f64>,
+    /// The tab's drag, while one runs.
+    drag: Option<TabDrag>,
+}
+
+/// The tab's drag: the shift it started from, and whether it has left the calm zone, sideways (a move along the
+/// editor) or not (a resize).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TabDrag {
+    shift: f32,
+    moved: bool,
+    sideways: bool,
 }
 
 impl Default for GraphLane {
@@ -301,6 +333,7 @@ impl Default for GraphLane {
             f: F_FIRST,
             moving: None,
             pressed: None,
+            drag: None,
         }
     }
 }
@@ -332,17 +365,19 @@ impl GraphLane {
     }
 
     /// The pull-up tab of the lane [`Self::split_below`] places in the `editor` below its top margin (H, and the
-    /// drag's measure), on the part below `y`; centred at `x`, its icon in the channel colour `ink`. A tap (released
-    /// within 0.3 s) opens the lane to f or closes it, animated; a drag sets f = (editor bottom − finger y)/H at once,
-    /// clamped to 0…0.7, closing the lane below min(2.5 U/H, 0.5) and otherwise remembering it. Draw it after the
-    /// grid and the lane.
+    /// drag's measure), on the part below `y`; centred at `x`, where the editor opens it, plus the sideways offset
+    /// `shift` (in U, kept inside the editor and out of the floating buttons' column, and remembered by the host), its
+    /// icon in the channel colour `ink`. A tap (released within 0.3 s) opens the lane to f or closes it, animated; a
+    /// drag that leaves the calm zone sideways moves the tab along the editor and leaves the split (and the lane) as it
+    /// was; a drag that leaves it down or up sets f = (editor bottom − finger y)/H at once, clamped to 0…0.7, closing
+    /// the lane below min(2.5 U/H, 0.5) and otherwise remembering it. Draw it after the grid and the lane.
     pub fn tab_below(
         &mut self,
         ui: &mut Ui,
         cx: &UiCtx,
         id: Id,
         (editor, y): (Rect, f32),
-        x: f32,
+        (x, shift): (f32, &mut f32),
         ink: Color32,
     ) {
         let m = cx.m;
@@ -351,6 +386,20 @@ impl GraphLane {
         let (_, strip) = self.split_below(editor, y, m);
         let bottom = strip.map_or(area.bottom(), |s| s.top()) + TAB_DROP_PX * px;
         let half = m.u(TAB_W) / 2.0;
+        // How far a drag may take the tab: its half plus a hairline in from the editor's edges, and clear of the
+        // floating buttons' column on the screen's right edge (the rack tab, the `↖`, #114), in U from where the editor
+        // opens it. An editor narrower than the tab keeps the tab at its left edge.
+        let column = ui.ctx().content_rect().right() - m.u(CORNER_W + CLEAR_U);
+        let (lo, hi) = (
+            (editor.left() + half + px - x) / m.u(1.0),
+            (editor.right().min(column) - half - px - x) / m.u(1.0),
+        );
+        // `max` then `min` rather than `clamp`: a degenerate editor (no room) must not panic, and a NaN in it must not
+        // take the tab with it. Only a drag writes the place: an editor that shows it clamped (another editor's home,
+        // a narrow window, a rotation) keeps it.
+        let hi = hi.max(lo);
+        let shown = shift.max(lo).min(hi);
+        let x = x + m.u(shown);
         let tab = Rect::from_x_y_ranges(
             m.round_px(x - half)..=m.round_px(x + half),
             m.round_px(bottom - m.u(TAB_H))..=bottom,
@@ -369,16 +418,41 @@ impl GraphLane {
             self.moving = Some(self.shown());
             self.open = !self.open;
         }
-        if response.dragged()
-            && live
-            && let Some(p) = response.interact_pointer_pos()
-        {
-            let f = ((editor.bottom() - p.y) / editor.height()).clamp(0.0, F_MAX);
-            self.moving = None;
-            self.open = f >= (m.u(CLOSE_U) / editor.height()).min(F_CLOSE_MAX);
-            if self.open {
-                self.f = f;
+        if response.drag_started() {
+            self.drag = Some(TabDrag {
+                shift: shown,
+                moved: false,
+                sideways: false,
+            });
+        }
+        if response.dragged() && live {
+            let total = response.total_drag_delta().unwrap_or_default();
+            let calm = m.u(gesture::CALM_U);
+            let drag = self.drag.get_or_insert(TabDrag {
+                shift: shown,
+                moved: false,
+                sideways: false,
+            });
+            if !drag.moved && total.length() > calm {
+                drag.moved = true;
+                drag.sideways = total.x.abs() > total.y.abs();
             }
+            if drag.sideways {
+                // Along the editor: the split and the lane stay where they were.
+                *shift = (drag.shift + total.x / m.u(1.0)).max(lo).min(hi);
+            } else if drag.moved
+                && let Some(p) = response.interact_pointer_pos()
+            {
+                let f = ((editor.bottom() - p.y) / editor.height()).clamp(0.0, F_MAX);
+                self.moving = None;
+                self.open = f >= (m.u(CLOSE_U) / editor.height()).min(F_CLOSE_MAX);
+                if self.open {
+                    self.f = f;
+                }
+            }
+        }
+        if response.drag_stopped() {
+            self.drag = None;
         }
         if !down {
             self.pressed = None;
@@ -502,37 +576,67 @@ pub fn content(strip: Rect, m: &Metrics) -> Rect {
     strip.with_min_y((strip.top() + GAP_PX / m.ppp()).min(strip.bottom()))
 }
 
-/// The drum editor's spacer `spacer` (the expanded mixer's room in the header column) showing a sample's waveform in
-/// `ink`, by the audio clip editor's waveform law (a 1 px column a device pixel from min/max peaks, mono centred at
-/// scale h/2, stereo halves at h/4 and 3h/4 at scale h/4, a column under 1 px a 1 px line, a `reversed` sample
-/// mirrored): the whole sample fitted to the spacer's width.
+/// The drum editor's spacer `spacer` (the expanded mixer's room in the header column) showing `slot`'s sample `wave`
+/// in `ink`, by the audio clip editor's waveform law (a 1 px column a device pixel from min/max peaks, mono centred at
+/// scale h/2, stereo halves at h/4 and 3h/4 at scale h/4, a column under 1 px a 1 px line, a REV sample mirrored): the
+/// whole sample fitted to the spacer's width.
+///
+/// Honeydew change (#175, 0.5.5): the sample as it plays, stretched by the slot's Stretch, on a time line as long as
+/// the longer of the sample and its stretched length, so a stretch shows at either end: the stretched end, short of
+/// the spacer's right edge (a shorter sample), or the sample's own end, short of it (a longer one), is a 1 px `text`
+/// line. The part a positive Sample Start skips is veiled in `background` up to a 1 px `text` line at the start.
 pub fn spacer_wave(
     painter: &Painter,
     spacer: Rect,
-    wave: &Waveform,
-    reversed: bool,
-    ink: Color32,
+    (wave, slot): (&Waveform, &SamplerSlot),
+    (ink, colors): (Color32, &ThemeColors),
     m: &Metrics,
 ) {
     let px = 1.0 / m.ppp();
     let (x0, width) = pixel_columns(spacer, m);
     let frames = wave.data.frames();
+    let stretch = stretch_of(slot);
+    // The stretched sample's columns, of the `width` the longer length takes.
+    let shown = ((width as f64 * stretch / stretch.max(1.0)).round() as usize).max(1);
     // One "beat" a frame: `columns` then mirrors a reversed sample over exactly the frames it shows.
     let fit = Wave {
         frames,
         per_beat: 1.0,
-        reversed,
+        reversed: slot.file.reverse,
     };
-    let fpp = frames as f64 / width.max(1) as f64;
+    let fpp = frames as f64 / shown as f64;
     let rows = wave_rows(spacer, wave.summary.len() > 1);
     let mut mesh = Mesh::default();
     for ((samples, summary), &row) in wave.channels().zip(&rows) {
-        let cols = columns(samples, summary, fit, 0.0, fpp, width);
+        let cols = columns(samples, summary, fit, 0.0, fpp, shown);
         for (i, peak) in cols.into_iter().enumerate() {
             add_column(&mut mesh, x0 + i as f32 * px, peak, row, px, ink);
         }
     }
     painter.add(mesh);
+    let line = |column: usize| {
+        let x = x0 + column.min(width.saturating_sub(1)) as f32 * px;
+        let rect = Rect::from_x_y_ranges(x..=x + px, spacer.y_range());
+        painter.rect_filled(rect, 0.0, colors.text.to_color32());
+    };
+    let rate = f64::from(wave.data.sample_rate.max(1));
+    let seconds = frames as f64 / rate * stretch;
+    let start = honeydew_audio::drums::sample_start_seconds(slot.params[SAMPLE_START]);
+    if start > 0.0 && seconds > 0.0 {
+        let column = (start / seconds * shown as f64).round() as usize;
+        let veil = Rect::from_x_y_ranges(x0..=x0 + column as f32 * px, spacer.y_range());
+        let background = colors.background.to_color32();
+        painter.rect_filled(veil, 0.0, background.gamma_multiply(0.7));
+        line(column);
+    }
+    // The shorter length's end: the stretched one, else the sample's own.
+    let end = match stretch < 1.0 {
+        true => shown,
+        false => (width as f64 / stretch).round() as usize,
+    };
+    if stretch != 1.0 {
+        line(end);
+    }
 }
 
 /// A drum value area's centre band: 1 U tall across `values` at its centre.
@@ -824,15 +928,15 @@ mod tests {
     /// In the closed lane's tab, whose bottom hangs 2 px below the editor (x −3..51, y 310..350).
     const CLOSED_TAB: Pos2 = pos2(24.0, 340.0);
 
-    /// The tab of `lane` in [`AREA`] at x 24, for an offscreen frame.
-    fn tab(lane: &mut GraphLane) -> impl FnMut(&mut Ui, &UiCtx) + '_ {
+    /// The tab of `lane` in [`AREA`] at x 24, for an offscreen frame, at the sideways offset `shift`.
+    fn tab<'a>(lane: &'a mut GraphLane, shift: &'a mut f32) -> impl FnMut(&mut Ui, &UiCtx) + 'a {
         move |ui, cx| {
             lane.tab_below(
                 ui,
                 cx,
                 Id::new("tab"),
                 (AREA, AREA.top()),
-                24.0,
+                (24.0, shift),
                 Color32::WHITE,
             )
         }
@@ -842,6 +946,7 @@ mod tests {
     fn a_long_press_on_the_tab_toggles_nothing() {
         // Held 0.35 s in place (egui still calls its release a click): past the shared 300 ms, so no tap.
         let mut lane = GraphLane::default();
+        let mut shift = 0.0;
         let mut s = Offscreen::new();
         let button = |pressed| In::PointerButton {
             pos: CLOSED_TAB,
@@ -849,13 +954,16 @@ mod tests {
             pressed,
             modifiers: Default::default(),
         };
-        s.frame(vec![In::PointerMoved(CLOSED_TAB)], &mut tab(&mut lane));
-        s.frame(vec![button(true)], &mut tab(&mut lane));
+        s.frame(
+            vec![In::PointerMoved(CLOSED_TAB)],
+            &mut tab(&mut lane, &mut shift),
+        );
+        s.frame(vec![button(true)], &mut tab(&mut lane, &mut shift));
         s.time += 0.35;
-        s.frame(vec![button(false)], &mut tab(&mut lane));
+        s.frame(vec![button(false)], &mut tab(&mut lane, &mut shift));
         assert!(!lane.open);
         // A quick one toggles.
-        s.click(CLOSED_TAB, &mut tab(&mut lane));
+        s.click(CLOSED_TAB, &mut tab(&mut lane, &mut shift));
         assert!(lane.open);
     }
 
@@ -864,35 +972,36 @@ mod tests {
         let m = metrics();
         let top = |lane: &GraphLane| lane.split(AREA, &m).1.map(|s| s.top());
         let mut lane = GraphLane::default();
+        let mut shift = 0.0;
         let mut s = Offscreen::new();
         anim::enable(&s.ctx);
         // Frames until the tap's animation lands.
-        let settle = |s: &mut Offscreen, lane: &mut GraphLane| {
+        let settle = |s: &mut Offscreen, lane: &mut GraphLane, shift: &mut f32| {
             let mut n = 0;
             while lane.moving.is_some() {
-                s.frame(vec![], &mut tab(lane));
+                s.frame(vec![], &mut tab(lane, shift));
                 n += 1;
                 assert!(n < 20, "{lane:?}");
             }
             n
         };
-        s.frame(vec![], &mut tab(&mut lane));
+        s.frame(vec![], &mut tab(&mut lane, &mut shift));
         // A tap opens toward f 0.5, half the way each 60 fps frame, landing within 0.002.
-        s.click(CLOSED_TAB, &mut tab(&mut lane));
+        s.click(CLOSED_TAB, &mut tab(&mut lane, &mut shift));
         assert!(lane.open);
         assert!((lane.shown() - 0.25).abs() < 1e-3, "{}", lane.shown());
-        assert!((6..=9).contains(&settle(&mut s, &mut lane)));
+        assert!((6..=9).contains(&settle(&mut s, &mut lane, &mut shift)));
         assert_eq!(top(&lane), Some(198.0));
         // A tap on the tab (now y 160..200) closes it the same way.
-        s.click(pos2(24.0, 190.0), &mut tab(&mut lane));
+        s.click(pos2(24.0, 190.0), &mut tab(&mut lane, &mut shift));
         assert!(!lane.open && lane.shown() > 0.0);
-        settle(&mut s, &mut lane);
+        settle(&mut s, &mut lane, &mut shift);
         assert_eq!(top(&lane), None);
         // A drag up to y 108 (f 0.8) opens it at once, capped at 0.7: trunc(0.7·300) = 210 tall.
         s.drag(
             CLOSED_TAB,
             &[vec2(0.0, -100.0), vec2(0.0, -232.0)],
-            &mut tab(&mut lane),
+            &mut tab(&mut lane, &mut shift),
         );
         assert_eq!((lane.open, lane.f, lane.moving), (true, 0.7, None));
         assert_eq!(top(&lane), Some(138.0));
@@ -901,37 +1010,79 @@ mod tests {
         s.drag(
             pos2(24.0, 135.0),
             &[to(150.0), to(228.0)],
-            &mut tab(&mut lane),
+            &mut tab(&mut lane, &mut shift),
         );
         assert!((lane.f - 0.4).abs() < 1e-6, "{}", lane.f);
         assert_eq!(top(&lane), Some(228.0));
-        // Through y 240 (f 0.36) to below min(2.5 U/H, 0.5) = 0.267 (y 268): it closes, keeping the last f above that;
-        // the next tap opens it to 0.36.
+        // Through y 240 (f 0.36) to below min(2.5 U/H, 0.5) = 0.267 (y 275, f 0.243): it closes, and a close keeps
+        // the height it remembers (0.4), so the next tap opens it to that.
         let to = |y: f32| vec2(0.0, y - 225.0);
         s.drag(
             pos2(24.0, 225.0),
             &[to(240.0), to(275.0)],
-            &mut tab(&mut lane),
+            &mut tab(&mut lane, &mut shift),
         );
         assert_eq!(top(&lane), None);
-        assert!((lane.f - 0.36).abs() < 1e-6, "{}", lane.f);
-        s.click(CLOSED_TAB, &mut tab(&mut lane));
-        settle(&mut s, &mut lane);
-        assert_eq!(top(&lane), Some(240.0));
+        assert!((lane.f - 0.4).abs() < 1e-6, "{}", lane.f);
+        s.click(CLOSED_TAB, &mut tab(&mut lane, &mut shift));
+        settle(&mut s, &mut lane, &mut shift);
+        assert_eq!(top(&lane), Some(228.0));
     }
 
     #[test]
     fn a_press_and_release_in_one_frame_is_a_tap() {
         let mut lane = GraphLane::default();
+        let mut shift = 0.0;
         let mut s = Offscreen::new();
-        s.frame(vec![In::PointerMoved(CLOSED_TAB)], &mut tab(&mut lane));
+        s.frame(
+            vec![In::PointerMoved(CLOSED_TAB)],
+            &mut tab(&mut lane, &mut shift),
+        );
         let button = |pressed| In::PointerButton {
             pos: CLOSED_TAB,
             button: PointerButton::Primary,
             pressed,
             modifiers: Default::default(),
         };
-        s.frame(vec![button(true), button(false)], &mut tab(&mut lane));
+        s.frame(
+            vec![button(true), button(false)],
+            &mut tab(&mut lane, &mut shift),
+        );
+        assert!(lane.open);
+    }
+
+    #[test]
+    fn a_sideways_drag_moves_the_tab_along_the_editor_and_leaves_the_lane_alone() {
+        let m = metrics();
+        let mut lane = GraphLane::default();
+        let mut shift = 0.0;
+        let mut s = Offscreen::new();
+        s.frame(vec![], &mut tab(&mut lane, &mut shift));
+        // The tab rests a hair right of home: its half and a hairline in from the editor's left edge, whichever is
+        // further. 96 px right of there: it follows the finger and neither opens nor sizes the lane.
+        let u = m.u(1.0);
+        let rest = ((AREA.left() + m.u(TAB_W) / 2.0 + 1.0) - 24.0).max(0.0) / u;
+        s.drag(
+            CLOSED_TAB,
+            &[vec2(48.0, 0.0), vec2(96.0, 0.0)],
+            &mut tab(&mut lane, &mut shift),
+        );
+        assert!(!lane.open && lane.moving.is_none(), "{lane:?}");
+        assert!((shift - (rest + 96.0 / u)).abs() < 1e-3, "{shift}");
+        // Past the editor's right edge it stops there: the tab's half and a hairline inside it.
+        s.drag(
+            pos2(CLOSED_TAB.x + 96.0, CLOSED_TAB.y),
+            &[vec2(200.0, 0.0), vec2(400.0, 0.0)],
+            &mut tab(&mut lane, &mut shift),
+        );
+        let hi = (AREA.right() - m.u(TAB_W) / 2.0 - 1.0 - 24.0) / u;
+        assert!(hi > rest + 3.0, "{hi}");
+        assert!((shift - hi).abs() < 1e-3, "{shift} {hi}");
+        // A tap there still toggles the lane.
+        s.click(
+            pos2(24.0 + m.u(shift), CLOSED_TAB.y),
+            &mut tab(&mut lane, &mut shift),
+        );
         assert!(lane.open);
     }
 

@@ -32,7 +32,6 @@ pub mod automation_editor;
 pub mod channel_settings;
 pub mod ctrl_menu;
 pub mod device_window;
-pub mod docks;
 pub mod drum_editor;
 pub mod keyboard_settings;
 pub mod main_menu;
@@ -63,6 +62,10 @@ pub mod instrument_builder;
 pub mod versions;
 // A Lemon plugin's editor full screen (#68).
 pub mod lemon_editor;
+// A song section's dialog (#80).
+pub mod section_settings;
+// `Import MIDI Tracks`' picker (#113).
+pub mod midi_picker;
 
 /// What fills the editor area, between the top of the screen and the transport bar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -180,6 +183,11 @@ pub enum Overlay {
     /// The window of module `module` on `channel` (a Device Rack card's pop-out): its card alone, centred over the screen
     /// as a synth's editor is, closing with its X, a tap outside it or Escape.
     DeviceEditor { channel: usize, module: i32 },
+    /// Song section `section`'s dialog (#80: the playlist ruler's `Section…`, or a tap on its name), with its name field's
+    /// text.
+    SectionSettings { section: usize, name: String },
+    /// `Import MIDI Tracks`' picker (#113) for the channel with this id.
+    MidiPicker(i32),
 }
 
 /// `Link to MIDI CC`'s prompt.
@@ -372,6 +380,8 @@ pub enum SongEdit {
     RackState,
     /// Mid-gesture (a drag): the song changed, the audio is not rebuilt yet.
     Ongoing,
+    /// Mid-gesture with a new engine that plays it: the Generate panel's preview in its clip.
+    Audition,
     /// Rack state the audio reads only at build (a drum strip's `Shift`, `AUX`, a stretch): as [`Self::RackState`],
     /// and a new engine.
     RackRebuild,
@@ -543,8 +553,6 @@ pub struct Slots {
     pub keyboard_settings: keyboard_settings::State,
     pub ctrl_menu: ctrl_menu::State,
     pub rack: rack::State,
-    /// The Browser and Device Rack docks around the arrangement.
-    pub docks: docks::Docks,
     pub modules_browser: modules_browser::State,
     pub tempo_editor: tempo_editor::State,
     pub preset_picker: preset_picker::State,
@@ -575,6 +583,8 @@ pub struct Slots {
     pub versions: versions::State,
     /// The full screen Lemon editor's texture and pointer.
     pub lemon_editor: lemon_editor::State,
+    /// `Import MIDI Tracks`' picker.
+    pub midi_picker: midi_picker::State,
 }
 
 impl Slots {
@@ -582,6 +592,7 @@ impl Slots {
     pub fn stop_samples(&mut self) {
         self.sample_picker.stop_sample();
         self.preset_picker.stop_sample();
+        self.main_menu.stop_sample();
     }
 
     /// Points the editor of `key`'s lane at that clip, if it exists: the piano roll keeps its snap and zoom, the drum
@@ -642,37 +653,6 @@ impl Slots {
         }
     }
 
-    /// Draws the docks over the view and under the overlays: the Browser down the left and, unless the side rack is
-    /// `racked` (it shows the same devices), the Device Rack under the arrangement; a device `windowed` over it draws
-    /// the rack's header only (the card is in the window). What they ask for is returned.
-    pub fn docks(
-        &mut self,
-        ui: &mut egui::Ui,
-        app: &mut AppCtx,
-        (racked, windowed): (bool, bool),
-        rows: &[(egui::Rect, usize)],
-    ) -> Vec<Nav> {
-        let mut navs = Vec::new();
-        if !self.docks.enabled {
-            return navs;
-        }
-        navs.extend(self.docks.browser(ui, app, &mut self.preset_picker));
-        // A Browser row dropped on a track row or the Device Rack.
-        if let Some((channel, action)) = self.docks.drag(ui, app, rows) {
-            self.docks
-                .add_dropped(app, &mut self.preset_picker, channel, action);
-        }
-        if !racked {
-            let held = self.roll_clip(*app.selected);
-            let (state, clipboard) = (&mut self.rack, &mut self.clipboard);
-            navs.extend(
-                self.docks
-                    .device_rack(ui, app, state, clipboard, held, !windowed),
-            );
-        }
-        navs
-    }
-
     /// Draws `overlays` bottom to top, over the view and the transport, and `corner` (the playlist screen's corner
     /// buttons) over the racks and under every other overlay; with no rack open, a rack still sliding out goes under
     /// them all ([`rack::show_closing`]). `escape`: the Escape press [`take_escape`] held back, handed to the topmost
@@ -690,7 +670,19 @@ impl Slots {
         let asking =
             (overlays.iter()).any(|o| matches!(o, Overlay::Message { tag: t, .. } if *t == tag));
         let (state, rack) = (&mut self.preset_picker, &mut self.rack);
+        // Issue #98: a card's ◀ or ▶ of the last frame.
+        if let Some(step) = rack.step.take() {
+            preset_picker::step_preset(state, app, step);
+        }
         preset_picker::land_close_grands(state, rack, ui.ctx(), app, asking);
+        // SONGS' preview stops once SONGS is not shown (#106).
+        if !(overlays.iter()).any(|o| matches!(o, Overlay::MainMenu(MenuTab::Songs))) {
+            self.main_menu.leave(app.audio);
+        }
+        // Issue #120: the SoundFont picker's note and keys stop once it is not open.
+        if !(overlays.iter()).any(|o| matches!(o, Overlay::SoundFontPicker { .. })) {
+            soundfont_picker::stop(&mut self.soundfont_picker, app.audio);
+        }
         let top = overlays.len().saturating_sub(1);
         self.rack.full = overlays.iter().find_map(|o| match o {
             Overlay::LemonEditor { channel, module } => Some((*channel, *module)),
@@ -786,7 +778,9 @@ impl Slots {
             }
             Overlay::SoundFontPicker { channel, module } => {
                 let state = &mut self.soundfont_picker;
-                soundfont_picker::show(state, &mut self.rack, ui, app, *channel, *module)
+                let lit = (self.preset_picker.lit.get(*channel)).copied();
+                let lit = lit.unwrap_or_default();
+                soundfont_picker::show(state, &mut self.rack, ui, app, *channel, *module, lit)
             }
             Overlay::SamplePicker { channel, pad } => {
                 let (state, drums) = (&mut self.sample_picker, &mut self.drum_editor);
@@ -858,6 +852,12 @@ impl Slots {
                 top.then(|| {
                     device_window::show(state, ui, app, (*channel, *module), clipboard, held)
                 })?
+            }
+            Overlay::SectionSettings { section, name } => {
+                section_settings::show(ui, app, *section, name)
+            }
+            Overlay::MidiPicker(channel) => {
+                midi_picker::show(&mut self.midi_picker, ui, app, *channel)
             }
         }
     }

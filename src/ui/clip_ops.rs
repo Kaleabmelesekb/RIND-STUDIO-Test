@@ -48,7 +48,7 @@ pub fn apply(clip: &mut Clip, op: NoteOp) -> bool {
     match op {
         NoteOp::Transpose(dk) => clip.events = shift_notes(&before, &sel, 0.0, dk),
         NoteOp::Reverse => reverse_notes(&mut clip.events, &sel),
-        NoteOp::Legato => legato_selected(&mut clip.events, &sel),
+        NoteOp::Legato => legato_selected(&mut clip.events, &sel, f64::from(PPQ) * 4.0),
         NoteOp::Quantize => {
             quantize_selected(&mut clip.events, &mut sel, f64::from(PPQ) / 4.0);
         }
@@ -127,14 +127,21 @@ mod tests {
     }
 
     #[test]
-    fn legato_joins_each_note_to_the_next_and_does_nothing_when_already_joined() {
+    fn legato_joins_each_note_to_the_next_and_the_last_to_the_bar_end() {
         let mut c = clip_with(&[note_at(0, 0.25, 60), note_at(128, 0.25, 62)]);
         assert!(apply(&mut c, NoteOp::Legato));
         let Event::Note { len_beats, .. } = c.events[0] else {
             panic!()
         };
         assert!((len_beats - 1.0).abs() < 1e-9, "{len_beats}");
-        assert!(!apply(&mut c, NoteOp::Legato));
+        // The last note reaches the end of its bar (#123).
+        let Event::Note {
+            len_beats: last, ..
+        } = c.events[1]
+        else {
+            panic!()
+        };
+        assert!(last > 0.25, "{last}");
     }
 
     #[test]

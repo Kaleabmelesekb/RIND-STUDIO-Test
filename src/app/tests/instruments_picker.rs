@@ -117,6 +117,19 @@ fn the_modules_browsers_instrument_lists_them_in_its_panel_and_a_later_pick_repl
     }
     let browser = Overlay::ModulesBrowser { channel: 1, at };
     assert_eq!(rig.overlays(), [Overlay::Rack(1), browser]);
+    // Issue #123: the whole browse adds one module, across its lists too. The Instruments list again, then Back and an
+    // effect: each pick takes the place of the module the last one added.
+    nested_row(&mut rig, 2);
+    nested_row(&mut rig, BELLS);
+    nested_row(&mut rig, 0);
+    assert_eq!(types(&rig, 1), [0, 2]);
+    for _ in 0..2 {
+        rig.click_id(Id::new(BROWSER).with("back"));
+        rig.frame(vec![]);
+    }
+    super::rack_wiring::pick(&mut rig, "Dist");
+    assert_eq!(types(&rig, 1), [0, 6]);
+    assert_eq!(rig.app.history.steps(), steps);
 }
 
 #[test]
@@ -348,7 +361,7 @@ fn a_folder_renamed_in_the_picker_takes_the_open_songs_file_along() {
 /// Opens the picker's ≡ menu (the left column's third button) and lets its items show.
 fn options(rig: &mut Rig) {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     rig.click(crate::ui::modules_browser::layout(screen, 1.0, &m).button(2));
     for _ in 0..30 {
         rig.frame(vec![]);

@@ -13,7 +13,7 @@ use crate::ui::save_dialog::{DialogLayout, ExportFormat, layout};
 
 /// The Save dialog's places on the rig's screen.
 fn dialog() -> DialogLayout {
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     layout(
         screen,
         &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
@@ -413,4 +413,37 @@ fn a_stem_that_cannot_be_written_ends_the_export_with_one_message() {
         [Overlay::Message { lines, .. }] if lines == &[RENDER_FAILED, "disk full"]
     ));
     assert_eq!(rig.flash_text(), None);
+}
+
+/// #139: a render carries PROJECT's metadata as tags (the file name's title while `Title:` is empty) and the app as
+/// the encoder; with `Write tags on export` (on by default) off it carries none, and the audio is the same.
+#[test]
+fn a_render_is_tagged_with_the_songs_metadata_unless_write_tags_is_off() {
+    let (mut rig, mem) = Rig::exporting();
+    assert!(rig.app.settings.write_tags, "on by default");
+    let render = |rig: &mut Rig, title: &str| {
+        rig.app.song.title = title.into();
+        rig.app.files.quick_render(&rig.app.song, ExportFormat::Wav);
+        rig.frame(vec![]);
+        rig.finish_export();
+        written(&mem, &format!("My Tracks/{title}.wav")).expect("written")
+    };
+    let meta = &mut rig.app.song.file.meta;
+    meta.author = "Ivan".into();
+    meta.genre = "House".into();
+    let tagged = render(&mut rig, "Beat");
+    let encoder = format!("{} {}", crate::APP_NAME, env!("CARGO_PKG_VERSION"));
+    let tags = [
+        ("TITLE", "Beat"),
+        ("ARTIST", "Ivan"),
+        ("GENRE", "House"),
+        ("ENCODER", &encoder),
+    ];
+    let info = honeydew_audio::wav_writer::info_chunk(&tags);
+    // After RIFF, WAVE and the 26-byte `fmt ` chunk.
+    assert_eq!(tagged[38..38 + info.len()], info[..]);
+    rig.app.settings.write_tags = false;
+    let plain = render(&mut rig, "Plain");
+    assert_eq!(&plain[38..42], b"data", "no LIST chunk");
+    assert_eq!(decode(&plain).unwrap(), decode(&tagged).unwrap());
 }

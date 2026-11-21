@@ -449,6 +449,35 @@ mod local {
         /// Plugin -> host (`Changed`, `Note`, `Automate`, `Edited`): queued for the host's next tick, which is woken. 1 when a host
         /// is there, 0 otherwise (as unanswered messages on Windows).
         pub fn to_host(&self, cmd: Cmd, arg: isize) -> isize {
+            // Honeydew (vendored change): with `embed`, Honeydew answers `Automate` from an editor that keeps its own
+            // tab row (#113). The editors run on the thread that hosts them there, which takes it (`take_automate`).
+            #[cfg(feature = "embed")]
+            if cmd == Cmd::Automate {
+                AUTOMATE.with_borrow_mut(|q| q.push((self.parent, arg)));
+                return 1;
+            }
+            // Honeydew (vendored change): and Tesla's `Audio` to the playlist (#117): the file it posted is kept for this
+            // thread (`take_sent`). The other places are not answered.
+            #[cfg(feature = "embed")]
+            if cmd == Cmd::Audio {
+                let ok = AudioTo::from_isize(arg) == AudioTo::Playlist;
+                if ok {
+                    let posted = take_audio().into_iter().map(|(path, _)| path);
+                    SENT.with_borrow_mut(|q| q.extend(posted));
+                }
+                return isize::from(ok);
+            }
+            // Honeydew (vendored change): and Tesla's `Notes` (Convert to score, #167): the notes it posted are kept for
+            // this thread (`take_scored`).
+            #[cfg(feature = "embed")]
+            if cmd == Cmd::Notes {
+                let notes = take_notes(arg);
+                let ok = !notes.is_empty();
+                if ok {
+                    SCORED.with_borrow_mut(|q| q.push(notes));
+                }
+                return isize::from(ok);
+            }
             if !self.hosted() {
                 return 0;
             }
@@ -464,6 +493,36 @@ mod local {
 
     static REGISTRY: Mutex<Vec<(u64, Weak<Peer>)>> = Mutex::new(Vec::new());
     static QUEUE: Mutex<Vec<(u64, Cmd, isize)>> = Mutex::new(Vec::new());
+
+    // Honeydew (vendored addition): the editors' `Automate`, the files of their `Audio` to the playlist and the notes of
+    // their `Notes` (`Peer::to_host`), by thread.
+    #[cfg(feature = "embed")]
+    thread_local! {
+        static AUTOMATE: std::cell::RefCell<Vec<(u64, isize)>> = const { std::cell::RefCell::new(Vec::new()) };
+        static SENT: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+        static SCORED: std::cell::RefCell<Vec<Vec<NoteOut>>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// Honeydew (vendored addition): the `Automate` this thread's editors sent since the last call, as (the editor's
+    /// host window, parameter index).
+    #[cfg(feature = "embed")]
+    pub fn take_automate() -> Vec<(u64, isize)> {
+        AUTOMATE.with_borrow_mut(std::mem::take)
+    }
+
+    /// Honeydew (vendored addition): the files this thread's editors sent to the playlist since the last call (`Audio`),
+    /// oldest first.
+    #[cfg(feature = "embed")]
+    pub fn take_sent() -> Vec<String> {
+        SENT.with_borrow_mut(std::mem::take)
+    }
+
+    /// Honeydew (vendored addition): the notes this thread's editors sent since the last call (`Notes`: Tesla's Convert
+    /// to score), one list a send, oldest first.
+    #[cfg(feature = "embed")]
+    pub fn take_scored() -> Vec<Vec<NoteOut>> {
+        SCORED.with_borrow_mut(std::mem::take)
+    }
     static HOST_WAKER: OnceLock<fn()> = OnceLock::new();
 
     /// Host: how plugins wake its UI loop when they send something.
@@ -548,6 +607,8 @@ mod local {
 pub use local::{set_host_waker, take_host_messages, Link, Peer};
 #[cfg(all(windows, feature = "embed"))]
 pub use local::Peer;
+#[cfg(feature = "embed")]
+pub use local::{take_automate, take_scored, take_sent};
 
 #[cfg(test)]
 mod tests {

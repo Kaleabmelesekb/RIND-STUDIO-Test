@@ -16,7 +16,7 @@ impl Rig {
     }
 
     /// Frames for the keyboard panel to slide to its place, where the transport bar's readout is; the centre of the
-    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, in the control bar left of the logo's corner).
+    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, at the bar's right edge).
     fn settle(&mut self) -> Pos2 {
         for _ in 0..40 {
             self.frame(vec![]);
@@ -28,10 +28,7 @@ impl Rig {
             .expect("the readout")
             .rect
             .center();
-        assert!(
-            (at.x - (1170.0 - 3.75 * U - 1.5 * 1.75 * U)).abs() < 0.01,
-            "{at:?}"
-        );
+        assert!((at.x - (1170.0 - 1.5 * 1.75 * U)).abs() < 0.01, "{at:?}");
         at
     }
 
@@ -68,7 +65,7 @@ impl Rig {
 /// The main menu's content area at U = 32.
 fn content() -> egui::Rect {
     crate::ui::main_menu::shell_layout(
-        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
+        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
         &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
     )
     .content
@@ -171,4 +168,24 @@ fn the_footers_memory_is_the_ram_readouts_reads() {
     };
     assert_eq!(rig.app.slots.performance.app_memory, shown);
     assert!(rig.painted(&footer_line(shown)), "{shown}");
+}
+
+/// #124: `Clear` zeroes the counters the app keeps, not the copy the page draws from, and a song load starts them
+/// from zero too.
+#[test]
+fn clear_and_a_song_load_start_the_counters_from_zero() {
+    let mut rig = Rig::with_synth();
+    rig.rec.0.borrow_mut().underruns = 5;
+    rig.performance_page();
+    assert_eq!(rig.app.slots.performance.underruns, 5);
+    rig.click_id(egui::Id::new("performance_clear"));
+    rig.frame(vec![]);
+    assert_eq!(rig.app.slots.performance.underruns, 0);
+    assert!(rig.painted(&status_line(0.0, 0)));
+    rig.rec.0.borrow_mut().underruns = 7;
+    rig.frame(vec![]);
+    assert_eq!(rig.app.slots.performance.underruns, 2);
+    rig.app.song_edited(SongEdit::Replaced, 0);
+    rig.frame(vec![]);
+    assert_eq!(rig.app.slots.performance.underruns, 0);
 }

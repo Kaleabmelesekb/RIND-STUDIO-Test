@@ -99,10 +99,20 @@ fn ticks(song: &Song, range: RenderRange) -> (f64, f64) {
     range_ticks(song, range).unwrap_or_else(|| (0.0, song_length_beats(song) * f64::from(PPQ)))
 }
 
-/// `Estimated length: ` in seconds: the range's length at the song tempo.
+/// `Estimated length: ` in seconds: the range as long as a render plays it, at the tempo automation's tempos
+/// ([`SongAudioEngine::frames_to_tick`], as [`Render::new`] measures it). Its engine is the song's without the rack
+/// modules, so that no instrument, effect or plugin is built for it. The range at the song tempo where none builds.
 pub fn estimated_secs(song: &Song, range: RenderRange) -> f64 {
+    const RATE: u32 = 44_100;
     let (start, end) = ticks(song, range);
-    (end - start) / f64::from(PPQ) * 60.0 / song.tempo_bpm
+    let mut bare = song.clone();
+    for channel in &mut bare.channels {
+        channel.rack.modules.clear();
+    }
+    let secs = engine(&bare, &SampleCache::default(), RATE, start)
+        .map(|engine| engine.frames_to_tick(end as u64) / f64::from(RATE));
+    (secs.ok().filter(|s| s.is_finite()))
+        .unwrap_or_else(|| (end - start) / f64::from(PPQ) * 60.0 / song.tempo_bpm)
 }
 
 /// Pass 1 of a render: the engine renders the range and its tail, and only what the processing pass needs is kept: the
@@ -243,13 +253,8 @@ impl Render {
         }
         let (start, end) = ticks(&song, spec.range);
         let engine = engine(&song, samples, spec.rate, start)?;
-        // As the engine's seek maps ticks to frames.
-        let frame = |tick: f64| {
-            (tick / f64::from(PPQ) * 60.0 * f64::from(spec.rate as f32)
-                / f64::from(song.tempo_bpm as f32))
-            .ceil()
-        };
-        let range = frame(end) - frame(start);
+        // As long as playback plays it, at the tempo automation's tempos (Honeydew change, #126).
+        let range = engine.frames_to_tick(end as u64).ceil();
         if range.is_nan() || range > f64::from(MAX_SECS) * f64::from(spec.rate) {
             return Err(RenderError::TooLong);
         }

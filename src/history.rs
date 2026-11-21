@@ -104,6 +104,8 @@ impl Snapshot {
             master_below,
             groups,
             markers,
+            sections,
+            sample_rate,
         } = song;
         let head = Song {
             title: title.clone(),
@@ -117,6 +119,8 @@ impl Snapshot {
             master_below: *master_below,
             groups: groups.clone(),
             markers: markers.clone(),
+            sections: sections.clone(),
+            sample_rate: *sample_rate,
         };
         // The same index first, so that identical channels keep their own.
         let channels = channels

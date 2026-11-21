@@ -14,6 +14,8 @@ pub mod points;
 mod rack;
 pub mod scales;
 mod tempo;
+// Song sections (#80).
+mod section;
 
 pub use channel::{Channel, ChannelParams};
 pub use drum_kit::{DrumKit, SamplerSlot};
@@ -26,6 +28,7 @@ pub use group::TrackGroup;
 pub use lane::MAX_PLAYS_A_PIXEL;
 pub use lane::{AutomationTarget, Clip, DrumGrid, Event, Lane, LaneKind};
 pub use rack::{CommonParams, ModuleInstance, Rack};
+pub use section::Section;
 pub use tempo::{
     AUTOMATION_TEMPO_RANGE, TEMPO_PARAM, TEMPO_RANGE, TEMPO_TARGET, automated_tempo, tempo_value,
 };
@@ -239,7 +242,16 @@ pub struct Song {
     pub groups: Vec<TrackGroup>,
     /// The markers ([`marker`]), sorted by tick, one to a tick. Kept in the `RMRK` chunk.
     pub markers: Vec<marker::Marker>,
+    /// The song's sections (Honeydew's own, #80), in the order they were made: `HDSe`s in the file.
+    pub sections: Vec<Section>,
+    /// The project's sample rate (PR #87, Honeydew's own: an `HDSR` in the file), one of [`SAMPLE_RATES`], or 0 to
+    /// follow the output's own rate (the default, as before). The live output asks for it, and may fall back to the
+    /// device's rate; a render runs at it.
+    pub sample_rate: u32,
 }
+
+/// The project sample rates PROJECT's `Samplerate:` offers (PR #87), besides the output's own (0).
+pub const SAMPLE_RATES: [u32; 5] = [22_050, 44_100, 48_000, 88_200, 96_000];
 
 impl Default for Song {
     fn default() -> Self {
@@ -255,6 +267,8 @@ impl Default for Song {
             master_below: None,
             groups: Vec::new(),
             markers: Vec::new(),
+            sections: Vec::new(),
+            sample_rate: 0,
         }
     }
 }
@@ -555,7 +569,8 @@ impl Song {
     }
 
     /// Takes from `current` what is not an edit, onto a song that undo or redo restored (or that a history compares):
-    /// the title (a save sets it), the META display title, author and link (the PROJECT tab types them), the play loop
+    /// the title (a save sets it), the META display title, author and link and the tag fields (the PROJECT tab types
+    /// them), the play loop
     /// (the rulers set it), the save stamp ([`Self::stamp_save`]: version, song GUID, created and modified dates), the
     /// view state a file keeps (HEAD @0, @288, @296, META editing time; per channel by id, CHHD @1040/@1048 and its
     /// GUID), the META@776 lock (PROJECT confirms it "forever") and the project versions. So none of them is ever an undo
@@ -569,6 +584,11 @@ impl Song {
             .meta
             .info_url
             .clone_from(&current.file.meta.info_url);
+        let (meta, from) = (&mut self.file.meta, &current.file.meta);
+        meta.album.clone_from(&from.album);
+        meta.genre.clone_from(&from.genre);
+        meta.year.clone_from(&from.year);
+        meta.comment.clone_from(&from.comment);
         self.play_loop = current.play_loop;
         let (file, from) = (&mut self.file, &current.file);
         file.version.clone_from(&from.version);

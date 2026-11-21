@@ -520,12 +520,14 @@ pub fn quantize_selected(events: &mut Vec<Event>, sel: &mut Vec<bool>, grid: f64
     true
 }
 
-/// Lengthens each selected note to the next later start among the selected notes; the last ones keep theirs.
-pub fn legato_selected(events: &mut [Event], sel: &[bool]) {
+/// Lengthens each selected note to the next later start among the selected notes. Honeydew change (GitHub #123):
+/// the last ones reach the end of the bar (`bar` ticks long) their start falls in, unless they end past it.
+pub fn legato_selected(events: &mut [Event], sel: &[bool], bar: f64) {
     let starts: Vec<f64> = flagged(events, sel).map(|(pos, _, _)| pos).collect();
     let new = map_notes(events, sel, |pos, len, key| {
         let next = starts.iter().copied().filter(|&s| s > pos).reduce(f64::min);
-        (pos, next.map_or(len, |s| s - pos), key)
+        let bar_end = ((pos / bar).floor() + 1.0) * bar;
+        (pos, next.map_or(len.max(bar_end - pos), |s| s - pos), key)
     });
     events.copy_from_slice(&new);
 }
@@ -900,7 +902,7 @@ pub fn content_tick(clip: Option<&Clip>, song_tick: u64) -> Option<f64> {
     Some((song_tick as f64 - start + offset).rem_euclid(lp))
 }
 
-/// A note of another channel drawn faintly behind the edited clip's notes, at the content tick it plays against.
+/// Another clip's note drawn faintly behind the edited clip's notes, at the content tick it plays against.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Ghost {
     pub pos: f64,
@@ -908,16 +910,37 @@ pub struct Ghost {
     pub key: u8,
     /// Its channel's hue.
     pub hue: f32,
+    /// Shown faintly in the graph lane (#152).
+    pub velocity: u8,
+    pub pan: u8,
+    /// Honeydew change (#154): where the note is, which a long press on its ghost opens: its channel, track and clip,
+    /// and its own content tick in that clip.
+    pub channel: usize,
+    pub lane: usize,
+    pub clip: u32,
+    pub at: f64,
 }
 
-/// The notes of every other channel's notes lanes that play during the edited clip's first loop pass (without a
-/// clip: during the first bar), mapped into the clip's content: those that reach the content ticks `view` shows, from
-/// clips whose loop passes are at least `px` ticks (a pixel) long ([`Clip::plays_to_draw`]). So the walk is bounded
-/// by the view, not by a file's loop or visible lengths. A hidden track's notes (`Hide track`) are never ghosts, whatever
+impl Ghost {
+    /// Its cell on the grid `g`.
+    pub fn rect(&self, g: &Geom) -> Rect {
+        let top = g.y(self.key);
+        Rect::from_min_max(
+            pos2(g.x(self.pos), top),
+            pos2(g.x(self.pos + self.len), top + g.row_h),
+        )
+    }
+}
+
+/// The notes of every notes clip but the edited one (`clip`, of `lane` of `channel`: its channel's other clips and
+/// tracks too, #152) that play during the edited clip's first loop pass (without a clip: during the first bar), mapped
+/// into the clip's content: those that reach the content ticks `view` shows, from clips whose loop passes are at least
+/// `px` ticks (a pixel) long ([`Clip::plays_to_draw`]). So the walk is bounded by the view, not by a file's loop or
+/// visible lengths. A hidden track's notes (`Hide track`) are never ghosts, whatever
 /// Settings `Show hidden tracks` (the playlist's) says.
 pub fn ghost_notes(
     song: &Song,
-    channel: usize,
+    (channel, lane): (usize, usize),
     clip: Option<&Clip>,
     beats_per_bar: u32,
     view: std::ops::Range<f64>,
@@ -929,12 +952,12 @@ pub fn ghost_notes(
     // Song tick s of the pass plays at content u mod lp, u = s − start + off running over [off, off + lp).
     let off = offset.rem_euclid(lp);
     let mut ghosts = Vec::new();
+    let edited = (channel, lane, clip.map(|c| c.id));
     for (ci, ch) in song.channels.iter().enumerate() {
-        if ci == channel {
-            continue;
-        }
-        for lane in (ch.lanes.iter()).filter(|l| l.kind == LaneKind::Notes && !l.hidden) {
-            for c in &lane.clips {
+        let notes =
+            (ch.lanes.iter().enumerate()).filter(|(_, l)| l.kind == LaneKind::Notes && !l.hidden);
+        for (li, l) in notes {
+            for c in l.clips.iter().filter(|c| (ci, li, Some(c.id)) != edited) {
                 // A note that starts before the view reaches into it by its length.
                 // ponytail: at most a view's width; a ghost longer than that, starting further before the view, is
                 // left out.
@@ -954,12 +977,20 @@ pub fn ghost_notes(
                         continue;
                     }
                     for (tick, e) in c.plays_to_draw(a.floor() as u64, b.ceil() as u64, px) {
-                        if let Some((_, len, key)) = note(e) {
+                        if let (Some((at, len, key)), &Event::Note { velocity, pan, .. }) =
+                            (note(e), e)
+                        {
                             ghosts.push(Ghost {
                                 pos: (tick as f64 - start + offset).rem_euclid(lp),
                                 len,
                                 key,
                                 hue: ch.hue,
+                                velocity,
+                                pan,
+                                channel: ci,
+                                lane: li,
+                                clip: c.id,
+                                at,
                             });
                         }
                     }

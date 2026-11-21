@@ -252,7 +252,7 @@ fn re_applying_the_same_values_allocates_nothing_and_changes_nothing() {
                 repeated.render(120.0, 0.05);
                 // Dragonfly Room's early reflections draw from the C library's one global `std::rand()`, which the
                 // plugin itself never reseeds, so two instances never match bit for bit (not a re-applied value).
-                same &= id == 1009 || plain.checksum == repeated.checksum;
+                same &= id == 1101 || plain.checksum == repeated.checksum;
             }
         });
         assert_eq!(calls, 0, "{id} {}", info.name);

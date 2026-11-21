@@ -28,15 +28,17 @@ pub struct Zone {
     /// The 0x1FD floats: #2 > 0 enables the Decay ramp (≤ 0 jumps to Sustain); #1 and #4 are a program's Attack and
     /// Release.
     pub floats: [f32; 4],
-    /// Cents on the zone's pitch, and the frames it plays, `offset..end` (`end` 0: to the sample's end): an SFZ
-    /// region's ([`Zone::of_sfz`]). A `.dwp` has none of them.
+    /// Cents on the zone's pitch, cents per key from the root (`pitch_keytrack`, 100), and the frames it plays,
+    /// `offset..end` (`end` 0: to the sample's end): an SFZ region's ([`Zone::of_sfz`]). A `.dwp` has none of them.
     pub tune: f32,
+    pub keytrack: f32,
     pub offset: u32,
     pub end: u32,
 }
 
 impl Default for Zone {
-    /// Root 48, keys 0–128, velocities 0–127, gain 1, pan 0, no loop, floats 0, 1, 1, 0.1, no tune, the whole sample.
+    /// Root 48, keys 0–128, velocities 0–127, gain 1, pan 0, no loop, floats 0, 1, 1, 0.1, no tune, 100 cents a key,
+    /// the whole sample.
     fn default() -> Self {
         Self {
             root: 48,
@@ -51,15 +53,21 @@ impl Default for Zone {
             loop_end: 0,
             floats: [0.0, 1.0, 1.0, 0.1],
             tune: 0.0,
+            keytrack: 100.0,
             offset: 0,
             end: 0,
         }
     }
 }
 
+/// The root key a plain audio file loaded into the DW Sampler plays at, so that middle C plays it as recorded
+/// (Honeydew change, #102). A song saved before keeps the earlier 48 ([`Zone::user_sample`]): a pick writes this one
+/// into its `PATh` ([`ProgramRef::root`]).
+pub const USER_SAMPLE_ROOT: u8 = 60;
+
 impl Zone {
     /// A user sample: one zone over all keys, root 48 (the `smpl` unity note ignored), looping over the file's
-    /// `smpl` loop when it has one.
+    /// `smpl` loop when it has one. A pick's `PATh` plays it at [`USER_SAMPLE_ROOT`] instead.
     // Loop mode 2 with start = end, so the loop rule takes the file's `smpl` loop.
     pub fn user_sample() -> Self {
         Self {
@@ -73,11 +81,11 @@ impl Zone {
         (self.floats[0], self.floats[3])
     }
 
-    /// An SFZ region as the DW Sampler plays it (an `.sfz` program): its keys, velocities and `pitch_keycenter`;
-    /// `tune` and `transpose` as the tune; `volume` and `amplitude` as the gain, which DW applies only while Loop is on;
-    /// `pan` stored, as DW never plays it; `offset` and `end`. `loop_continuous` and `loop_sustain` loop over
-    /// `loop_start`…`loop_end`, as does a region without `loop_mode` (SFZ's default for a looped sample); without both
-    /// points the file's own `smpl` loop. `no_loop` and `one_shot` never loop. `None` for a region DW cannot play: a
+    /// An SFZ region as the DW Sampler plays it (an `.sfz` program): its keys, velocities, `pitch_keycenter` and
+    /// `pitch_keytrack`; `tune` and `transpose` as the tune; `volume` and `amplitude` as the gain, which DW applies
+    /// only while Loop is on; `pan` stored, as DW never plays it; `offset` and `end`. `loop_continuous` and
+    /// `loop_sustain` loop over `loop_start`…`loop_end`, as does a region without `loop_mode` (SFZ's default for a
+    /// looped sample); without both points the file's own `smpl` loop. `no_loop` and `one_shot` never loop. `None` for a region DW cannot play: a
     /// built-in sample (`*sine`), a note-off one (`trigger=release`), one with no key, or `end` ≤ 0.
     pub fn of_sfz(r: &SfzRegion) -> Option<Self> {
         let silent = r.keys[1] < r.keys[0].max(0) || r.end.is_some_and(|end| end <= 0);
@@ -107,6 +115,7 @@ impl Zone {
             loop_start,
             loop_end,
             tune: r.tune + 100.0 * r.transpose as f32,
+            keytrack: r.pitch_keytrack,
             offset: frame(r.offset),
             end: r.end.map_or(0, |end| frame(end as u64).saturating_add(1)),
             ..Self::default()
@@ -454,6 +463,10 @@ pub struct ProgramRef<'a> {
     /// the current values. `None` unless both are there (≥ 8 bytes after the path, both finite); a legacy
     /// `PATH` has none.
     pub init: Option<(f32, f32)>,
+    /// Honeydew's own `u8` after the two floats (Honeydew change, #102): the root key a plain audio file (a user
+    /// sample) plays at, [`USER_SAMPLE_ROOT`] since a pick writes it. `None` (a song saved before, a legacy `PATH`, a
+    /// key over 127): the earlier 48 ([`Zone::user_sample`]). A program's zones keep their own roots.
+    pub root: Option<u8>,
     /// The whole chunk, header included, in the blob: what a save rewrites with the init values.
     pub chunk: Range<usize>,
 }
@@ -511,10 +524,13 @@ impl<'a> Cstm<'a> {
                         && !path.is_empty()
                     {
                         let at = 4 + path.len();
-                        let floats = f32_at(body, at).zip(f32_at(body, at + 4));
+                        let init =
+                            (f32_at(body, at).zip(f32_at(body, at + 4))).filter(|_| id == *b"PATh");
+                        let root = body.get(at + 8).copied().filter(|&key| key < 128);
                         cstm.program = Some(ProgramRef {
                             path,
-                            init: floats.filter(|_| id == *b"PATh"),
+                            init,
+                            root: init.and(root),
                             chunk: start..blob.len() - chunks.len(),
                         });
                     }

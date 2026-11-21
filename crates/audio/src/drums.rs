@@ -428,6 +428,12 @@ impl PadSampler {
     /// Renders `pad`'s voices for one block and adds them into `left` and `right` (equal lengths). Speed, bend,
     /// Level, Pan, Mute/Solo, D, S, R and Length are read once per block.
     pub fn process(&mut self, pad: usize, left: &mut [f32], right: &mut [f32]) {
+        self.process_at(pad, left, right, 1.0);
+    }
+
+    /// [`Self::process`] with the voices stepping through the sample `rate` times as fast: a SYNC audio clip resampled
+    /// by the live tempo over the tempo its sample is stretched for (Honeydew change, #126), its pitch moving with it.
+    pub fn process_at(&mut self, pad: usize, left: &mut [f32], right: &mut [f32], rate: f64) {
         let soloed = self.soloed;
         let Some(p) = self.pads.get(pad) else { return };
         let Some(sample) = &p.sample else {
@@ -446,7 +452,7 @@ impl PadSampler {
         let pan = 2.0 * params[PAN] - 1.0;
         let out = [level * (1.0 - pan.max(0.0)), level * (1.0 + pan.min(0.0))];
         // Speed: exp2f(s/12), s = trunc(fma_f32(v, 48, −24)) whole semitones.
-        let step = speed_ratio(params[SPEED]) * self.bend * f64::from(sample.sample_rate())
+        let step = speed_ratio(params[SPEED]) * self.bend * rate * f64::from(sample.sample_rate())
             / f64::from(self.sample_rate);
         let (decay, sustain, release) = (
             coefficient(params[EG_D], 50.0),
@@ -538,7 +544,7 @@ pub fn level_gain(v: f32) -> f32 {
 }
 
 /// Slot Sample Start v in seconds: the signed square ±0.5·u², u = 2v − 1.
-fn sample_start_seconds(v: f32) -> f64 {
+pub fn sample_start_seconds(v: f32) -> f64 {
     let u = 2.0 * v - 1.0;
     f64::from(0.5 * u * u * u.signum())
 }

@@ -11,10 +11,10 @@ use std::collections::HashSet;
 use honeydew_audio::dwp::Cstm;
 
 use super::chunk::{
-    ChunkWriter, ContentPath, ContentRoot, FlmError, FlmErrorKind, MAGIC_CH02, MAGIC_CL02,
-    MAGIC_RK01, MAGIC_SL02, MAGIC_SM01, MAGIC_TMPL,
+    ChunkWriter, FlmError, FlmErrorKind, MAGIC_CH02, MAGIC_CL02, MAGIC_RK01, MAGIC_SL02,
+    MAGIC_SM01, MAGIC_TMPL,
 };
-use super::read::{check_cstm, decode_events};
+use super::read::{check_cstm, decode_events, writable};
 use crate::song::{
     AutomationTarget, CHANNEL_ID_LIMIT, Channel, ChannelKind, Clip, DrumKit, Event, Lane, LaneKind,
     ModuleInstance, PPQ, RawChunk, SamplerSlot, SendState, Song, TEMPO_TARGET, output_bus,
@@ -74,6 +74,28 @@ pub fn write(song: &Song) -> Result<Vec<u8>, FlmError> {
     let markers = crate::song::marker::encode(&song.markers);
     if !markers.is_empty() {
         writer.chunk(*b"RMRK", |writer| writer.raw(&markers))?;
+    }
+    // Honeydew's sections (#80): an `HDSe` each, `u32` start and end ticks, `f32` hue and `vstr32` name, which a reader
+    // that does not know it skips as an unknown chunk.
+    for section in &song.sections {
+        writer.chunk(*b"HDSe", |writer| {
+            writer.u32(section.start)?;
+            writer.u32(section.end)?;
+            writer.f32(section.hue)?;
+            writer.vstr32(section.name.as_bytes())
+        })?;
+    }
+    // The project sample rate (PR #87): an `HDSR`, `u32` Hz, only when the song has one (0 follows the output).
+    if song.sample_rate != 0 {
+        writer.chunk(*b"HDSR", |writer| writer.u32(song.sample_rate))?;
+    }
+    // PROJECT's tag fields (#139): an `HDTg`, `vstr32` album, genre, year and comment, only when one is set.
+    let meta = &song.file.meta;
+    let tags = [&meta.album, &meta.genre, &meta.year, &meta.comment];
+    if tags.iter().any(|t| !t.is_empty()) {
+        writer.chunk(*b"HDTg", |writer| {
+            (tags.iter()).try_for_each(|t| writer.vstr32(t.as_bytes()))
+        })?;
     }
     write_raw(&mut writer, &song.file.unknown_chunks)?;
     crate::versions::write(&mut writer, &song.file.versions)?;
@@ -533,6 +555,10 @@ fn write_lane(writer: &mut ChunkWriter, lane: &Lane) -> Result<(), FlmError> {
     if lane.hidden {
         writer.chunk(*b"HDHd", |_| Ok(()))?;
     }
+    // A collapsed track (#83) holds an empty `HDCo`, which a reader that does not know it skips.
+    if lane.collapsed {
+        writer.chunk(*b"HDCo", |_| Ok(()))?;
+    }
     write_raw(writer, &lane.file.unknown_chunks)
 }
 
@@ -773,14 +799,9 @@ fn write_slot(
         writer.f64(file.stretch_ratio)?;
         writer.f64(file.pitch_semitones)
     })?;
-    // PTH1 holds only a shorthand into the content or user root; any other sample is not saved.
-    if let Some(
-        path @ ContentPath::Shorthand {
-            root: ContentRoot::App | ContentRoot::User,
-            ..
-        },
-    ) = &file.path
-    {
+    // PTH1 holds only a shorthand into the content or user root, or a library folder's file by its own path
+    // (`read::writable`); any other sample is not saved.
+    if let Some(path) = file.path.as_ref().filter(|p| writable(p)) {
         writer.chunk(*b"PTH1", |writer| writer.content_path16(path))?;
     }
     writer.chunk(*b"PRST", |writer| {

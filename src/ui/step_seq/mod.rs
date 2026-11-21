@@ -431,7 +431,7 @@ pub struct StepSeqView {
     pub playhead: u64,
     /// How far past `playhead` the playhead is drawn ([`crate::audio_link::AudioLink::playhead_lead`]): the line, the
     /// knob and follow playhead only, never an edit. The host sets it each frame.
-    pub lead: u64,
+    pub lead: i64,
     pub playing: bool,
     /// REC is armed: the playhead disc shows the record icon. The host sets it each frame.
     pub armed: bool,
@@ -460,6 +460,8 @@ pub struct StepSeqView {
     /// and whether it has sent an edit (its end then closes it, even with the hits back as they were).
     pub graph: GraphLane,
     graph_drag: Option<(Vec<Event>, bool)>,
+    /// The drag's touch-down while it keeps to its column ([`graph_lane::drum_paint_x`]).
+    graph_lock: Option<Pos2>,
     /// The selected steps, as (pad, step) cells that hold a hit.
     selection: BTreeSet<(u8, usize)>,
     /// The marquee, from its long press: its selection is live.
@@ -727,8 +729,8 @@ pub(crate) fn row_headers(
         // The drum mixer strip's header lines, kept to the header.
         let clip = painter.with_clip_rect(header);
         header_names(&clip, m, header, name, sample, color);
-        // The level meters: vertical at the header's edge, horizontal under the page once the mixer is out (along
-        // the bottom 5 hairlines of the row, under the strip controls' 75 % high layer).
+        // The level meters: vertical at the header's edge, horizontal under the page once the mixer is out (in the
+        // room the strip controls' 75 % high layer leaves at the bottom of the row).
         let full = fold.c == 1.0;
         let level = levels.get(row).map_or([0.0; 2], |p| p.map(meter_level));
         for bar in meter_bars(header, page, full, level, m.t()) {
@@ -782,10 +784,17 @@ pub(crate) fn add_drum(
 }
 
 /// A row's two level-meter bars (L, R) at `levels`, `t` being the hairline (2 hairlines thick, 1 apart).
-/// `full` (the mixer fully out): horizontal along the bottom of the `page` area, filling from the left. Otherwise two
-/// thin vertical bars at the `header`'s right edge, in the 5 hairlines its text leaves, filling from the bottom.
+/// `full` (the mixer fully out): horizontal along the bottom of the `page` area, filling from the left, within the
+/// eighth of the row the strip's centred 75 % page row leaves under it (a short row thins the hairline), so no strip
+/// control covers them (#85). Otherwise two thin vertical bars at the `header`'s right edge, in the 5 hairlines its
+/// text leaves, filling from the bottom.
 fn meter_bars(header: Rect, page: Rect, full: bool, levels: [f32; 2], t: f32) -> [Rect; 2] {
     let level = |i: usize| levels[i].clamp(0.0, 1.0);
+    let t = if full {
+        t.min(page.height() / 8.0 / 5.0)
+    } else {
+        t
+    };
     // Bar i's band: L 5 to 3 hairlines from the edge, R the last 2.
     let band = |edge: f32, i: usize| {
         let far = edge - if i == 0 { 3.0 * t } else { 0.0 };
@@ -837,7 +846,11 @@ impl StepSeqView {
         let loop_beats = clip.map_or(f64::from(sig.bar_beats()), |c| c.loop_len_beats);
         let origin = region::clip_origin(clip);
         let folded = ruler::folded(self.playhead, origin, loop_beats * BEAT);
-        let drawn = ruler::folded(self.playhead + self.lead, origin, loop_beats * BEAT);
+        let drawn = ruler::folded(
+            self.playhead.saturating_add_signed(self.lead),
+            origin,
+            loop_beats * BEAT,
+        );
         let (rect, graph_rect) = lane_split(ui.max_rect(), m, &self.graph);
         // The drum mixer's fold: the header column is 3 U + c·12 U, and the layout follows it every frame.
         let (now, dt) = ui.input(|i| (i.time, i.stable_dt));
@@ -1028,7 +1041,9 @@ impl StepSeqView {
         };
         let live = l.x0 + (drawn / BEAT) as f32 * l.step_w * d as f32;
         let line_x = (self.knob).line_x(ui, m, &at, song_end, live);
-        let bottom = (l.row_top() + rows as f32 * l.pitch).clamp(l.top, l.rect.bottom());
+        // PR #87 (the rotation panic): a screen too short for the lane can leave its rect ending above where it
+        // starts, and `clamp` panics when min is above max; on Android a panic leaves the last frame up, a freeze.
+        let bottom = (l.row_top() + rows as f32 * l.pitch).clamp(l.top, l.rect.bottom().max(l.top));
         let column = Rect::everything_right_of(l.column_right());
         let line = painter.with_clip_rect(painter.clip_rect().intersect(column));
         let span = Rect::from_x_y_ranges(l.grid().x_range(), l.top..=bottom);
@@ -1268,14 +1283,22 @@ impl StepSeqView {
         }
     }
 
-    /// The graph lane's tab for the view `rect`, its icon in the channel colour `ink`: centred 1.4 U from its left,
-    /// over the lane's top or the view's bottom edge. The host calls it after everything it draws over the rows (the
-    /// drum mixer's strips), so that the tab is on top.
-    pub fn graph_knob(&mut self, ui: &mut Ui, cx: &UiCtx, rect: Rect, ink: Color32) {
+    /// The graph lane's tab for the view `rect`, its icon in the channel colour `ink`: centred 1.4 U from its left plus
+    /// the sideways `shift` a drag gave it (PR #87, `Settings::graph_tab_shift`), over the lane's top or the view's
+    /// bottom edge. The host calls it after everything it draws over the rows (the drum mixer's strips), so that the
+    /// tab is on top.
+    pub fn graph_knob(
+        &mut self,
+        ui: &mut Ui,
+        cx: &UiCtx,
+        rect: Rect,
+        ink: Color32,
+        shift: &mut f32,
+    ) {
         let m = cx.m;
         let below = (rect, rect.top() + timeline::ruler_h(m));
         let x = rect.left() + m.u(GRAPH_KNOB_X);
-        (self.graph).tab_below(ui, cx, id().with("graph tab"), below, x, ink);
+        (self.graph).tab_below(ui, cx, id().with("graph tab"), below, (x, shift), ink);
     }
 
     /// The graph lane in the strip `strip`: its items in the header column, the mixer's room left to the host (the
@@ -1364,13 +1387,14 @@ impl StepSeqView {
         // Every drag starts afresh, also after one that an undo cancelled (`Context::stop_dragging`) without an end.
         if response.drag_started() && live && !pinch {
             self.graph_drag = Some((events.to_vec(), false));
+            self.graph_lock = ui.input(|i| i.pointer.press_origin());
         }
         if response.dragged()
             && live
             && let Some(p) = response.interact_pointer_pos()
             && self.graph_drag.is_some()
         {
-            let at = (p.x - l.x0) / l.step_w;
+            let at = (graph_lane::drum_paint_x(&mut self.graph_lock, p, m) - l.x0) / l.step_w;
             let v = if centred {
                 graph_lane::v_centred(values, p.y, m)
             } else {

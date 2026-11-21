@@ -32,6 +32,8 @@
 //! - [`PresetPicker::in_modules`]: a list shown in the Modules browser's place, in the same panel. Its header has the
 //!   Back arrow at its root too, where Back gives [`PickerAction::Back`].
 //! - A long press then a drag on an audio file's row drags the file out to the playlist ([`crate::ui::file_drag`]).
+//! - A Honeydew addition (#109, #123): each folder and file row ends in its mark ([`Mark`]): a folder's `›`,
+//!   a file's extension, an audio file's too.
 //!
 //! - [`PresetPicker::show_mut`] adds `Select` and the ≡ options menu below them, with the file browser's actions
 //!   (SONGS' [`FileActions`]) on the user's files: inside `My Files` and `Recently Deleted`, dimmed at the root, whose
@@ -57,6 +59,10 @@
 //!   listing, even with the search bar shown. The path's folders are joined with `/`.
 //!
 //! Every picker's rows are the side browsers' ([`crate::ui::search_bar::ROW_H`]).
+//!
+//! Honeydew change (#144, #155, #165): `My Files` ends in the library folders the user added on Android
+//! ([`crate::ui::main_menu::library::library_folders`]), after its own rows: places, never selected, and read-only
+//! inside, as a factory folder is. The search leaves them out.
 
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -65,12 +71,12 @@ use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
 
-use eframe::egui::{Area, Context, Id, LayerId, Order, Pos2, Sense};
+use eframe::egui::{Context, Id, Pos2};
 
 use crate::content;
 use crate::project_files::content::{FOLD_CASE, inside};
 use crate::project_files::export::slice;
-use crate::project_files::{DWP_EXT, PRESET_EXT, SAMPLE_EXTS, SFZ_EXT, fits};
+use crate::project_files::{DWP_EXT, PRESET_EXT, SAMPLE_EXTS, SFZ_EXT, fits, is_audio};
 use crate::ui::main_menu::library::RECENTLY_DELETED;
 use crate::ui::main_menu::{
     CONVERTING, FILE_MANAGER, FileActions, MenuState, Opt, SongEntry, SongLibrary, Step, bin_crumb,
@@ -79,9 +85,9 @@ use crate::ui::main_menu::{
 use crate::ui::modules_browser::{
     Chrome, PanelClick, PanelRow, RowKind, SideButton, SidePanel, crumb_text, layout,
 };
-use crate::ui::picker_preview::{Play, SampleStrip, Sound};
+use crate::ui::picker_preview::{KeyStrip, Play, SampleStrip, Sound};
 use crate::ui::popup::{self, PopupItem, PopupResult};
-use crate::ui::search_bar::{Found, Walk, matching};
+use crate::ui::search_bar::{Found, Mark, Walk, matching};
 use crate::ui::{UiCtx, views};
 
 /// The root row that opens the user's folder for the scope.
@@ -168,6 +174,20 @@ impl<'a> Item<'a> {
             Self::Found(f) => f.entry.is_folder,
             Self::Default => false,
         }
+    }
+
+    /// Its mark at the row's end ([`Mark`]): a folder's, else its file's extension. `Default` and the picker's own
+    /// preset files (`own`, what every plain row there is) have none; an audio file always has its extension (Honeydew
+    /// change, #123: the sample picker's own files are audio).
+    fn mark(self, own: &str) -> Option<Mark<'a>> {
+        let path = match self {
+            _ if self.is_folder() => return Some(Mark::Folder),
+            Self::Entry(entry) => &entry.path,
+            Self::Found(found) => &found.entry.path,
+            _ => return None,
+        };
+        let ext = path.extension()?.to_str()?;
+        (is_audio(path) || !ext.eq_ignore_ascii_case(own)).then_some(Mark::Ext(ext))
     }
 }
 
@@ -257,7 +277,15 @@ pub struct PresetPicker {
     found: OnceCell<Vec<Found>>,
     /// The web: a pick of our bundled content waiting for its download ([`content::web::picked`]).
     download: Option<(PathBuf, content::web::Ticket)>,
+    /// Where it keeps its place ([`Self::keep_place`]).
+    place: Option<Id>,
+    /// The library folders, which `My Files` lists after its own rows, read-only (Honeydew change, #144, #155, #165:
+    /// [`crate::ui::main_menu::library::library_folders`]).
+    roots: Vec<SongEntry>,
 }
+
+/// Where a picker was left: its folders open and its scroll.
+type Place = (Vec<SongEntry>, f32);
 
 impl PresetPicker {
     /// A picker for one scope, at its root.
@@ -300,6 +328,8 @@ impl PresetPicker {
             categories: None,
             found: OnceCell::new(),
             download: None,
+            place: None,
+            roots: crate::ui::main_menu::library::library_rows(),
         }
     }
 
@@ -377,6 +407,15 @@ impl PresetPicker {
     /// scrolled into view as the list first shows (a pad's sample). It stops at the deepest folder listed on the way.
     /// Folders and the row match without case where the file system ignores it ([`FOLD_CASE`]).
     pub fn reveal(&mut self, library: &dyn SongLibrary, path: &Path) {
+        self.open_to(library, path);
+        self.picked = Some(Some(path.to_owned()));
+        self.picked_in = self.folders.iter().map(|f| f.path.clone()).collect();
+        self.panel.reveal = true;
+    }
+
+    /// Opens the folders from the root down to `path`, as taps on them would: to the folder `path` names, or a file's
+    /// folder. It stops at the deepest folder listed on the way.
+    pub fn open_to(&mut self, library: &dyn SongLibrary, path: &Path) {
         self.read_factory(library);
         loop {
             // The deepest folder row holding it: a factory folder lies inside the user folder.
@@ -397,14 +436,96 @@ impl PresetPicker {
             self.listing = Some(self.read_open(library, &next.path));
             self.folders.push(next);
         }
-        self.picked = Some(Some(path.to_owned()));
-        self.picked_in = self.folders.iter().map(|f| f.path.clone()).collect();
-        self.panel.reveal = true;
+    }
+
+    /// Issue #131: it keeps where it is left (its folders and scroll) under `id` in `ctx`'s memory,
+    /// which lasts while the app runs, and opens there while still at its root (not opened at a file). Whether it did.
+    pub fn keep_place(&mut self, ctx: &Context, library: &dyn SongLibrary, id: Id) -> bool {
+        self.place = Some(id);
+        let place = ctx.data(|d| d.get_temp::<Place>(id));
+        let Some((folders, scroll_y)) = place.filter(|_| self.folders.is_empty()) else {
+            return false;
+        };
+        // A folder of a merged factory category lists from its sources.
+        self.read_factory(library);
+        (self.folders, self.listing, self.panel.scroll_y) = (folders, None, scroll_y);
+        true
+    }
+
+    /// Issue #98: the preset `by` (−1 or 1) rows on from the file `current`, among the presets of the folder it is listed
+    /// in ([`Self::reveal`]), round and round, in the order the rows show. From `None` (`Default`), or a file no folder
+    /// lists, the first (`by` > 0) or last preset of the root's first folder (Honeydew change, #149: `My Files` where
+    /// the root has none, a plugin's picker). `None` when there is no other to go to.
+    pub fn step(
+        &mut self,
+        library: &dyn SongLibrary,
+        current: Option<&Path>,
+        by: i32,
+    ) -> Option<PathBuf> {
+        self.read_factory(library);
+        if let Some(path) = current {
+            self.reveal(library, path);
+        }
+        let presets = self.presets();
+        let at = current.and_then(|c| presets.iter().position(|p| same_file(p, c)));
+        let (presets, i) = match at {
+            Some(at) => {
+                let i = (at as i32 + by).rem_euclid(presets.len() as i32);
+                (presets, i as usize)
+            }
+            None => {
+                self.folders.clear();
+                let rows = self.rows("");
+                let first = (rows.iter())
+                    .find_map(|item| match item {
+                        Item::Entry(e) if e.is_folder => Some((*e).clone()),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        rows.iter().find_map(|item| match item {
+                            Item::MyFiles(Some(dir)) => Some(folder(MY_FILES, dir)),
+                            _ => None,
+                        })
+                    })?;
+                self.listing = Some(self.read_open(library, &first.path));
+                self.folders.push(first);
+                let presets = self.presets();
+                let i = if by > 0 {
+                    0
+                } else {
+                    presets.len().checked_sub(1)?
+                };
+                (presets, i)
+            }
+        };
+        let next = presets.into_iter().nth(i)?;
+        current.is_none_or(|c| !same_file(&next, c)).then_some(next)
+    }
+
+    /// The open folder's presets, as its rows list them.
+    fn presets(&self) -> Vec<PathBuf> {
+        let rows = self.rows("").into_iter();
+        rows.filter_map(|item| match item {
+            Item::Entry(e) if !e.is_folder => Some(e.path.clone()),
+            _ => None,
+        })
+        .collect()
     }
 
     /// Reads the open folder again: a file came into it from outside the picker (`Import`).
     pub fn reload(&mut self) {
         self.listing = None;
+    }
+
+    /// `My Files` is the open folder.
+    fn in_my_files(&self) -> bool {
+        matches!(&self.folders[..], [open] if Some(&open.path) == self.my_files.as_ref())
+    }
+
+    /// The open folder is a library folder, or one inside it: read-only.
+    fn in_library_folder(&self) -> bool {
+        let open = self.folders.last();
+        open.is_some_and(|f| self.roots.iter().any(|r| f.path.starts_with(&r.path)))
     }
 
     /// The open folder is the second root, or one inside it.
@@ -426,9 +547,30 @@ impl PresetPicker {
         self.panel.auditioned = false;
     }
 
-    /// Releases the audition strip's held note (take it after).
+    /// [`Self::audition_on`] over a drum kit's pick: the strip plays the kit's pads, their notes `pads` in pad order.
+    pub fn audition_pads(&mut self, pads: Vec<u8>) {
+        self.panel.audition.pads = pads;
+        self.audition_on();
+    }
+
+    /// Shows the keys at the bottom of the panel (an instrument's presets, #98), in the channel's colour `ink`, labelled
+    /// as `settings` say: they play its channel. Once: later calls keep them as they are, but for what they light,
+    /// `lit` ([`KeyStrip::lit`]).
+    pub fn keys_on(
+        &mut self,
+        ink: eframe::egui::Color32,
+        settings: &crate::settings::Settings,
+        lit: (u128, u128),
+    ) {
+        (self.panel.keys)
+            .get_or_insert_with(|| KeyStrip::new(ink, settings.clone()))
+            .lit = lit;
+    }
+
+    /// Releases the audition strip's held note and the keys' (take them after).
     pub fn release(&mut self) {
         self.panel.audition.release();
+        self.panel.keys.iter_mut().for_each(KeyStrip::release);
     }
 
     /// Whether the audition strip is on.
@@ -442,9 +584,11 @@ impl PresetPicker {
         self.panel.audition.loading = loading || self.download.is_some();
     }
 
-    /// The audition strip's notes since the last call, for the picked module's channel.
+    /// The audition strip's and the keys' notes since the last call, for the picked module's channel.
     pub fn take_sounds(&mut self) -> Vec<Sound> {
-        self.panel.audition.take_sounds()
+        let mut sounds = self.panel.audition.take_sounds();
+        sounds.extend(self.panel.keys.iter_mut().flat_map(KeyStrip::take_sounds));
+        sounds
     }
 
     /// Shows `strip` for the last pick; any sample playing stops.
@@ -458,6 +602,17 @@ impl PresetPicker {
         plays.extend(strip.take_plays());
         self.panel.sample = Some(strip);
         self.held_plays = plays;
+    }
+
+    /// The sample strip's sample decoded further ([`SampleStrip::grow`]).
+    pub fn grow_sample(
+        &mut self,
+        wave: Option<crate::sample_cache::Waveform>,
+        whole: Option<usize>,
+    ) {
+        if let Some(strip) = &mut self.panel.sample {
+            strip.grow(wave, whole);
+        }
     }
 
     /// The name the sample strip shows, if it shows one.
@@ -547,6 +702,10 @@ impl PresetPicker {
         library: &mut dyn SongLibrary,
         actions: bool,
     ) -> Option<PickerAction> {
+        if let Some(id) = self.place {
+            let place: Place = (self.folders.clone(), self.panel.scroll_y);
+            ctx.data_mut(|d| d.insert_temp(id, place));
+        }
         if self.listing.is_none() {
             self.found = OnceCell::new();
             self.trash = library.trash();
@@ -554,9 +713,10 @@ impl PresetPicker {
                 Some(folder) => self.read_open(library, &folder.path),
                 None => {
                     let bin = self.my_files.as_deref().and_then(|f| library.bin_path(f));
-                    // The Instruments picker's `My Files` is the whole user folder, the bin one of its folders.
-                    let instruments = self.categories.is_some();
-                    self.bin = bin.filter(|bin| actions && !instruments && library.exists(bin));
+                    // A `My Files` that is the whole user folder (the Instruments picker's, the DW Sampler's) has the
+                    // bin as one of its folders: its bin path is none, or the bin itself.
+                    let whole = |bin: &PathBuf| Some(bin) == self.trash.as_ref();
+                    self.bin = bin.filter(|bin| actions && !whole(bin) && library.exists(bin));
                     Vec::new()
                 }
             });
@@ -590,8 +750,8 @@ impl PresetPicker {
         let header = self.header();
         let back = !self.folders.is_empty() || self.nested;
         let mut buttons = vec![SideButton::Search];
-        // The user's presets only: a factory folder and the second root are read-only.
-        let mine = back && !self.in_factory() && !self.in_extra();
+        // The user's presets only: a factory folder, the second root and the library folders are read-only.
+        let mine = back && !self.in_factory() && !self.in_extra() && !self.in_library_folder();
         let instruments = self.categories.is_some();
         // The Instruments picker shows them inside `My Files` only.
         if actions && (mine || !instruments) {
@@ -637,12 +797,15 @@ impl PresetPicker {
                         _ => RowKind::Enabled(item),
                     },
                     picked: self.is_picked(item),
+                    mark: item.mark(self.exts[0]),
                 })
                 .collect()
         });
         let selecting = mine && self.selection.is_some();
+        // A library folder's row is a place: never selected.
+        let place = |e: &SongEntry| self.roots.contains(e);
         let path_of = |item: Item| match item {
-            Item::Entry(e) => Some(e.path.clone()),
+            Item::Entry(e) if !place(e) => Some(e.path.clone()),
             Item::Found(f) => Some(f.entry.path.clone()),
             _ => None,
         };
@@ -667,7 +830,7 @@ impl PresetPicker {
             }
             PanelClick::Row(Item::Bin(path)) => Go::Open(folder(RECENTLY_DELETED, path)),
             PanelClick::Row(Item::Default) => Go::Pick(None, Vec::new()),
-            PanelClick::Row(Item::Entry(e)) if selecting => Go::Toggle(e.path.clone()),
+            PanelClick::Row(Item::Entry(e)) if selecting && !place(e) => Go::Toggle(e.path.clone()),
             PanelClick::Row(Item::Entry(e)) if e.is_folder => Go::Open(e.clone()),
             PanelClick::Row(Item::Entry(e)) => Go::Pick(Some(e.path.clone()), Vec::new()),
             PanelClick::Row(Item::Found(f)) if selecting => Go::Toggle(f.entry.path.clone()),
@@ -1099,7 +1262,15 @@ impl PresetPicker {
                 (b.is_folder.cmp(&a.is_folder)).then_with(|| natural(&a.name, &b.name))
             });
         }
-        rows.into_iter().map(Item::Entry).collect()
+        // `My Files` ends in the library folders.
+        let lower = query.to_lowercase();
+        let roots = (self
+            .in_my_files()
+            .then_some(&self.roots)
+            .into_iter()
+            .flatten())
+        .filter(|e| e.name.to_lowercase().contains(&lower));
+        rows.into_iter().chain(roots).map(Item::Entry).collect()
     }
 
     /// The rows' names, for `query`, once the folders `path` are opened from the root one by one, as clicks would.
@@ -1294,8 +1465,7 @@ fn popup_items(popup: &Popup, state: MenuState) -> Items {
     Items::Answer(std::iter::once(header).chain(choices).collect())
 }
 
-/// `items` in a popup centred on `at`, modal over the panel too: the popup's own backdrop lies under the panel
-/// (`Order::Middle`), so a blocker above the panel takes the clicks outside the popup, and closes it.
+/// `items` in a popup centred on `at` inside the screen, modal over the panel too ([`popup::show`]).
 pub(crate) fn modal<T: Copy>(
     ctx: &Context,
     cx: &UiCtx,
@@ -1303,23 +1473,7 @@ pub(crate) fn modal<T: Copy>(
     at: Pos2,
     items: &[PopupItem<T>],
 ) -> PopupResult<T> {
-    let screen = ctx.content_rect();
-    let blocker = Area::new(id.with("blocker"))
-        .order(Order::Foreground)
-        .fixed_pos(screen.min)
-        .constrain(false)
-        .fade_in(false)
-        .sense(Sense::click_and_drag())
-        .show(ctx, |ui| {
-            ui.allocate_exact_size(screen.size(), Sense::hover())
-        })
-        .response;
-    let mut result = popup::show(ctx, id, at, screen, items, cx);
-    result.close |= blocker.clicked() || blocker.secondary_clicked() || blocker.middle_clicked();
-    // Both above the panel, however a press raised it; the blocker, made first, stays under the popup.
-    ctx.move_to_top(blocker.layer_id);
-    ctx.move_to_top(LayerId::new(Order::Foreground, id));
-    result
+    popup::show(ctx, id, at, ctx.content_rect(), items, cx)
 }
 
 /// A library seen through [`PresetPicker::show`]: it lists and reads, and changes nothing.

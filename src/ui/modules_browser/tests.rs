@@ -1,26 +1,19 @@
 use super::*;
 
 /// The Modules browser's list: `Paste`, `Rack Preset`, `Instrument`, then the sections. The NOTE EFFECT section's five entries are
-/// all the note effects of the registry. Lemon Reverb and Lemon Limiter are built-in plugins (the old tabbed panels of `honeydew_audio::lemon` are not listed any more); the Dynamic EQ, the De-esser, Denoise and the four Dragonfly reverbs, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
-/// 0.4.9's effects and Citrus, Lemon Drum Sampler, Lemon Slicer, Lemon SoundFont Player, Smith and Lemon Drop its built-in plugins (`crate::plugins::builtin`), a
-/// Lemon plugin after its counterpart, the others by name.
+/// all the note effects of the registry. Lemon Reverb and Lemon Limiter are Honeydew's own (`honeydew_audio::lemon`), as is
+/// the Dynamic EQ, the De-esser, Denoise and Half Time. The built-in plugins (`crate::plugins::builtin`) are LEMON STUDIO,
+/// last (#86): the instruments, then the effects, each by name.
 const SPEC: &[(&str, &[&str])] = &[
     ("", &["Paste", "Rack Preset", "Instrument"]),
     (
         "SYNTH",
         &[
             "3x Osc",
-            "Lemon Trio",
-            "Citrus",
             "DW Sampler",
-            "Lemon Sampler",
             "GMSynth",
-            "Lemon Drum Sampler",
-            "Lemon SoundFont Player",
             "MiniSynth",
             "Slicer",
-            "Lemon Slicer",
-            "Smith",
             "SoundFont Player",
             "SuperSaw",
             "Transistor Bass",
@@ -29,10 +22,8 @@ const SPEC: &[(&str, &[&str])] = &[
     (
         "ECHO",
         &[
-            "Lemon Delay",
             "Reverb",
             "Reverb 2",
-            "Lemon Reverb",
             "Dragonfly Hall Reverb",
             "Dragonfly Room Reverb",
             "Dragonfly Plate Reverb",
@@ -50,15 +41,9 @@ const SPEC: &[(&str, &[&str])] = &[
             "Denoise",
             "Distortion",
             "Gate",
-            "Lemon Fast Distortion",
-            "Lemon Soft Clipper",
-            "Lemon Transient Processor",
             "Leveller",
             "Limiter",
-            "Lemon Limiter",
-            "ML Tape",
             "Multiband Compressor",
-            "Press",
             "Waveshaper",
         ],
     ),
@@ -68,11 +53,8 @@ const SPEC: &[(&str, &[&str])] = &[
             "Comb Filter",
             "Dynamic EQ",
             "Equalizer",
-            "Lemon Parametric EQ",
             "Filter",
-            "Lemon Filter",
             "Graphic EQ",
-            "Pulp Filter",
             "Spacer",
             "Spreader",
             "Stereoizer",
@@ -84,35 +66,14 @@ const SPEC: &[(&str, &[&str])] = &[
         &[
             "Analyzer",
             "Chorus",
-            "Lemon Chorus",
             "Flanger",
-            "Lemon Flanger",
-            "Lemon Balance",
-            "Lemon Drop",
-            "Lemon Formula Controller",
-            "Lemon Peak Controller",
-            "Lemon Stereo Enhancer",
-            "Lemon Stereo Shaper",
-            "Lemon Vocoder",
-            "ML De-Esser",
-            "ML Frequency Shift",
-            "ML Meter",
-            "ML Multiband Delay",
-            "ML Phase",
-            "ML Pitch Shift",
-            "ML Reference",
-            "ML Riser",
-            "ML Split",
-            "ML Tuner",
-            "ML Waveshaper",
+            "Half Time",
             "Modulator",
             "MultiFX",
             "Phaser",
-            "Lemon Phaser",
             "Pitcher",
             "Pitcher 2",
             "Tape Stop",
-            "Tesla",
             "Tremolo",
             "Tuner",
             "Wow & Flutter",
@@ -126,6 +87,51 @@ const SPEC: &[(&str, &[&str])] = &[
             "Randomizer",
             "Scale",
             "Transpose",
+        ],
+    ),
+    (
+        "LEMON STUDIO",
+        &[
+            "Citrus",
+            "Lemon Drum Sampler",
+            "Lemon Sampler",
+            "Lemon Slicer",
+            "Lemon SoundFont Player",
+            "Lemon Trio",
+            "Smith",
+            "Lemon Balance",
+            "Lemon Chorus",
+            "Lemon Delay",
+            "Lemon Drop",
+            "Lemon Fast Distortion",
+            "Lemon Filter",
+            "Lemon Flanger",
+            "Lemon Formula Controller",
+            "Lemon Limiter",
+            "Lemon Parametric EQ",
+            "Lemon Peak Controller",
+            "Lemon Phaser",
+            "Lemon Reverb",
+            "Lemon Soft Clipper",
+            "Lemon Stereo Enhancer",
+            "Lemon Stereo Shaper",
+            "Lemon Transient Processor",
+            "Lemon Vocoder",
+            "ML De-Esser",
+            "ML Frequency Shift",
+            "ML Meter",
+            "ML Multiband Delay",
+            "ML Phase",
+            "ML Pitch Shift",
+            "ML Reference",
+            "ML Riser",
+            "ML Split",
+            "ML Tape",
+            "ML Tuner",
+            "ML Waveshaper",
+            "Press",
+            "Pulp Filter",
+            "Tesla",
         ],
     ),
 ];
@@ -162,7 +168,15 @@ fn the_list_is_the_spec_table() {
         .collect();
     assert_eq!(
         headers,
-        ["SYNTH", "ECHO", "LEVEL", "FILTER", "MISC", "NOTE EFFECT"]
+        [
+            "SYNTH",
+            "ECHO",
+            "LEVEL",
+            "FILTER",
+            "MISC",
+            "NOTE EFFECT",
+            "LEMON STUDIO"
+        ]
     );
 }
 
@@ -182,7 +196,7 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
     listed_sorted.sort();
     let current: Vec<u16> = (params::modules().chain(&params::LEMON_MODULES))
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
-        .chain([&params::DE_ESSER, &params::DENOISE])
+        .chain([&params::DE_ESSER, &params::DENOISE, &params::HALF_TIME])
         .chain(params::DRAGONFLY_MODULES)
         .filter(|m| !m.legacy)
         .map(|m| m.id)
@@ -280,10 +294,10 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
         names(&rows("delay")),
         [
             "ECHO",
-            "Lemon Delay",
             "Tape Delay",
             "Trance Delay",
-            "MISC",
+            "LEMON STUDIO",
+            "Lemon Delay",
             "ML Multiband Delay"
         ]
     );
@@ -296,7 +310,13 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
     );
     assert_eq!(
         names(&rows("pa")),
-        ["Paste", "FILTER", "Lemon Parametric EQ", "Spacer"],
+        [
+            "Paste",
+            "FILTER",
+            "Spacer",
+            "LEMON STUDIO",
+            "Lemon Parametric EQ"
+        ],
         "the actions are entries too"
     );
     assert_eq!(
@@ -305,10 +325,10 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "FILTER",
             "Dynamic EQ",
             "Equalizer",
-            "Lemon Parametric EQ",
             "Graphic EQ",
             "Tuned EQ",
-            "MISC",
+            "LEMON STUDIO",
+            "Lemon Parametric EQ",
             "ML Frequency Shift"
         ]
     );
@@ -317,21 +337,20 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
         [
             "Instrument",
             "SYNTH",
-            "Lemon Trio",
-            "Citrus",
             "Transistor Bass",
             "ECHO",
             "Trance Delay",
-            "LEVEL",
-            "Lemon Transient Processor",
-            "FILTER",
-            "Lemon Parametric EQ",
             "MISC",
-            "Lemon Formula Controller",
-            "Lemon Peak Controller",
             "Tremolo",
             "NOTE EFFECT",
             "Transpose",
+            "LEMON STUDIO",
+            "Citrus",
+            "Lemon Trio",
+            "Lemon Formula Controller",
+            "Lemon Parametric EQ",
+            "Lemon Peak Controller",
+            "Lemon Transient Processor",
         ]
     );
     assert!(rows("zzz").is_empty());
@@ -702,8 +721,8 @@ fn the_rows_are_drawn_in_order_down_the_list() {
         "Rack Preset",
         "SYNTH",
         "3x Osc",
-        "Lemon Trio",
         "DW Sampler",
+        "GMSynth",
     ]
     .iter()
     .map(|t| rig.text_at(t).y)
@@ -961,12 +980,12 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Randomizer",
             "Scale",
             "Arpeggiator",
-            // Honeydew's own: 1004 … 1011, then the built-in plugins (Lemon Reverb and Lemon Limiter among them: the
-            // plugins' editors, not the old tabbed panels, which only songs that have them still load).
+            // Honeydew's own: 1002 … 1008 and Dragonfly's 1100 …, then the built-in plugin.
             "Dynamic EQ",
             "Modulator",
             "De-esser",
             "Denoise",
+            "Half Time",
             "Dragonfly Hall Reverb",
             "Dragonfly Room Reverb",
             "Dragonfly Plate Reverb",
@@ -1098,9 +1117,10 @@ fn dragging_scrolls_to_the_end_of_the_list_and_no_further() {
     // The drags pick nothing, and the last row now sits at the bottom of the list.
     assert_eq!(rig.action, None);
     assert!(!rig.shows("Paste"));
-    assert_eq!(rig.text_at("Transpose").y, list.bottom() - 24.0);
-    let at = rig.text_at("Transpose");
-    assert_eq!(rig.click(at), Some(BrowserAction::Pick(48)));
+    assert_eq!(rig.text_at("Tesla").y, list.bottom() - 24.0);
+    let at = rig.text_at("Tesla");
+    let tesla = "clap:org.openstudio.tesla";
+    assert_eq!(rig.click(at), Some(BrowserAction::Plugin(tesla)));
 }
 
 #[test]
@@ -1122,7 +1142,7 @@ fn the_wheel_scrolls_the_list_only_over_it() {
     assert_eq!(rig.text_at("3x Osc").y, first);
     // And at the end.
     rig.wheel(pos2(200.0, 400.0), -5000.0);
-    assert_eq!(rig.text_at("Transpose").y, list.bottom() - 24.0);
+    assert_eq!(rig.text_at("Tesla").y, list.bottom() - 24.0);
 }
 
 #[test]
@@ -1135,7 +1155,7 @@ fn a_narrower_query_clamps_the_scroll_to_the_shorter_list() {
         for _ in 0..12 {
             rig.drag(pos2(200.0, 480.0), pos2(200.0, 120.0));
         }
-        assert!(rig.shows("Transpose"));
+        assert!(rig.shows("Tesla"));
         rig
     };
 
@@ -1167,7 +1187,8 @@ fn the_rows_take_touches_at_rest_while_the_panel_slides_in() {
     // No animation blocks input, and touch handlers never check the animation state. On its 3rd frame the panel is
     // drawn 72 points short of its rest (p = 0.875), but a row takes a touch where it will rest.
     let paste = Rig::new().text_at("Paste");
-    let at = pos2(560.0, paste.y);
+    // Past the drawn panel's right edge (504), left of the scrollbar's grab (the right 1.5 U, #111).
+    let at = pos2(520.0, paste.y);
     let mut rig = Rig {
         ctx: Context::default(),
         browser: ModulesBrowser::default(),
@@ -1522,6 +1543,7 @@ fn bare_frame(
                     sub: None,
                     kind: RowKind::Enabled(()),
                     picked: false,
+                    mark: None,
                 })
                 .collect()
         });
@@ -1582,4 +1604,58 @@ fn the_flash_skips_folders_starts_the_frame_after_the_tap_and_stays_on_its_rows_
     let moved = [("Folder", true), ("New", false), ("Item", false)];
     let shapes = frame(&mut panel, &moved, vec![]);
     assert!(!bare_flash(&ctx, &shapes, 1) && !bare_flash(&ctx, &shapes, 2));
+}
+
+#[test]
+fn a_drag_on_the_scrollbar_moves_the_list_by_its_share_and_a_swipe_on_the_rows_still_scrolls() {
+    // #111: a folder of 1000 samples. The thumb is a finger long (1.5 U) and takes a drag in the band 1.5 U in from the
+    // list's right edge, though the bar drawn is thinner; the list moves by the share of the thumb's travel dragged.
+    let (ctx, mut panel) = (Context::default(), SidePanel::in_place());
+    let names: Vec<_> = (0..1000).map(|i| format!("Kick {i}")).collect();
+    let rows: Vec<_> = names.iter().map(|n| (n.as_str(), false)).collect();
+    let m = metrics();
+    let list = layout(SCREEN, 1.0, &m).list;
+    let range = 1000.0 * m.round_px(m.u(search_bar::ROW_H)) - list.height();
+    let finger = m.u(1.5);
+    let press = |pos, pressed| Event::PointerButton {
+        pos,
+        button: PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::NONE,
+    };
+    let drag = |from: Pos2, to: Pos2| {
+        vec![
+            vec![Event::PointerMoved(from)],
+            vec![press(from, true)],
+            vec![Event::PointerMoved(from.lerp(to, 0.5))],
+            vec![Event::PointerMoved(to)],
+            vec![press(to, false)],
+        ]
+    };
+    let mut t = 0.0;
+    let mut run = |panel: &mut SidePanel, frames: Vec<Vec<Event>>| {
+        for events in frames {
+            t += 1.0 / 60.0;
+            bare_frame(&ctx, panel, t, &rows, events);
+        }
+    };
+    run(&mut panel, vec![vec![]; 3]);
+    let grab = pos2(list.right() - 0.8 * finger, list.top() + finger / 2.0);
+    run(&mut panel, drag(grab, grab + vec2(0.0, 100.0)));
+    let want = 100.0 / (list.height() - finger) * range;
+    assert!(
+        (panel.scroll_y - want).abs() < 1e-2,
+        "{} vs {want}",
+        panel.scroll_y
+    );
+    // A swipe on the rows, in the same band but off the thumb, moves them 1:1.
+    let at = panel.scroll_y;
+    let swipe = pos2(list.right() - finger / 2.0, list.bottom() - 100.0);
+    run(&mut panel, drag(swipe, swipe - vec2(0.0, 120.0)));
+    assert!(
+        (panel.scroll_y - (at + 120.0)).abs() < 1e-2,
+        "{} vs {}",
+        panel.scroll_y,
+        at + 120.0
+    );
 }

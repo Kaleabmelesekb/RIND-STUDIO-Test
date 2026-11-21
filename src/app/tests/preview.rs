@@ -466,8 +466,8 @@ fn turning_preview_on_silences_the_held_note_and_sends_the_clip_alone_from_its_s
 
 #[test]
 fn while_playing_the_engine_loops_the_span_and_a_playhead_before_it_jumps_to_its_start() {
-    // The engine loops, so a playhead at or past the end needs no Seek from the app; one before the loop still jumps
-    // to its start.
+    // The engine loops, so a playhead at or past the end needs no Seek from the app; one before the loop jumps to its
+    // start (the app's Seek, and since PR #87 the engine's own jump for a playhead it finds before the loop).
     let mut rig = Rig::previewable();
     rig.preview();
     rig.app.main_screen.playing = true;
@@ -484,12 +484,12 @@ fn while_playing_the_engine_loops_the_span_and_a_playhead_before_it_jumps_to_its
         rig.frame(vec![]);
         assert_eq!(rig.take(), sent, "{tick}");
     }
-    // The solo engine loops [512, 1024): at or past its end it goes on from 512; before it, it plays into it.
+    // The solo engine loops [512, 1024): at or past its end, or before it, it goes on from 512; inside, from where it is.
     for (from, to) in [
         (1024, 512..520),
         (1500, 512..520),
         (600, 600..608),
-        (100, 100..108),
+        (100, 512..520),
     ] {
         assert!(to.contains(&rig.engine_from(from)), "{from}");
     }
@@ -675,14 +675,17 @@ fn a_clip_offset_by_two_loops_still_loops_its_box() {
 
 #[test]
 fn a_loop_the_engine_never_got_goes_out_once_the_audio_runs_again() {
-    // With the stream failed no engine goes out, so the app does not count its loop as sent.
+    // With the stream failed (and its reopen too, the device gone) no engine goes out, so the app does not count its
+    // loop as sent.
     let mut rig = Rig::previewable();
     rig.rec.0.borrow_mut().failed = true;
+    rig.rec.0.borrow_mut().no_device = true;
     rig.frame(vec![]);
     rig.app.song.play_loop = Some((640, 768));
     rig.app.test_edit = Some(SongEdit::Final);
     rig.frame(vec![]);
     assert_eq!(rig.take(), Vec::<String>::new());
+    rig.rec.0.borrow_mut().no_device = false;
     rig.click(OUTSIDE);
     assert!(rig.take().contains(&"SetLoop 640 768".to_string()));
 }
@@ -786,9 +789,8 @@ fn the_playlist_dims_every_clip_but_the_previewed_one() {
     rig.app.navigate(Nav::Show(View::Playlist));
     rig.frame(vec![]);
     rig.frame(vec![]);
-    // Row 2 spans y 176..240 under the control bar; a beat is 38.4 points from x 48.
-    let row =
-        |from: f32, to: f32| Rect::from_x_y_ranges(from..=to, TOP_BAR + 176.0..=TOP_BAR + 240.0);
+    // Row 2 spans y 176..240; a beat is 38.4 points from x 48.
+    let row = |from: f32, to: f32| Rect::from_x_y_ranges(from..=to, 176.0..=240.0);
     let (first, second) = (row(201.6, 355.0), row(355.2, 508.0));
     let (lit, dimmed) = (note_fills(&rig, first), note_fills(&rig, second));
     assert_eq!(lit.len(), 1, "{lit:?}");

@@ -358,7 +358,7 @@ impl Logic {
                 m.add(MenuItem::item("Enter value..."), Cmd::TypeIn(id.clone()));
                 // Automation belongs to the host: offered when Lemon Studio hosts the editor (host link).
                 m.sep(Cmd::None);
-                m.add(MenuItem::item("Create automation clip").enabled(self.hosted), Cmd::Automate(id.clone()));
+                m.add(MenuItem::item("Create automation clip").enabled(self.hosted || cfg!(feature = "embed")), Cmd::Automate(id.clone()));
                 m.sep(Cmd::None);
                 m.add(MenuItem::item("About Lemon Delay..."), Cmd::About);
                 m

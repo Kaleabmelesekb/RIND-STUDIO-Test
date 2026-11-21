@@ -23,6 +23,7 @@
 //!
 //! The Save dialog's other formats (ZIP, MIDI, the audio renders) and `Quick Render` are [`export`]'s.
 
+use std::borrow::Cow;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -102,6 +103,9 @@ pub const MAX_FILE_BYTES: u64 = if cfg!(target_arch = "wasm32") {
 } else {
     512 << 20
 };
+/// The largest file an import takes unread (issue #91: 2.5 GiB): past [`MAX_FILE_BYTES`], a file a user folder takes
+/// is copied there from disk, never read whole ([`FileEvent::Picked`]).
+pub const MAX_IMPORT_BYTES: u64 = 2560 << 20;
 /// Longer HEAD version strings are ignored, and versions compare at most this many dotted parts.
 const MAX_VERSION_LEN: usize = 64;
 const MAX_VERSION_PARTS: usize = 8;
@@ -178,17 +182,18 @@ pub enum Pick {
     Song,
     /// An audio file for a picker's user folder (its `Import`, [`ProjectFiles::import_audio`]).
     Sample,
-    /// The track menu's `Import MIDI Tracks` on the channel with this id: a MIDI file
-    /// ([`ProjectFiles::pick_midi_tracks`]).
-    MidiTracks(i32),
+    /// A MIDI file for `My MIDI` (the MIDI picker's `Import`, [`ProjectFiles::import_midi`]).
+    Midi,
     /// The theme creator's `Import`: a theme JSON file ([`ProjectFiles::pick_theme`]).
     Theme,
+    /// An audio file or a DW program for the DW Sampler picker's `Import` ([`ProjectFiles::import_program`]).
+    Program,
 }
 
 impl Pick {
     /// The extensions (no dot, any case) the dialog offers and the provider reads: every [`FileKind`] and every type
     /// a user folder takes ([`samples::import_folder`]) for a song, the sample ones for a sample, the MIDI ones for
-    /// `Import MIDI Tracks`.
+    /// a MIDI file.
     pub const fn accept(self) -> &'static [&'static str] {
         match self {
             Pick::Song => &[
@@ -212,8 +217,9 @@ impl Pick {
                 DWP_EXT,
             ],
             Pick::Sample => &SAMPLE_EXTS,
-            Pick::MidiTracks(_) => FileKind::Midi.extensions(),
+            Pick::Midi => FileKind::Midi.extensions(),
             Pick::Theme => &["json"],
+            Pick::Program => &["wav", "flac", "mp3", "ogg", DWP_EXT, SFZ_EXT],
         }
     }
 }
@@ -281,6 +287,10 @@ impl Default for Codec {
 pub enum FileEvent {
     /// The user picked this file (on the web only its name) with these contents.
     Opened(PathBuf, Vec<u8>),
+    /// The user picked this file, too large to read whole ([`MAX_FILE_BYTES`], up to [`MAX_IMPORT_BYTES`]) and of a
+    /// type a user folder takes: unread, at this path, for the import to copy ([`FileProvider::copy`]; a phone's
+    /// picker copy, the provider's own, moves). Or an archive that large, which streams from there (#128).
+    Picked(PathBuf),
     /// Written to this path (on the web: downloaded under this name, a bare name that is taken to be in the folder
     /// the save asked for).
     Saved(PathBuf),
@@ -417,6 +427,9 @@ pub struct ProjectFiles {
     stem_writes: export::StemWrites,
     /// An archive's files, while `Import %d files?` waits for its answer ([`IMPORT_TAG`]).
     importing: Option<Vec<Entry>>,
+    /// Issue #128: the archive the last [`Self::unzip_file`] listed from disk, too large to read whole.
+    #[cfg(not(target_arch = "wasm32"))]
+    streamed: Option<archive::OnDisk>,
     /// The picked folder those files are from, if they are ([`Self::pick_folder`]).
     folder: Option<archive::FolderImport>,
     /// A folder import's summary while its copy runs.
@@ -442,7 +455,7 @@ pub struct ProjectFiles {
     /// writes once written ([`FileProvider::share`]). The Save dialog sets it before each; [`Self::update`] drops one
     /// not taken (a dialog that closed without writing).
     pub send: bool,
-    /// The MIDI file `Import MIDI Tracks` picked, until [`Self::take_midi_tracks`] hands it over.
+    /// The MIDI file `Import MIDI Tracks`' picker picked, until [`Self::take_midi_tracks`] hands it over.
     midi_tracks: Option<MidiTracks>,
     /// The last [`RECENT_STATE`] write, on its worker: the next waits for it, so the last load's lands last.
     #[cfg(not(target_arch = "wasm32"))]
@@ -547,6 +560,8 @@ impl ProjectFiles {
             export_left_out: 0,
             stem_writes: export::StemWrites::default(),
             importing: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            streamed: None,
             folder: None,
             copying: None,
             import_dir: None,
@@ -581,22 +596,19 @@ impl ProjectFiles {
         self.open_pick(Pick::Song);
     }
 
-    /// The track menu's `Import MIDI Tracks` on the channel with id `channel`:
-    /// asks for a `.mid` or `.midi` file. Once it is read, [`Self::take_midi_tracks`] hands it over scanned; a file
-    /// that does not scan shows `Could not load MIDI file. It may be corrupted.` with the detail.
-    pub fn pick_midi_tracks(&mut self, channel: i32) {
-        self.open_pick(Pick::MidiTracks(channel));
-    }
-
-    /// The MIDI file [`Self::pick_midi_tracks`] asked for, once, when it is here.
+    /// The MIDI file [`Self::midi_picked`] took, once.
     pub fn take_midi_tracks(&mut self) -> Option<MidiTracks> {
         self.midi_tracks.take()
     }
 
-    /// The file `Import MIDI Tracks` picked for the channel with id `channel`: scanned for [`Self::take_midi_tracks`],
-    /// or the MIDI load error.
-    fn midi_picked(&mut self, channel: i32, bytes: Vec<u8>) {
+    /// The file `Import MIDI Tracks`' picker (`ui::views::midi_picker`) read for the channel with id `channel`:
+    /// scanned for [`Self::take_midi_tracks`], or `Could not load MIDI file. It may be corrupted.` with the detail.
+    pub(crate) fn midi_picked(&mut self, channel: i32, read: std::io::Result<Vec<u8>>) {
         use crate::smf::import::{LOAD_FAILED, scan};
+        let bytes = match read {
+            Ok(bytes) => bytes,
+            Err(err) => return self.fail(LOAD_FAILED, err.to_string()),
+        };
         match scan(&bytes) {
             Ok(scan) => {
                 self.midi_tracks = Some(MidiTracks {
@@ -775,6 +787,9 @@ impl ProjectFiles {
     /// our factory ([`Replace::Template`]); what it has to show (an error, the newer-version question) shows after
     /// the frame, and a newer project loads through [`Self::update`] once answered.
     fn open_song(&mut self, path: PathBuf) -> Option<Song> {
+        if self.streams(&path) {
+            return self.opened(path, Vec::new());
+        }
         let from: &dyn SongLibrary = match crate::content::is_factory(&path) {
             true => self.factory,
             false => &*self.library,
@@ -1015,6 +1030,14 @@ impl ProjectFiles {
         ))
     }
 
+    /// Issue #128 (a Honeydew change): `path` is an archive on disk too large to read whole ([`MAX_FILE_BYTES`]), which
+    /// opens streamed from there ([`Self::unzip_file`]). Never where the session keeps copies (the web).
+    fn streams(&self, path: &Path) -> bool {
+        !self.copies
+            && file_kind(path) == Some(FileKind::Archive)
+            && std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_FILE_BYTES)
+    }
+
     /// `path` is inside the songs folder, and not in the bin (the web's root, the empty path, holds it); anything is
     /// when there is none.
     fn inside(&self, path: &Path) -> bool {
@@ -1070,12 +1093,8 @@ impl ProjectFiles {
                 event if self.is_theme_export(&event) => self.theme_exported(event),
                 FileEvent::Opened(path, bytes) => {
                     opened = match self.pick.take() {
-                        Some(Pick::Sample) => {
+                        Some(Pick::Sample | Pick::Midi | Pick::Program) => {
                             self.audio_imported(&path, bytes);
-                            None
-                        }
-                        Some(Pick::MidiTracks(channel)) => {
-                            self.midi_picked(channel, bytes);
                             None
                         }
                         Some(Pick::Theme) => {
@@ -1127,13 +1146,21 @@ impl ProjectFiles {
                     self.saving = None;
                     self.save_failed(err);
                 }
-                FileEvent::Failed(title, err) if matches!(self.pick, Some(Pick::Sample)) => {
+                FileEvent::Failed(title, err)
+                    if matches!(self.pick, Some(Pick::Sample | Pick::Midi | Pick::Program)) =>
+                {
                     self.import_failed(title, err);
                 }
                 FileEvent::Failed(title, err) => self.fail(title, err),
                 FileEvent::Located(files) => self.located(song, files),
                 FileEvent::Folder(files) => self.folder_picked(files),
                 FileEvent::Copied(error) => self.folder_copied(error),
+                // Issue #128: an archive too large to read whole opens streamed from disk.
+                FileEvent::Picked(path) if self.streams(&path) => {
+                    self.pick = None;
+                    opened = self.opened(path, Vec::new()).or(opened);
+                }
+                FileEvent::Picked(path) => self.import_unread(path),
                 FileEvent::SaveCancelled(_) => {}
             }
         }
@@ -1150,8 +1177,11 @@ impl ProjectFiles {
             Some(FileKind::Song | FileKind::Template) => None,
             Some(FileKind::Midi) => return self.open_midi(&path, &bytes),
             Some(FileKind::Flp) => return self.open_flp(&path, &bytes, None),
-            Some(FileKind::Archive) => Some(self.unzip(&bytes)?),
-            None if samples::import_folder(&path).is_some() => {
+            Some(FileKind::Archive) => Some(self.unzip_file(&path, &bytes)?),
+            // By its name, as `native::open_path` checks it: a hidden folder above a pick is no archive junk.
+            None if samples::import_folder(Path::new(path.file_name().unwrap_or_default()))
+                .is_some() =>
+            {
                 let name = path.file_name().unwrap_or_default().to_string_lossy();
                 let entry = Entry {
                     path: name.into_owned(),
@@ -1173,22 +1203,29 @@ impl ProjectFiles {
             let flp = |e: &&Entry| file_kind(Path::new(&e.path)) == Some(FileKind::Flp);
             let mut projects = all.iter().filter(flp);
             if let (Some(project), None) = (projects.next(), projects.next()) {
-                return self.open_flp(&path, &project.data, Some(all));
+                let project = self.data_of(project);
+                let project = project
+                    .map_err(|err| self.fail(DECOMPRESS_FAILED, err))
+                    .ok()?;
+                return self.open_flp(&path, &project, Some(all));
             }
         }
         if let Some(entries) = entries.take_if(|all| archive::the_song(all).is_none()) {
             self.ask_import(entries);
+            #[cfg(not(target_arch = "wasm32"))]
+            self.stream_import();
             return None;
         }
         let song = match &entries {
-            Some(all) => &all[archive::the_song(all)?].data[..],
-            None => &bytes[..],
+            Some(all) => self.data_of(&all[archive::the_song(all)?]),
+            None => Ok(Cow::Borrowed(&bytes[..])),
         };
+        let song = song.map_err(|err| self.fail(DECOMPRESS_FAILED, err)).ok()?;
         if song.starts_with(FLM2_MAGIC) {
             self.fail(LOAD_FAILED, FLM2_UNSUPPORTED.into());
             return None;
         }
-        if let Some(version) = saved_version(song).filter(|v| newer(v, FORMAT_VERSION)) {
+        if let Some(version) = saved_version(&song).filter(|v| newer(v, FORMAT_VERSION)) {
             self.message = Some(vec![
                 // The file's version is its format's; the app names its own version.
                 format!(
@@ -1202,7 +1239,7 @@ impl ProjectFiles {
             self.pending = Some((path, bytes));
             return None;
         }
-        self.load_from(path, song, entries.as_deref())
+        self.load_from(path, &song, entries.as_deref())
     }
 
     /// Loads the file `bytes` of `path` once [`Self::opened`] checked it: a song or template, or an archive whose one
@@ -1211,9 +1248,10 @@ impl ProjectFiles {
         if file_kind(&path) != Some(FileKind::Archive) {
             return self.load_from(path, bytes, None);
         }
-        let entries = self.unzip(bytes)?;
-        let song = &entries[archive::the_song(&entries)?].data;
-        self.load_from(path, song, Some(&entries))
+        let entries = self.unzip_file(&path, bytes)?;
+        let song = self.data_of(&entries[archive::the_song(&entries)?]);
+        let song = song.map_err(|err| self.fail(DECOMPRESS_FAILED, err)).ok()?;
+        self.load_from(path, &song, Some(&entries))
     }
 
     /// `.flm` keeps its path (a quick save of one outside the songs folder goes into it, [`Self::quick_save`]); a
@@ -1250,6 +1288,13 @@ impl ProjectFiles {
                             return None;
                         }
                     }
+                } else if let Some(dir) = self.extracted_dir(&path) {
+                    // Issue #157: a song in an archive's extracted folder (SONGS lists them) finds the archive's
+                    // files as the archive's song does.
+                    self.relink_to(&mut song, &dir);
+                } else {
+                    // Issue #168: a Lemon plugin's file that is not where the song has it is looked for beside it.
+                    self.relink_plugin_files(&mut song, None, path.parent());
                 }
                 // Each DW Sampler's program loads now, with its files.
                 crate::panels::cstm::load_dw_programs(
@@ -1306,6 +1351,7 @@ impl ProjectFiles {
         file_kind(&path)?;
         let bytes = match (file.bytes, &file.path) {
             (Some(bytes), _) => bytes.to_vec(),
+            (None, Some(at)) if self.streams(at) => Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
             (None, Some(at)) => match std::fs::File::open(at).map_err(|e| e.to_string()) {
                 Ok(f) => match read_file_limited(f, MAX_FILE_BYTES) {

@@ -52,13 +52,29 @@ fn parts(rect: Rect, v: f32, t: f32, u: f32, px: f32) -> Parts {
     }
 }
 
+/// What of a fader's `rect` lies below its cap at the lowest value: room for a readout (#133), a sliver on a short one.
+pub fn below_cap(rect: Rect, m: &crate::metrics::Metrics) -> Rect {
+    rect.with_min_y(
+        parts(rect, 0.0, m.t(), m.u(1.0), 1.0 / m.ppp())
+            .cap
+            .bottom(),
+    )
+}
+
 /// The track of a fader in `rect`: its value runs up it from 0 at the bottom.
 pub fn fader_track(rect: Rect, m: &crate::metrics::Metrics) -> Rect {
     parts(rect, 0.0, m.t(), m.u(1.0), 1.0 / m.ppp()).track
 }
 
 /// A fader in `c.rect` (no label or value strips): drags as a vertical slider, a double tap resets to `c.default`.
-pub fn fader(ui: &mut Ui, cx: &UiCtx, c: &Control, value: &mut f32) -> Response {
+/// `display` is the value text of its drag bubble.
+pub fn fader(
+    ui: &mut Ui,
+    cx: &UiCtx,
+    c: &Control,
+    value: &mut f32,
+    display: impl Fn(f32) -> String,
+) -> Response {
     let (m, colors) = (cx.m, &cx.theme.colors);
     let at = |v| parts(c.rect, v, m.t(), m.u(1.0), 1.0 / m.ppp());
     let len = at(0.0).track.height();
@@ -66,7 +82,7 @@ pub fn fader(ui: &mut Ui, cx: &UiCtx, c: &Control, value: &mut f32) -> Response 
         len,
         horizontal: false,
     };
-    let (response, v) = drag_control(ui, cx, c, value, law);
+    let (response, v) = drag_control(ui, cx, c, value, law, &display);
     let p = at(v);
     let (menu_fill, painter) = (colors.menu_fill.to_color32(), ui.painter());
     // Desktop hover, as the slider's.

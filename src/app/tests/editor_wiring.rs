@@ -24,7 +24,7 @@ fn strip(row: usize, ctl: Ctl) -> egui::Id {
 
 /// The keyboard band at the default panel height, where the drum view has its pads, and the centre of pad `index`
 /// there.
-const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, SCREEN_H));
+const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, 540.0));
 fn pad(index: usize) -> Pos2 {
     pad_in(crate::ui::keyboard_settings::PANEL_H, index)
 }
@@ -33,7 +33,7 @@ fn pad(index: usize) -> Pos2 {
 /// panel only the first row (pads 0–6) is on the screen: the grid keeps its least size and overflows below.
 pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     let keys = Regions::sized(screen, panel_u * U, 1, &m).keyboard;
     let area = crate::ui::keyboard_settings::pads_rect(keys, &m);
     drums::pad_grid(area, 1170.0, U).centres[index]
@@ -42,7 +42,7 @@ pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
 /// The bottom editors' one close X (`ui::split::close_button`).
 pub(super) const EDITOR_CLOSE: &str = "editor_close";
 /// The top of a clip editor: the area's top, as it opens fully expanded (`ui::split`).
-pub(super) const EDITOR_TOP: f32 = TOP_BAR;
+pub(super) const EDITOR_TOP: f32 = 0.0;
 
 /// The gap between a drum editor's header column and its grid: t = ceil(U/16) px.
 const T: f32 = 2.0;
@@ -1244,7 +1244,7 @@ fn the_keys_take_no_touch_with_the_master_alone_and_key_lock_snaps_a_major_songs
     let mut rig = Rig::with_synth();
     rig.app.song.key_scale = crate::song::scales::scale_to_stored(0);
     for (x, key) in [(1.8, 48), (2.2, 50), (5.0, 52)] {
-        let at = pos2(x * U, TOP_BAR + 445.5);
+        let at = pos2(x * U, 445.5);
         rig.press(at);
         rig.release(at);
         let on = rig.take().first().cloned().unwrap_or_default();
@@ -1317,8 +1317,10 @@ fn a_new_drums_channels_default_drumset_shows_and_its_pads_play_it() {
     rig.app.add_channel(ChannelKind::Drums, 0);
     super::rack_wiring::picker_row(&mut rig, 1);
     rig.frame(vec![]);
+    // The picker stays for the next kit (#88): a click right of it closes it.
+    assert_eq!(rig.app.nav.overlays.len(), 1);
+    rig.click(pos2(1000.0, 300.0));
     assert!(rig.app.nav.overlays.is_empty());
-    rig.click(OUTSIDE);
     rig.edit(1);
     rig.slide_split();
     rig.frame(vec![]);
@@ -1357,7 +1359,7 @@ fn a_new_drums_channels_default_drumset_shows_and_its_pads_play_it() {
         rig.frame(vec![]);
     }
     let pad = |i| pad_in(8.0, i);
-    assert!(pad(kit.slots.len()).y < SCREEN_H);
+    assert!(pad(kit.slots.len()).y < 540.0);
     for i in 0..kit.slots.len() {
         rig.press(pad(i));
         rig.release(pad(i));
@@ -1429,6 +1431,21 @@ fn ghost_notes_show_another_channels_notes_while_the_setting_is_on() {
     rig.app.settings.ghost_notes = false;
     rig.frame(vec![]);
     assert_eq!(rig.rects(ghost).len(), 0);
+    // The roll's snap menu shows or hides them too (#152): `Show` (3, 9) and `Hide` (3, 10) under `Ghosts` set the
+    // setting. A right click opens it; the playhead knob, at beat 0 over the Snap button, at beat 2.
+    rig.rec.0.borrow_mut().tick = 256;
+    let pick = |rig: &mut Rig, cell: (usize, usize)| {
+        rig.secondary_click(rig.rect_of(roll("snap")).center());
+        rig.frame(vec![]);
+        rig.click_id(roll("snap_menu").with(cell));
+        rig.frame(vec![]);
+    };
+    pick(&mut rig, (3, 9));
+    assert!(rig.app.settings.ghost_notes);
+    assert_eq!(rig.rects(ghost).len(), 1);
+    pick(&mut rig, (3, 10));
+    assert!(!rig.app.settings.ghost_notes);
+    assert_eq!(rig.rects(ghost).len(), 0);
 }
 
 /// A key held on the keyboard lights its row in the roll of its channel (the channel colour α 0.1), until it is let go.
@@ -1459,7 +1476,7 @@ fn a_held_keyboard_key_lights_its_row_in_the_roll() {
 }
 
 #[test]
-fn the_rolls_c_labels_follow_the_middle_c_setting() {
+fn the_rolls_key_labels_follow_the_middle_c_and_key_names_settings() {
     let mut rig = Rig::with_synth();
     rig.edit(1);
     rig.slide_split();
@@ -1469,6 +1486,15 @@ fn the_rolls_c_labels_follow_the_middle_c_setting() {
     rig.app.settings.middle_c_is_c4 = true;
     rig.frame(vec![]);
     assert_eq!(rig.texts_in(keys), ["C4"]);
+    // `Show key names on keyboard and piano roll` (#77): the other keys' names too, with no octave, and under
+    // Chromatic none on a black key, as on the keyboard.
+    rig.app.settings.key_names = true;
+    rig.frame(vec![]);
+    let names = rig.texts_in(keys);
+    for name in ["E", "D", "C4", "B", "A"] {
+        assert!(names.contains(&name.to_owned()), "{name}: {names:?}");
+    }
+    assert!(!names.iter().any(|n| n.contains('#')), "{names:?}");
 }
 
 #[test]
@@ -1541,9 +1567,9 @@ fn while_playing_the_playlists_and_the_rolls_play_boxes_fade_out_and_only_their_
 /// line (`text`, narrower than U) runs down the track area.
 fn playlist_playhead(rig: &Rig) -> (Option<(f32, u8)>, bool) {
     let text = rig.app.theme.colors.text.to_color32();
-    let tracks = egui::Rangef::new(TOP_BAR + RULER, PANEL_TOP);
+    let tracks = egui::Rangef::new(RULER, PANEL_TOP);
     let line = (rig.rects(text).iter()).any(|r| r.width() < U && r.y_range() == tracks);
-    (rig.play_box_in(TOP_BAR..TOP_BAR + RULER), line)
+    (rig.play_box_in(0.0..RULER), line)
 }
 
 #[test]
@@ -2251,7 +2277,7 @@ fn a_playlist_region_edit_rebuilds_once_and_is_one_undo_step_that_keeps_the_loop
     rig.frame(vec![]);
     rig.take();
     // Beats 2 to 6 on the ruler (a beat is 38.4 points from x 48): the clip's first two beats go.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.region(beat(2.0), beat(6.0), "Delete space");
     assert_eq!(rig.clip_spans(), [(256, 256.0)]);
     // The region's loop reached the engine; the edit clears it, and the new engine reads none.
@@ -2264,6 +2290,46 @@ fn a_playlist_region_edit_rebuilds_once_and_is_one_undo_step_that_keeps_the_loop
     assert_eq!(rig.app.song.play_loop, Some((0, 128)));
 }
 
+/// `Section…`, the playlist region menu's last item (#80), makes the range's song section, one undo step, and opens its
+/// dialog; a tap on its name on the ruler opens the dialog again, whose `Delete` removes it.
+#[test]
+fn the_playlist_region_menus_section_item_makes_a_section_whose_name_on_the_ruler_opens_it() {
+    let mut rig = Rig::with_synth();
+    rig.frame(vec![]);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
+    rig.region(beat(2.0), beat(6.0), "Section…");
+    rig.frame(vec![]);
+    let sections = |rig: &Rig| -> Vec<(u32, u32, String)> {
+        (rig.app.song.sections.iter())
+            .map(|s| (s.start, s.end, s.name.clone()))
+            .collect()
+    };
+    let made = [(256, 768, "Section 1".to_owned())];
+    assert_eq!(sections(&rig), made);
+    assert_eq!(rig.app.song.play_loop, None);
+    let open = |rig: &Rig| {
+        matches!(
+            rig.overlays().last(),
+            Some(Overlay::SectionSettings { section: 0, .. })
+        )
+    };
+    assert!(open(&rig));
+    rig.frame(key_tap(egui::Key::Escape, egui::Modifiers::NONE));
+    rig.frame(vec![]);
+    assert!(!open(&rig));
+    rig.frame(z(egui::Modifiers::NONE));
+    assert_eq!(sections(&rig), []);
+    rig.frame(z(egui::Modifiers::SHIFT));
+    assert_eq!(sections(&rig), made);
+    rig.frame(vec![]);
+    rig.click(rig.text_center("Section 1"));
+    rig.frame(vec![]);
+    assert!(open(&rig));
+    rig.click_id(egui::Id::new("section_settings").with("delete"));
+    rig.frame(vec![]);
+    assert_eq!((sections(&rig), open(&rig)), (vec![], false));
+}
+
 #[test]
 fn a_play_loop_is_no_undo_step_even_when_a_final_edit_follows_it() {
     let mut rig = Rig::with_synth();
@@ -2273,7 +2339,7 @@ fn a_play_loop_is_no_undo_step_even_when_a_final_edit_follows_it() {
     rig.frame(vec![]);
     rig.app.files.saved();
     // A loop on the playlist's ruler: a long press on beat 2 dragged to beat 6 (a beat is 38.4 points from x 48).
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.press(beat(2.0));
     rig.next_frame_at(rig.time + 0.31);
     rig.frame(vec![]);
@@ -2335,7 +2401,7 @@ fn a_tap_on_any_ruler_sets_the_shared_playhead_or_stops_a_playing_transport() {
     let mut rig = Rig::with_synth();
     rig.app.song.channels[1].lanes[0].add_clip(512, 8.0);
     // The playlist's ruler: beat 3 (a beat is 38.4 points from x 48).
-    let ruler = pos2(48.0 + 3.1 * 38.4, TOP_BAR + 24.0);
+    let ruler = pos2(48.0 + 3.1 * 38.4, 24.0);
     rig.click(ruler);
     assert_eq!(rig.take(), ["Seek 384"]);
     rig.rec.0.borrow_mut().tick = 384;
@@ -2371,7 +2437,7 @@ fn the_playhead_knob_takes_its_own_taps_and_the_ruler_beside_it_keeps_its_gestur
     rig.rec.0.borrow_mut().tick = 384;
     rig.frame(vec![]);
     // Stopped at beat 3; 0.6 beat to its right is on the box (a beat is 38.4 points from x 48): a tap plays.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.click(beat(3.6));
     assert_eq!(rig.take(), ["Play"]);
     rig.click(PLAY);
@@ -2503,6 +2569,9 @@ fn a_drag_in_the_drum_editors_graph_lane_is_heard_once_and_undone_in_one_step() 
     let bars = rig.rect_of(steps("graph"));
     let (a, b) = (rig.step(0, 0).x, rig.step(0, 2).x);
     rig.press(pos2(a, bars.center().y));
+    // A clear sideways move first, so the drag paints across the steps (#127: a mostly vertical one keeps to its
+    // first column).
+    rig.drag_to(pos2(b, bars.center().y));
     rig.drag_to(pos2(b, bars.bottom() + 10.0));
     assert_eq!(values_of(&hits(&rig), Prop::Velocity), [127, 1]);
     assert_eq!(rig.take(), Vec::<String>::new());
@@ -3089,6 +3158,8 @@ mod samples {
     /// In the open sample picker: `My Files`, then its folder `folder` (0 `My Recordings`, 1 `My Samples`), then that
     /// folder's first file; then it closes the picker, which stays open after a pick.
     fn pick(rig: &mut Rig, folder: usize) {
+        // From the root, wherever the picker was left (issue #131).
+        super::rack_wiring::picker_root(rig);
         picker_row(rig, 0);
         picker_row(rig, folder);
         picker_row(rig, 0);
@@ -3178,7 +3249,7 @@ mod samples {
                 ],
                 "grid {grid}"
             );
-            super::rack_wiring::close_picker(&mut rig);
+            rig.click(pos2(1000.0, 300.0));
             assert_eq!(rig.overlays(), []);
             let slot = &rig.kit().slots[1];
             assert_eq!(slot.file.path, user("My Samples/Kick 01.wav"));
@@ -3461,11 +3532,12 @@ mod samples {
                 channel: 1,
                 target: PresetTarget::Drumset,
             };
-            assert_eq!(rig.overlays(), [picker]);
+            assert_eq!(rig.overlays(), std::slice::from_ref(&picker));
             picker_row(&mut rig, 0);
             picker_row(&mut rig, 0);
             rig.frame(vec![]);
-            assert_eq!(rig.overlays(), []);
+            // The picker stays for the next kit (#88).
+            assert_eq!(rig.overlays(), [picker]);
             assert_eq!(
                 rig.take(),
                 [
@@ -3475,6 +3547,7 @@ mod samples {
                 ],
                 "grid {grid}"
             );
+            rig.click(pos2(1000.0, 300.0));
             assert_eq!(names(rig.kit()), names(&kit));
             // The kit's last id is not undone, so no pad id comes back.
             let last = rig.kit().file.last_slot_id;
@@ -3896,7 +3969,7 @@ fn a_keys_area_0_tall_hides_the_pads_and_a_press_there_plays_nothing() {
     rig.frame(vec![]);
     rig.app.settings.preferred_kbd_size = 4.75;
     // Pads: 6-point paths under the bar (the keyboard-settings icon's keys are 6-point paths too).
-    let under_bar = SCREEN_H - (4.75 - 1.75) * U;
+    let under_bar = 540.0 - (4.75 - 1.75) * U;
     let hexes = |rig: &Rig| {
         (rig.out.shapes.iter())
             .filter(|s| match &s.shape {
@@ -3956,7 +4029,7 @@ fn rec_armed_gives_the_step_knob_its_record_icon_and_a_tap_on_the_knob_plays() {
 #[test]
 fn the_keyboard_panel_is_control_fill_under_a_1_px_background_line_behind_the_piano_and_the_pads() {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     let regions = Regions::sized(screen, crate::ui::keyboard_settings::PANEL_H * U, 1, &m);
     let panel = Rect::from_min_max(regions.transport.min, regions.keyboard.max);
     let on_top = |rig: &Rig, at: Pos2| {
@@ -4027,7 +4100,7 @@ fn the_keys_outside_the_span_of_the_channels_instrument_ranges_are_disabled() {
     // E4 (52) and D5 (62) are in range, low on their keys; D#4 (51) and D#5 (63), high on theirs, are not.
     assert_eq!(on_top(E4), Some(white));
     assert_eq!(on_top(pos2(17.0 * U, LOW)), Some(white));
-    let high = KEYS_TOP + 0.3 * (SCREEN_H - KEYS_TOP);
+    let high = KEYS_TOP + 0.3 * (540.0 - KEYS_TOP);
     assert_eq!(on_top(pos2(4.0 * U, high)), Some(black_off));
     assert_eq!(on_top(pos2(18.0 * U, high)), Some(black_off));
 }
@@ -4285,4 +4358,182 @@ fn clear_and_fill_are_changes() {
         assert_eq!(rig.take(), log);
         assert!(rig.app.files.modified(), "{item:?}");
     }
+}
+
+/// PR #87: GENERATE shows in the transport bar in the piano roll only and opens the roll's Generate panel, whose
+/// preview goes into the clip and plays while the panel is open, a new seed's too without stopping, and
+/// whose `Apply` keeps the chords and melody in the clip as one undo step.
+#[test]
+fn generate_writes_chords_and_a_melody_into_the_rolls_clip_in_one_undo_step() {
+    let mut rig = Rig::with_drums_and_synth();
+    rig.click(OUTSIDE);
+    let generate = egui::Id::new(("transport", "generate"));
+    assert!(
+        rig.ctx.read_response(generate).is_none(),
+        "the playlist has none"
+    );
+    rig.edit(2);
+    rig.slide_split();
+    let notes = |rig: &Rig| rig.app.song.channels[2].lanes[0].clips[0].events.len();
+    let played = |rig: &Rig| {
+        let song = rig.app.audio.built_song().expect("an engine");
+        song.channels[2].lanes[0].clips[0].events.clone()
+    };
+    assert_eq!(notes(&rig), 0);
+    rig.click(PLAY);
+    rig.click_id(generate);
+    rig.frame(vec![]);
+    assert!(notes(&rig) > 6, "the preview is in the clip");
+    assert_eq!(
+        played(&rig),
+        rig.app.song.channels[2].lanes[0].clips[0].events
+    );
+    let first = played(&rig);
+    rig.click_id(roll("generate").with("new seed"));
+    rig.frame(vec![]);
+    assert_ne!(played(&rig), first, "the new seed's preview plays");
+    assert!(rig.app.main_screen.playing);
+    rig.click_id(roll("generate").with("apply"));
+    // Two bars of Pop: a triad a bar and a melody over them.
+    assert!(notes(&rig) > 6, "{}", notes(&rig));
+    let before = rig.app.history.undo().expect("an undo step");
+    let clips = &before.channels[2].lanes[0].clips;
+    assert_eq!(clips.iter().map(|c| c.events.len()).sum::<usize>(), 0);
+}
+
+/// #107: the Generate panel's dropdowns open one at a time and above the panel (a tap on another one closes the open
+/// one first), and the panel stays inside the screen beside a roll narrowed by the rack, where a tap on the rack, outside
+/// the panel, closes it.
+#[test]
+fn the_generate_panels_dropdowns_open_one_at_a_time_and_a_tap_outside_closes_it() {
+    let mut rig = Rig::with_drums_and_synth();
+    rig.screen = vec2(800.0, 540.0);
+    rig.edit(2);
+    rig.slide_split();
+    rig.open_rack(2);
+    rig.slide_rack();
+    let panel = roll("generate");
+    let popup = |name: &str| panel.with(name).with("item popup");
+    // Drawn in the last frame: `read_response` would also give the frame before's.
+    let drawn = |rig: &Rig, id: egui::Id| {
+        let layer = egui::LayerId::new(egui::Order::Foreground, id);
+        rig.ctx.memory(|m| m.areas().visible_last_frame(&layer))
+    };
+    rig.click_id(egui::Id::new(("transport", "generate")));
+    rig.frame(vec![]);
+    let rect = rig
+        .ctx
+        .memory(|m| m.area_rect(panel))
+        .expect("the panel shows");
+    assert!(rect.left() >= 0.0, "{rect:?} is off the screen");
+    rig.click_id(panel.with("bars"));
+    rig.frame(vec![]);
+    assert!(drawn(&rig, popup("bars")));
+    // A tap on another dropdown closes the open one, and opens nothing over it; the next tap opens it.
+    rig.click_id(panel.with("octave"));
+    rig.frame(vec![]);
+    assert!(!drawn(&rig, popup("bars")) && !drawn(&rig, popup("octave")));
+    rig.click_id(panel.with("octave"));
+    rig.frame(vec![]);
+    assert!(drawn(&rig, popup("octave")));
+    // Above the panel, and a press on the panel beside it closes it.
+    let cell = (rig
+        .ctx
+        .read_response(popup("octave").with((0_usize, 0_usize))))
+    .unwrap()
+    .rect
+    .center();
+    let layer = egui::LayerId::new(egui::Order::Foreground, popup("octave"));
+    assert_eq!(rig.ctx.layer_id_at(cell), Some(layer));
+    rig.click(rect.left_top() + vec2(U, U));
+    rig.frame(vec![]);
+    assert!(!drawn(&rig, popup("octave")));
+    assert!(drawn(&rig, panel), "one tap closes one level");
+    // A tap on the rack, outside the panel, closes it.
+    rig.click(pos2(rig.screen.x - 2.0 * U, 200.0));
+    rig.frame(vec![]);
+    assert!(!drawn(&rig, panel), "the panel closed");
+}
+
+/// Bars of Generate past the clip's end grow the clip, its loop and its set length, in the preview too
+/// (so that all of it plays); `Cancel` gives the clip its notes and length back with no undo step, and `Apply` keeps
+/// the grown clip as one.
+#[test]
+fn generates_bars_grow_the_clip_in_one_undo_step_and_cancel_restores_it() {
+    let mut rig = Rig::with_drums_and_synth();
+    rig.click(OUTSIDE);
+    rig.edit(2);
+    rig.slide_split();
+    // One bar with a length of its own, which other edits keep.
+    rig.app.song.channels[2].lanes[0].clips[0].visible_len_beats = 4.0;
+    rig.app.song_edited(SongEdit::Final, 0);
+    let clip = |rig: &Rig| {
+        let c = &rig.app.song.channels[2].lanes[0].clips[0];
+        (c.loop_len_beats, c.visible_len_beats, c.events.len())
+    };
+    let panel = roll("generate");
+    let four_bars = |rig: &mut Rig| {
+        rig.click_id(egui::Id::new(("transport", "generate")));
+        rig.frame(vec![]);
+        rig.click_id(panel.with("bars"));
+        for _ in 0..30 {
+            rig.frame(vec![]);
+        }
+        rig.click_id(
+            panel
+                .with("bars")
+                .with("item popup")
+                .with((0_usize, 2_usize)),
+        );
+        rig.frame(vec![]);
+    };
+    let steps = rig.app.history.steps();
+    four_bars(&mut rig);
+    let (lp, len, notes) = clip(&rig);
+    assert_eq!((lp, len), (16.0, 16.0), "the preview grows it");
+    assert!(notes > 0);
+    rig.click_id(panel.with("cancel"));
+    rig.frame(vec![]);
+    assert_eq!(clip(&rig), (4.0, 4.0, 0));
+    assert_eq!(rig.app.history.steps(), steps);
+    four_bars(&mut rig);
+    rig.click_id(panel.with("apply"));
+    rig.frame(vec![]);
+    assert_eq!((clip(&rig).0, clip(&rig).1), (16.0, 16.0));
+    assert_eq!(rig.app.history.steps(), steps + 1);
+    let before = rig.app.history.undo().expect("an undo step");
+    let c = &before.channels[2].lanes[0].clips[0];
+    assert_eq!(
+        (c.loop_len_beats, c.visible_len_beats, c.events.len()),
+        (4.0, 4.0, 0)
+    );
+}
+
+/// The transport's Play stays live under the Generate panel, so its preview can be heard: a tap on it,
+/// and Space, start and stop playback, and the panel stays open.
+#[test]
+fn play_and_space_play_and_stop_under_the_generate_panel_which_stays_open() {
+    let mut rig = Rig::with_drums_and_synth();
+    rig.click(OUTSIDE);
+    rig.edit(2);
+    rig.slide_split();
+    let layer = egui::LayerId::new(egui::Order::Foreground, roll("generate"));
+    let open = |rig: &Rig| rig.ctx.memory(|m| m.areas().visible_last_frame(&layer));
+    rig.click_id(egui::Id::new(("transport", "generate")));
+    rig.frame(vec![]);
+    assert!(open(&rig));
+    rig.click(PLAY);
+    rig.frame(vec![]);
+    assert!(rig.app.main_screen.playing);
+    assert!(open(&rig), "the panel stays open");
+    let space = |pressed| egui::Event::Key {
+        key: egui::Key::Space,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    rig.frame(vec![space(true), space(false)]);
+    assert!(!rig.app.main_screen.playing);
+    assert!(open(&rig));
 }

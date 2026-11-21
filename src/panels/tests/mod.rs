@@ -283,6 +283,7 @@ fn every_panel_fits_its_module() {
         .chain([&crate::params::DYNAMIC_EQ, &crate::params::MODULATOR])
         .chain([&crate::params::DE_ESSER, &crate::params::DENOISE])
         .chain(crate::params::DRAGONFLY_MODULES)
+        .chain([&crate::params::HALF_TIME])
     {
         if let Some(panel) = panel_for(spec.id) {
             problems.extend(check(spec, panel));

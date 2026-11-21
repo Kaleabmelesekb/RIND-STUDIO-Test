@@ -24,6 +24,7 @@ use super::chunk::{
     MAGIC_TMPL, MAX_FILE_SIZE, Prefix, PrefixKind, file_chunks, text,
 };
 use crate::params;
+use crate::song::Section;
 use crate::song::plugin::{self, PluginParam, PluginRef};
 use crate::song::points::{Shape, ShapeKind};
 use crate::song::{
@@ -419,6 +420,34 @@ impl Reader {
                         self.unknown(&chunk, &mut song.file.unknown_chunks)?;
                     }
                 }
+                b"HDSe" => {
+                    self.charge(2 * size_of::<Section>() + chunk.payload.len(), &chunk.path)?;
+                    match section(&chunk) {
+                        Some(section) => song.sections.push(section),
+                        None => self.unknown(&chunk, &mut song.file.unknown_chunks)?,
+                    }
+                }
+                // The project sample rate (PR #87, `flm::write`): a rate it does not offer is kept as unknown.
+                b"HDSR" => match <[u8; 4]>::try_from(chunk.payload).map(u32::from_le_bytes) {
+                    Ok(rate) if crate::song::SAMPLE_RATES.contains(&rate) => {
+                        song.sample_rate = rate
+                    }
+                    _ => self.unknown(&chunk, &mut song.file.unknown_chunks)?,
+                },
+                // PROJECT's tag fields (#139, `flm::write`): four `vstr32` texts, else kept as unknown.
+                b"HDTg" => {
+                    self.charge(chunk.payload.len(), &chunk.path)?;
+                    let mut r = chunk.reader();
+                    let mut field = || r.vstr32().ok().map(text);
+                    match [field(), field(), field(), field()] {
+                        [Some(album), Some(genre), Some(year), Some(comment)] => {
+                            let meta = &mut song.file.meta;
+                            (meta.album, meta.genre, meta.year, meta.comment) =
+                                (album, genre, year, comment);
+                        }
+                        _ => self.unknown(&chunk, &mut song.file.unknown_chunks)?,
+                    }
+                }
                 _ => self.unknown(&chunk, &mut song.file.unknown_chunks)?,
             }
         }
@@ -804,8 +833,13 @@ impl Reader {
                         self.charge(4 * values.len(), &child.path)?;
                         module.params = values;
                     } else {
+                        let saved = values.len();
                         for (param, value) in module.params.iter_mut().zip(values) {
                             *param = value;
+                        }
+                        // Half Time's Length moved to a param of its own (GitHub #122).
+                        if type_id == honeydew_audio::half_time::HALF_TIME {
+                            honeydew_audio::half_time::upgrade(&mut module.params, saved);
                         }
                     }
                 }
@@ -983,6 +1017,8 @@ impl Reader {
                 b"DESc" if !seen_desc => seen_desc = true,
                 // A hidden track (`flm::write`).
                 b"HDHd" => lane.hidden = true,
+                // A collapsed track (`flm::write`).
+                b"HDCo" => lane.collapsed = true,
                 _ => self.unknown(&child, &mut lane.file.unknown_chunks)?,
             }
         }
@@ -1191,6 +1227,19 @@ fn head(chunk: &Chunk<'_>, song: &mut Song) -> Result<Option<i32>, FlmError> {
 }
 
 /// `META`: fields that are cut short take their loader defaults.
+/// An `HDSe` (`flm::write`); `None` for a short one or one with no range or hue, which the reader keeps as unknown.
+fn section(chunk: &Chunk<'_>) -> Option<Section> {
+    let mut r = chunk.reader();
+    let (start, end, hue) = (r.u32().ok()?, r.u32().ok()?, r.f32().ok()?);
+    let name = text(r.vstr32().ok()?);
+    (start < end && hue.is_finite()).then_some(Section {
+        start,
+        end,
+        name,
+        hue,
+    })
+}
+
 fn meta(bytes: &[u8]) -> MetaState {
     let field = |offset: usize, size: usize| {
         let field = bytes.get(offset..)?;
@@ -1306,15 +1355,14 @@ fn legacy_reverb_params(params: &mut [f32], legacy: &[f32]) {
     }
 }
 
-/// A sample path a file can hold: a shorthand into the content or user root.
-fn writable(path: &ContentPath) -> bool {
-    matches!(
-        path,
-        ContentPath::Shorthand {
-            root: ContentRoot::App | ContentRoot::User,
-            ..
-        }
-    )
+/// A sample path a file can hold: a shorthand into the content or user root, or (Honeydew change, #144) an absolute
+/// path, a library folder's file, which reads only while its folder is added
+/// ([`crate::project_files::ProjectFiles::resolve`]).
+pub(super) fn writable(path: &ContentPath) -> bool {
+    match path {
+        ContentPath::Shorthand { root, .. } => matches!(root, ContentRoot::App | ContentRoot::User),
+        ContentPath::Plain(path) => std::path::Path::new(path).is_absolute(),
+    }
 }
 
 /// The channel's lane order, kind, name and kit, once its rack and CHNL are read.

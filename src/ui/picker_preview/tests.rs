@@ -129,34 +129,93 @@ fn a_sample_strip_plays_its_pick_from_the_start_once_decoded_and_stops_once() {
 }
 
 #[test]
-fn the_strips_waveform_is_a_quad_a_device_pixel_a_flat_one_a_1_px_line_each() {
-    // The waveform strip's law: a column a device pixel; a column with < 1 px range is drawn as a 1 px line. A constant
-    // 0.5 has no range anywhere.
-    let mut strip = SampleStrip::new("Kick".into(), Some(wave(100)));
-    let panel = Rect::from_min_size(pos2(0.0, 0.0), vec2(390.0, 120.0));
-    let mut off = crate::ui::offscreen::Offscreen::new();
-    let mut wave_rect = Rect::NOTHING;
-    let shapes = off.frame(vec![], &mut |ui, cx| {
-        wave_rect = SampleStrip::layout(panel, cx)[2];
-        strip.show(ui, cx, panel, Id::new("strip"));
-    });
-    let ink = crate::theme::theme_by_id(0)
-        .colors
-        .text
-        .to_color32()
-        .gamma_multiply(WAVE_ALPHA);
-    let quads = crate::ui::audio_editor::mesh_quads(shapes.iter().map(|s| &s.shape));
-    let cols: Vec<_> = quads
-        .into_iter()
-        .filter(|q| q.1 == ink)
-        .map(|q| q.0)
-        .collect();
-    let (x0, width) = pixel_columns(wave_rect, &crate::ui::offscreen::metrics());
-    assert!(width > 300, "{wave_rect:?}");
-    assert_eq!(cols.len(), width);
-    for (i, c) in cols.iter().enumerate() {
-        assert_eq!((c.left(), c.width(), c.height()), (x0 + i as f32, 1.0, 1.0));
+fn a_strip_plays_a_big_files_first_part_at_once_and_goes_on_in_each_longer_one() {
+    // Issues #131, #153: the first part plays from the start, waiting at its end for more; a longer one plays on from
+    // where it is, with no restart; the whole once more, which ends it; the same whole again (the pick landing) asks
+    // nothing.
+    let mut strip = SampleStrip::new("Long".into(), None);
+    strip.grow(Some(wave(100)), Some(400));
+    assert!(strip.playing());
+    assert_eq!(strip.take_plays(), [Play::From(0), Play::More(true)]);
+    strip.grow(Some(wave(200)), Some(400));
+    assert_eq!(strip.take_plays(), [Play::More(true)]);
+    let whole = wave(400);
+    strip.grow(Some(whole.clone()), None);
+    strip.grow(Some(whole), None);
+    assert_eq!(strip.take_plays(), [Play::More(false)]);
+    // A file that fails after all stops.
+    strip.grow(None, None);
+    assert_eq!(strip.take_plays(), [Play::Stop]);
+    assert!(strip.wave.is_none());
+}
+
+#[test]
+fn the_strips_waveform_is_the_playlists_columns_a_device_pixel_each() {
+    // Honeydew change (#124; #108 drew one smoothed band of held peaks scaled to the loudest): the playlist's
+    // audio clips' law, each channel's min/max a device pixel a column, stereo in halves, at full scale. A 20 Hz tone at
+    // half scale reaches half of its half's height and its right channel (a tenth of it) a tenth; silence is a 1 px line.
+    let tone = |i: usize| 0.5 * (std::f32::consts::TAU * 20.0 * i as f32 / 1000.0).cos();
+    for (left, loud) in [(tone as fn(usize) -> f32, true), (|_| 0.0, false)] {
+        let mut strip = SampleStrip::new("Kick".into(), Some(stereo(2000, left)));
+        let panel = Rect::from_min_size(pos2(0.0, 0.0), vec2(390.0, 120.0));
+        let mut off = crate::ui::offscreen::Offscreen::new();
+        let mut wave_rect = Rect::NOTHING;
+        let shapes = off.frame(vec![], &mut |ui, cx| {
+            wave_rect = SampleStrip::layout(panel, cx)[2];
+            strip.show(ui, cx, panel, Id::new("strip"));
+        });
+        let ink = crate::theme::theme_by_id(0)
+            .colors
+            .text
+            .to_color32()
+            .gamma_multiply(WAVE_ALPHA);
+        let quads = crate::ui::audio_editor::mesh_quads(shapes.iter().map(|s| &s.shape));
+        let cols: Vec<_> = quads
+            .into_iter()
+            .filter(|q| q.1 == ink)
+            .map(|q| q.0)
+            .collect();
+        let (x0, width) = pixel_columns(wave_rect, &crate::ui::offscreen::metrics());
+        assert!(width > 300, "{wave_rect:?}");
+        assert_eq!(cols.len(), 2 * width, "a column a pixel in each half");
+        let quarter = wave_rect.height() / 4.0;
+        for (half, (centre, peak)) in cols.chunks(width).zip([
+            (wave_rect.top() + quarter, 0.5),
+            (wave_rect.top() + 3.0 * quarter, 0.05),
+        ]) {
+            let reach = if loud { peak * quarter } else { 0.0 };
+            for (i, c) in half.iter().enumerate() {
+                assert_eq!((c.left(), c.width()), (x0 + i as f32, 1.0));
+                assert!(c.height() >= 1.0, "{c:?}");
+                assert!(c.top() >= centre - reach - 1.0, "{loud}: column {i}: {c:?}");
+                assert!(
+                    c.bottom() <= centre + reach + 1.0,
+                    "{loud}: column {i}: {c:?}"
+                );
+            }
+            let top = half.iter().map(|c| c.top()).fold(f32::MAX, f32::min);
+            let bottom = half.iter().map(|c| c.bottom()).fold(f32::MIN, f32::max);
+            assert!(
+                (bottom - top - (2.0 * reach).max(1.0)).abs() <= 1.0,
+                "{top}..{bottom}"
+            );
+        }
     }
+}
+
+/// `frames` frames at 1 kHz: `left(i)` on the left, a tenth of it on the right.
+fn stereo(frames: usize, left: fn(usize) -> f32) -> Waveform {
+    Waveform::new(Arc::new(SampleData {
+        sample_rate: 1000,
+        left: (0..frames).map(left).collect::<Vec<_>>().into(),
+        right: Some(
+            (0..frames)
+                .map(|i| left(i) / 10.0)
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+        meta: Default::default(),
+    }))
 }
 
 #[test]

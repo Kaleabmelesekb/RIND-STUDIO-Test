@@ -18,6 +18,8 @@
 //!   0.4 or 1.0 [`OggEncoder`], per `High quality`. Once written, the message `Render complete` / `Saved to: <path
 //!   below the user folder>` shows, with `Open My Tracks` (SONGS on the render) and `OK` (#72: a flash
 //!   was gone before Android users found the file). The web, which downloads, flashes the two lines.
+//! - **Tags** (#139). With PROJECT's `Write tags on export` on (the default), each file carries [`tags`]: Vorbis
+//!   comments in FLAC and Ogg, ID3v2.4 in MP3, a `LIST` `INFO` chunk in WAV. An FLP's stems never do.
 //! - **Errors.** No audible frame: `The song has no sound`. A render that cannot be built, is too long or cannot be
 //!   written: `An error occurred while rendering`. MIDI with no lane to write: `Error: no data to save`. ZIP: the
 //!   export messages (`Failed to save project` for the song, `Failed to compress files`, `Failed to export
@@ -46,13 +48,14 @@ use std::path::{Path, PathBuf};
 use honeydew_audio::flac_writer::FlacEncoder;
 use honeydew_audio::mp3_writer::Mp3Encoder;
 use honeydew_audio::ogg_writer::OggEncoder;
-use honeydew_audio::wav_writer::{HEADER_LEN, WavWriter, float32_wav};
+use honeydew_audio::wav_writer::{HEADER_LEN, WavWriter, float32_wav, header, info_chunk};
 
 use super::{
-    FileEvent, MAX_FILE_BYTES, OVERWRITE, ProjectFiles, SAVE_FAILED, SAVE_FILE_FAILED, SAVED,
-    in_user_folder, stamped, stem, too_large,
+    FileEvent, MAX_FILE_BYTES, OVERWRITE, ProjectFiles, SAMPLES_FOLDER, SAVE_FAILED,
+    SAVE_FILE_FAILED, SAVED, in_user_folder, stamped, stem, too_large,
 };
-use crate::flm::chunk::ContentPath;
+use crate::APP_NAME;
+use crate::flm::chunk::{ContentPath, ContentRoot};
 use crate::render::{Render, RenderError, RenderSpec, Stream};
 use crate::sample_cache::{self, SampleCache};
 use crate::smf::smf_with;
@@ -135,6 +138,30 @@ pub fn quick_render_format(id: u8) -> ExportFormat {
     ExportFormat::from_id(id)
         .filter(|f| f.is_audio() && f.available())
         .unwrap_or(ExportFormat::Wav)
+}
+
+/// The tags a render of `song` writes (#139), by their Vorbis comment fields: PROJECT's title (else the song's file
+/// name), author, album, genre, year and comment, each when it has more than spaces, and the app as the encoder.
+pub fn tags(song: &Song) -> Vec<(&'static str, String)> {
+    let meta = &song.file.meta;
+    let title = match meta.display_title.trim() {
+        "" => &song.title,
+        _ => &meta.display_title,
+    };
+    let encoder = format!("{APP_NAME} {}", env!("CARGO_PKG_VERSION"));
+    let fields = [
+        ("TITLE", title),
+        ("ARTIST", &meta.author),
+        ("ALBUM", &meta.album),
+        ("GENRE", &meta.genre),
+        ("DATE", &meta.year),
+        ("COMMENT", &meta.comment),
+        ("ENCODER", &encoder),
+    ];
+    (fields.into_iter())
+        .filter(|(_, value)| !value.trim().is_empty())
+        .map(|(field, value)| (field, value.trim().to_owned()))
+        .collect()
 }
 
 /// `Saved!`, and a line for the imported content files a project archive left out (`left_out`), in the import's
@@ -408,6 +435,7 @@ impl ProjectFiles {
             }
             FileEvent::Failed(_, detail) => self.fail(failure(export.format), detail),
             FileEvent::Opened(..)
+            | FileEvent::Picked(_)
             | FileEvent::Located(_)
             | FileEvent::Folder(_)
             | FileEvent::Copied(_)
@@ -418,10 +446,10 @@ impl ProjectFiles {
     /// The project archive of `song` as `<name>.flm`: the song as a save writes it, then every user file it plays;
     /// and the count of original content files left out. An error carries its message's title.
     fn archive(&self, song: &Song, name: &str) -> Result<(Vec<u8>, usize), (&'static str, String)> {
-        let flm =
-            (self.codec.write)(&stamped(song, name.to_owned())).map_err(|e| (SAVE_FAILED, e))?;
+        let mut song = stamped(song, name.to_owned());
+        let (user_files, left_out) = self.user_files_of(&mut song);
+        let flm = (self.codec.write)(&song).map_err(|e| (SAVE_FAILED, e))?;
         let mut entries = vec![(format!("{name}.flm"), flm)];
-        let (user_files, left_out) = self.user_files_of(song);
         entries.extend(user_files);
         let bytes = crate::zip::write(&entries).map_err(|e| (COMPRESS_FAILED, e.to_string()))?;
         if bytes.len() as u64 > MAX_FILE_BYTES {
@@ -434,17 +462,27 @@ impl ProjectFiles {
     /// Only a DW program (`.dwp`) and an SFZ (`.sfz`, and the `.sfzh` it includes) are handed on, for the files they
     /// name; nothing else is decoded, parsed or stretched.
     /// A file it plays that really is in the Original Content folder, every link followed, is only counted.
-    fn user_files_of(&self, song: &Song) -> (BTreeMap<String, Vec<u8>>, usize) {
+    /// Issue #168: also each file a built-in Lemon plugin opens by its path, which its state then names by its path in
+    /// the archive, for opening it to lead to the extracted file ([`Self::relink_plugin_files`]): a user file's path in
+    /// the user folder, any other's [`Self::outside_name`].
+    /// Honeydew change (#144): a sample from a library folder, which a song names by its own path, goes in by its
+    /// [`Self::outside_name`] too, the song relinked to that file in the user folder.
+    fn user_files_of(&self, song: &mut Song) -> (BTreeMap<String, Vec<u8>>, usize) {
         let (read, found) = (sample_cache::reader(self), RefCell::new(BTreeMap::new()));
         let left_out = RefCell::new(std::collections::BTreeSet::new());
+        let library = RefCell::new(Vec::new());
         let record = |path: &ContentPath| {
             let bytes = read(path)?;
             let file = self.resolve(path);
-            if let Some(file) = file.filter(|file| self.in_content(file)) {
+            if let Some(file) = file.clone().filter(|file| self.in_content(file)) {
                 left_out.borrow_mut().insert(file);
             } else if let Some(relative) = in_user_folder(path) {
                 let parts: Vec<_> = relative.iter().map(|p| p.to_string_lossy()).collect();
                 found.borrow_mut().insert(parts.join("/"), bytes.clone());
+            } else if let (ContentPath::Plain(_), Some(file)) = (path, file) {
+                library
+                    .borrow_mut()
+                    .push((path.clone(), file, bytes.clone()));
             }
             let (ContentPath::Shorthand { relative, .. } | ContentPath::Plain(relative)) = path;
             let ext = Path::new(relative).extension();
@@ -452,7 +490,56 @@ impl ProjectFiles {
             (ext.is_some_and(|e| named.iter().any(|x| e.eq_ignore_ascii_case(x)))).then_some(bytes)
         };
         SampleCache::default().load(song, &record);
-        (found.into_inner(), left_out.into_inner().len())
+        let (mut found, mut left_out) = (found.into_inner(), left_out.into_inner());
+        let mut packed = std::collections::HashMap::new();
+        for (path, file, bytes) in library.into_inner() {
+            let name = self.outside_name(&found, &file, &bytes);
+            found.insert(name.clone(), bytes);
+            let (root, relative) = (ContentRoot::User, name);
+            packed.insert(path, ContentPath::Shorthand { root, relative });
+        }
+        super::archive::relink(song, &|path| packed.get(path).cloned());
+        crate::plugins::files::relink(song, &mut |path| {
+            let file = Path::new(path);
+            // A path on this disk is absolute; the web's copies have no root.
+            if !(self.copies || file.is_absolute()) {
+                return None;
+            }
+            let relative = match self.user_shorthand(file) {
+                Some(ContentPath::Shorthand { relative, .. }) => Some(relative),
+                _ => None,
+            };
+            let relative = relative.filter(|r| Self::stays_inside(Path::new(r)));
+            let Ok(bytes) = self.read_user_file(file) else {
+                return relative;
+            };
+            if self.in_content(file) {
+                left_out.insert(file.to_owned());
+                return relative;
+            }
+            let name = relative.unwrap_or_else(|| self.outside_name(&found, file, &bytes));
+            found.insert(name.clone(), bytes);
+            Some(name)
+        });
+        (found, left_out.len())
+    }
+
+    /// The archive name of the file `file` from outside the user folder, of `bytes` (issue #168): `My Samples/<its
+    /// name>`, numbered ` (2)` and up while the archive has other bytes of that name or the user folder a file of it.
+    fn outside_name(&self, found: &BTreeMap<String, Vec<u8>>, file: &Path, bytes: &[u8]) -> String {
+        let stem = file
+            .file_stem()
+            .unwrap_or("Sample".as_ref())
+            .to_string_lossy();
+        let ext = (file.extension()).map_or(String::new(), |e| format!(".{}", e.to_string_lossy()));
+        let user = self.user.clone().unwrap_or_default();
+        let taken = |name: &str| {
+            let name = format!("{name}{ext}");
+            (found.get(&name))
+                .map_or_else(|| self.user_file_exists(&user.join(&name)), |b| b != bytes)
+        };
+        let name = crate::token_map::free(&format!("{SAMPLES_FOLDER}/{stem}"), taken);
+        format!("{name}{ext}")
     }
 }
 
@@ -465,6 +552,8 @@ pub struct Job {
     stage: Stage,
     /// A split export's stems.
     split: Option<Box<Stems>>,
+    /// What each file is tagged with ([`Self::with_tags`]).
+    tags: Vec<(&'static str, String)>,
 }
 
 /// What a [`Job::step`] ended with.
@@ -557,7 +646,17 @@ impl Job {
             high_quality: page.high_quality,
             stage: Stage::Rendering(Box::new(render)),
             split,
+            tags: Vec::new(),
         })
+    }
+
+    /// The job tags each file it writes with `tags` ([`tags`]), but an FLP's stems: `flp::export` reads their plain
+    /// 46-byte WAV header.
+    pub fn with_tags(mut self, tags: Vec<(&'static str, String)>) -> Self {
+        if self.export.split != Split::Flp {
+            self.tags = tags;
+        }
+        self
     }
 
     pub fn export(&self) -> &Export {
@@ -607,8 +706,9 @@ impl Job {
                         Err(error) => return Some(Done::Failed(error)),
                     };
                     let frames = stream.frames();
-                    let encoder =
-                        Encoder::new(self.export.format, self.rate, self.high_quality, frames);
+                    let tags: Vec<_> = (self.tags.iter()).map(|(f, v)| (*f, v.as_str())).collect();
+                    let (format, rate, hq) = (self.export.format, self.rate, self.high_quality);
+                    let encoder = Encoder::new(format, rate, hq, frames, &tags);
                     self.stage = Stage::Encoding {
                         stream: Box::new(stream),
                         encoder,
@@ -765,27 +865,30 @@ enum Encoder {
 }
 
 impl Encoder {
-    /// For `frames` frames of `format` at `rate` Hz. WAV is also the encoder of a format that has none yet (no such
-    /// format is available to export).
-    fn new(format: ExportFormat, rate: u32, high_quality: bool, frames: usize) -> Self {
+    /// For `frames` frames of `format` at `rate` Hz, tagged with `tags`. WAV is also the encoder of a format that has
+    /// none yet (no such format is available to export).
+    fn new(
+        format: ExportFormat,
+        rate: u32,
+        high_quality: bool,
+        frames: usize,
+        tags: &[(&str, &str)],
+    ) -> Self {
         match (format, high_quality) {
             (ExportFormat::Flac, hq) => {
-                Self::Flac(FlacEncoder::new(rate, if hq { 24 } else { 16 }, 2))
+                let bits = if hq { 24 } else { 16 };
+                Self::Flac(FlacEncoder::with_tags(rate, bits, 2, tags))
             }
-            (ExportFormat::Mp3, hq) => Self::Mp3(Box::new(Mp3Encoder::new(rate, hq))),
-            (ExportFormat::Ogg, hq) => Self::Ogg(Box::new(OggEncoder::new(rate, hq))),
+            (ExportFormat::Mp3, hq) => Self::Mp3(Box::new(Mp3Encoder::with_tags(rate, hq, tags))),
+            (ExportFormat::Ogg, hq) => Self::Ogg(Box::new(OggEncoder::with_tags(rate, hq, tags))),
             (_, false) => {
                 let out = Cursor::new(Vec::with_capacity(HEADER_LEN + frames * 4));
-                Self::Pcm16(WavWriter::new(out, rate, 2).expect("a Vec takes every write"))
+                let wav = WavWriter::with_tags(out, rate, 2, tags);
+                Self::Pcm16(wav.expect("a Vec takes every write"))
             }
             (_, true) => {
                 // `float32_wav`'s header, its sizes those of `frames` frames (capped as its own are).
-                let mut out = float32_wav(rate, &[[0f32; 0]; 2]);
-                let data = u32::try_from(frames * 8)
-                    .unwrap_or(u32::MAX)
-                    .min(u32::MAX - 38);
-                out[4..8].copy_from_slice(&(38 + data).to_le_bytes());
-                out[HEADER_LEN - 4..].copy_from_slice(&data.to_le_bytes());
+                let mut out = header(3, 2, rate, 32, frames as u64 * 8, &info_chunk(tags));
                 out.reserve(frames * 8);
                 Self::Float(out)
             }

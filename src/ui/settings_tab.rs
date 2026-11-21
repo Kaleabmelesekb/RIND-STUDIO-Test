@@ -40,6 +40,9 @@
 //! then each input the app lists when it opens ([`SettingsTab::wants_audio_inputs`]), the pick stored by name in
 //! `Settings::audio_input`. Not on the web, which has no input.
 //!
+//! `Input gain` (Honeydew change, #129) is a level row like the metronome's: its label line with the gain in dB on the
+//! right, and a slider under it over −12 to +24 dB (`Settings::input_gain_db`), 0 dB on a double tap. Not on the web.
+//!
 //! `Restore demo songs` asks the app to write our demo songs into the songs folder again
 //! ([`SettingsTab::take_restore_demos`]), with no question first.
 //!
@@ -53,19 +56,24 @@
 //! ([`crate::project_files::CONTENT_FOLDER`]) and an `Open folder` light button. Each button asks the app to show its
 //! folder in the system's file manager ([`SettingsTab::take_reveal`]). They show only where there is such a folder
 //! ([`SettingsTab::content`]): natively, not on the web; on Android the system Files app shows it.
+//!
+//! Honeydew change (#144, #155, #165): on Android, before `Advanced:`, `Library folders:` lists the library
+//! folders' names with `Add folder`, or `Allow access` until the app may read the phone's storage (All files access);
+//! the app answers either ([`SettingsTab::take_library_tap`]). `Remove a library folder` lists their paths under
+//! [`REMOVE_LIBRARY_FOLDER`], and a pick removes it.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use eframe::egui::{
-    Align2, Color32, DragValue, Id, Pos2, Rect, Sense, Shape, TextEdit, Ui, UiBuilder, WidgetInfo,
-    WidgetType, vec2,
+    Align2, Color32, DragValue, Id, Pos2, Rect, Response, Sense, Shape, TextEdit, Ui, UiBuilder,
+    WidgetInfo, WidgetType, vec2,
 };
 
 use crate::icons::{IconId, draw_icon};
 use crate::metrics::{FontSize, UI_SCALE_RANGE};
 use crate::midi::device::menu as midi_menu;
-use crate::settings::{BUFFER_SIZES, SOUND_MODES, Settings};
+use crate::settings::{BUFFER_SIZES, INPUT_GAIN_DB, SOUND_MODES, Settings};
 use crate::theme::{DISABLED_ALPHA, Theme, builtin_themes};
 use crate::ui::popup::{self, PopupItem};
 use crate::ui::scroller::Scroller;
@@ -146,7 +154,8 @@ enum Kind {
     McpStatus,
     /// A disabled toggle fixed in this state.
     FixedToggle(bool),
-    /// `Enable audio recording latency compensation`: a toggle of the stored `Option<bool>`, shown ON while unset.
+    /// `Enable audio recording latency compensation`: ON compensates (Honeydew change, #129: it was inverted),
+    /// with `Calibrate` beside it while ON.
     Latency,
     /// A wide light button showing the current item; a tap opens the popup of items.
     Dropdown(Choice),
@@ -154,6 +163,8 @@ enum Kind {
     MidiDropdown,
     /// `Audio input:`: a dropdown over the audio inputs, showing the stored name (shrunk to fit) or `Default`.
     AudioInput,
+    /// `Input gain`: the label line with the gain in dB, and a full-width slider over [`INPUT_GAIN_DB`].
+    InputGain,
     /// A disabled wide light button with this text.
     FixedDropdown(&'static str),
     /// The Bluetooth icon and the label, disabled.
@@ -188,6 +199,11 @@ enum Kind {
     ForgetPluginFolders,
     /// `Theme creator`: the label and an `Edit` button, which opens the theme creator ([`SettingsTab::take_creator`]).
     ThemeCreator,
+    /// The library folders' names (the label) and `Add folder`, or, until the app may read the phone's storage, `Allow
+    /// access` ([`SettingsTab::take_library_tap`]).
+    LibraryFolders,
+    /// `Remove a library folder`: a full-width light button, enabled while there are some, opening their list.
+    RemoveLibraryFolder,
 }
 
 /// What the plugin rows asked the app for ([`SettingsTab::take_plugin_action`]).
@@ -208,6 +224,16 @@ const PLUGIN_ROWS: [Row; 4] = [
     row("Plugins", Kind::PluginScan),
     row("Forget my plugin folders", Kind::ForgetPluginFolders),
 ];
+
+/// Honeydew change (#144, #155, #165): the library folder rows, before `Advanced:` on Android
+/// ([`SettingsTab::library`]).
+const LIBRARY_ROWS: [Row; 3] = [
+    row("Library folders:", Kind::Header),
+    row("Library folders", Kind::LibraryFolders),
+    row("Remove a library folder", Kind::RemoveLibraryFolder),
+];
+/// The note above the library folders' list, which `Remove a library folder` opens.
+const REMOVE_LIBRARY_FOLDER: &str = "Remove from the library";
 
 /// The dropdown rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -239,7 +265,7 @@ const fn row(label: &'static str, kind: Kind) -> Row {
 }
 
 /// Every row of the SETTINGS tab, in order.
-const ROWS: [Row; 52] = {
+const ROWS: [Row; 56] = {
     use Kind::*;
     [
         row("MIDI:", Header),
@@ -268,6 +294,7 @@ const ROWS: [Row; 52] = {
         row("Sample memory limit:", Dropdown(Choice::SampleMemory)),
         row("Recording:", Header),
         row("Audio input:", AudioInput),
+        row("Input gain", InputGain),
         row("Enable audio recording latency compensation", Latency),
         row(
             "Enable multitrack recording",
@@ -285,6 +312,8 @@ const ROWS: [Row; 52] = {
         row("Scaling:", Scaling),
         row("Scale is currently limited to", ScaleLimit),
         row("Animation:", Dropdown(Choice::Animation)),
+        // Honeydew change (#171).
+        row("Show value while dragging", Toggle(|s| &mut s.value_bubble)),
         row("Application:", Header),
         row("Enable ghost notes", Toggle(|s| &mut s.ghost_notes)),
         row(
@@ -296,6 +325,7 @@ const ROWS: [Row; 52] = {
             "Show range labels on keyboard",
             Toggle(|s| &mut s.range_labels),
         ),
+        row("Keyboard in pickers", Toggle(|s| &mut s.picker_keys)),
         row(
             "Continuous scrolling during playback",
             Toggle(|s| &mut s.continuous_scroll),
@@ -304,6 +334,10 @@ const ROWS: [Row; 52] = {
         row(
             "Show CPU and RAM meters",
             Toggle(|s| &mut s.hardware_meters),
+        ),
+        row(
+            "Show performance overlay",
+            Toggle(|s| &mut s.performance_overlay),
         ),
         row("Project version size limit:", Dropdown(Choice::VersionSize)),
         row(
@@ -346,16 +380,20 @@ enum Menu {
     Restore,
     /// The `OK` / `Cancel` confirm of a `Theme:` pick over the theme creator's unsaved edits.
     ThemeConfirm,
+    /// The library folders, each carrying its index: a pick removes it.
+    LibraryFolders,
 }
 
 /// The confirm's question, and the values its `Yes` and `No` items return.
 const RESTORE_QUESTION: &str = "Are you sure you want to restore default settings?";
 const CONFIRM_YES: usize = 1;
 const CONFIRM_NO: usize = 0;
-/// The warning a `Theme:` pick over the theme creator's unsaved edits asks first.
-pub const THEME_WARNING: [&str; 2] = [
+/// The warning a `Theme:` pick over the theme creator's unsaved edits asks first. Its line is in two, so that the popup
+/// fits a phone's width with room each side (#81).
+pub const THEME_WARNING: [&str; 3] = [
     "Warning",
-    "Setting the theme will undo changes made in the theme creator!",
+    "Setting the theme will undo changes",
+    "made in the theme creator!",
 ];
 /// The `Theme:` popup's value of the first user theme ([`SettingsTab::user_themes`]); the built-ins' are their ids.
 const USER_THEMES: usize = 1000;
@@ -417,6 +455,11 @@ pub struct SettingsTab {
     pub creator_unsaved: bool,
     /// The `Theme:` pick waiting for the warning's `OK`.
     pending_theme: Option<usize>,
+    /// The library folder rows show (Android), and whether the app may read the phone's storage. The caller keeps it
+    /// current.
+    pub library: Option<bool>,
+    /// `Library folders`' button was tapped, until [`Self::take_library_tap`].
+    library_tap: bool,
 }
 
 impl SettingsTab {
@@ -478,6 +521,12 @@ impl SettingsTab {
         self.plugin_action.take()
     }
 
+    /// Whether `Library folders`' button was tapped since the last call, once a tap: the app asks for the access, or
+    /// picks a folder to add once it has it.
+    pub fn take_library_tap(&mut self) -> bool {
+        std::mem::take(&mut self.library_tap)
+    }
+
     /// The rows shown: all but the content folder's without one, and the plugin rows before `Advanced:` where plugins
     /// are hosted.
     fn rows(&self) -> Vec<&'static Row> {
@@ -492,7 +541,7 @@ impl SettingsTab {
                 !(web
                     && matches!(
                         r.kind,
-                        Kind::Dropdown(Choice::SampleMemory) | Kind::AudioInput
+                        Kind::Dropdown(Choice::SampleMemory) | Kind::AudioInput | Kind::InputGain
                     ))
                     && (cfg!(desktop)
                         || (!matches!(
@@ -519,6 +568,10 @@ impl SettingsTab {
         if self.orientation {
             let at = rows.iter().position(|r| r.label == "Animation:");
             rows.insert(at.map_or(rows.len(), |i| i + 1), &ORIENTATION_ROW);
+        }
+        if self.library.is_some() {
+            let at = (rows.iter().position(|r| r.label == "Advanced:")).unwrap_or(rows.len());
+            rows.splice(at..at, &LIBRARY_ROWS);
         }
         rows
     }
@@ -636,7 +689,7 @@ impl SettingsTab {
         let (m, colors) = (cx.m, &cx.theme.colors);
         // Headers and the metronome row take the whole slot; the other rows are a control row, centred in it.
         let r = match row.kind {
-            Kind::Header | Kind::Level | Kind::Scaling | Kind::BufferSize => slot,
+            Kind::Header | Kind::Level | Kind::Scaling | Kind::BufferSize | Kind::InputGain => slot,
             _ => Rect::from_center_size(slot.center(), vec2(slot.width(), m.u(ROW_H))),
         };
         let text = colors.text.to_color32();
@@ -715,23 +768,24 @@ impl SettingsTab {
             }
             Kind::Toggle(_) | Kind::FixedToggle(_) | Kind::Latency => {
                 // The rect starts 0.5 U left of the column and ends at its right edge; the latency one is 2.5 U
-                // shorter, for `Calibrate`, which is 2.5 U wide at the right end, only while the toggle is OFF
-                // (compensating).
+                // shorter, for `Calibrate`, which is 2.5 U wide at the right end, only while the toggle is ON
+                // (compensating; Honeydew change, #129).
                 let latency = matches!(row.kind, Kind::Latency);
                 let shorter = if latency { LATENCY_SHORTER } else { 0.0 };
                 let rect = Rect::from_x_y_ranges(
                     r.left() - m.u(TOGGLE_OUT)..=r.right() - m.u(shorter),
                     r.y_range(),
                 );
-                if latency && s.latency_compensation == Some(false) {
+                if latency && s.latency_compensation {
                     let at = right(CALIBRATE_W, BUTTON_H);
                     let b = Button::new(id.with("calibrate"), at, "Calibrate", false, colors);
-                    self.calibrate |= button(ui, cx, &b, !cfg!(mobile)).clicked();
+                    // On phones too (Honeydew change, #129): it asks for the microphone as REC does.
+                    self.calibrate |= button(ui, cx, &b, true).clicked();
                 }
                 let (on, field) = match row.kind {
                     Kind::Toggle(field) => (*field(s), Some(field)),
                     Kind::FixedToggle(on) => (on, None),
-                    Kind::Latency => (s.latency_compensation != Some(false), None),
+                    Kind::Latency => (s.latency_compensation, None),
                     _ => unreachable!("a toggle row"),
                 };
                 // Settings are not parameters: no parameter menu. The label is the pill's, plain and in `text`, and
@@ -759,7 +813,7 @@ impl SettingsTab {
                 match (changed, field) {
                     (true, Some(field)) => *field(s) = v >= 0.5,
                     (true, None) if matches!(row.kind, Kind::Latency) => {
-                        s.latency_compensation = Some(v >= 0.5);
+                        s.latency_compensation = v >= 0.5;
                     }
                     _ => {}
                 }
@@ -774,12 +828,15 @@ impl SettingsTab {
             }
             Kind::Dropdown(choice) => {
                 label(ui, before(button_rect), FontSize::Pt10);
-                // A theme of the user's, or the theme creator's work, is no item of the built-ins: its own name.
-                let current = match choice {
-                    Choice::Theme if !s.custom_theme.is_empty() => cx.theme.name.clone(),
-                    _ => choice.label(s),
+                // A theme of the user's, or the theme creator's work, is no item of the built-ins: its own name, of
+                // any length, shrunk as a device name is (#124).
+                let tapped = match choice {
+                    Choice::Theme if !s.custom_theme.is_empty() => {
+                        shrunk_button(ui, cx, id, button_rect, &cx.theme.name).clicked()
+                    }
+                    _ => light_button(ui, button_rect, &choice.label(s), true),
                 };
-                if light_button(ui, button_rect, &current, true) {
+                if tapped {
                     self.menu = Some((Menu::Choice(choice), button_rect.center()));
                 }
                 if matches!(choice, Choice::SoundMode) {
@@ -800,28 +857,18 @@ impl SettingsTab {
             }
             Kind::MidiDropdown | Kind::AudioInput => {
                 label(ui, before(button_rect), FontSize::Pt10);
-                let b = Button::new(id, button_rect, "", false, colors);
-                let response = button(ui, cx, &b, true);
                 let name = match row.kind {
                     Kind::MidiDropdown => &s.midi_device,
                     _ if s.audio_input.is_empty() => DEFAULT_INPUT,
                     _ => &s.audio_input,
                 };
-                // The name it draws itself (shrunk) is its name for accessibility tools too.
-                response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, name));
-                if response.clicked() {
+                if shrunk_button(ui, cx, id, button_rect, name).clicked() {
                     let midi = matches!(row.kind, Kind::MidiDropdown);
                     let menu = if midi { Menu::Midi } else { Menu::AudioInput };
                     self.menu = Some((menu, button_rect.center()));
                     self.midi_rescan |= midi;
                     self.audio_inputs = None;
                 }
-                // A device name is the device's, of any length: shrink drawing in the button, in the ink the button
-                // would give a label of its own.
-                let room = button_rect.shrink2(vec2(m.u(BUTTON_PAD), 0.0));
-                let ink = colors.menu_fill.to_color32();
-                let (align, pt) = (Align2::CENTER_CENTER, FontSize::Pt10.points() as u8);
-                shrink(ui.painter(), m, room, align, name, pt, ink);
             }
             Kind::FixedDropdown(value) => {
                 label(ui, before(button_rect), FontSize::Pt10);
@@ -848,6 +895,51 @@ impl SettingsTab {
                 );
                 let c = level_control(id, body, text);
                 h_slider(ui, cx, &c, &mut s.metronome_level, |_| String::new());
+            }
+            Kind::InputGain => {
+                let (line, body) = r.split_top_bottom_at_y(r.top() + m.u(LEVEL_LABEL_H));
+                let (room, value_room) =
+                    line.split_left_right_at_x(line.right() - m.u(PERCENT_W + 2.5));
+                label(ui, room, FontSize::Pt10);
+                let (lo, hi) = (*INPUT_GAIN_DB.start(), *INPUT_GAIN_DB.end());
+                let fraction = |db: f32| (db - lo) / (hi - lo);
+                let c = Control {
+                    bipolar: false,
+                    menu: ParamMenu::Unbound,
+                    ..Control::new(
+                        id,
+                        body,
+                        "",
+                        text,
+                        fraction(Settings::default().input_gain_db),
+                    )
+                };
+                let stored = fraction(s.input_gain_db);
+                let mut value = stored;
+                h_slider(ui, cx, &c, &mut value, |_| String::new());
+                // Written back only when moved, so that the round trip never changes the setting by a hair.
+                if value != stored {
+                    s.input_gain_db = lo + value.clamp(0.0, 1.0) * (hi - lo);
+                }
+                let db = (s.input_gain_db * 10.0).round() / 10.0;
+                let display = if db == 0.0 {
+                    "0.0 dB".to_owned()
+                } else {
+                    format!("{db:+.1} dB")
+                };
+                plain(
+                    ui,
+                    value_room,
+                    &display,
+                    FontSize::Pt10,
+                    Align2::RIGHT_CENTER,
+                );
+                crate::ui::tooltip::tip(
+                    ui,
+                    r,
+                    "Raises or lowers the audio input before monitoring, recording and Calibrate. Raise it for a quiet microphone.",
+                    None,
+                );
             }
             Kind::BufferSize => {
                 let (line, body) = r.split_top_bottom_at_y(r.top() + m.u(LEVEL_LABEL_H));
@@ -1043,6 +1135,40 @@ impl SettingsTab {
                     self.plugin_action = Some(PluginAction::Rescan);
                 }
             }
+            Kind::LibraryFolders => {
+                let access = self.library == Some(true);
+                let names: Vec<String> = (s.library_folders.iter())
+                    .map(|f| {
+                        Path::new(f)
+                            .file_name()
+                            .map_or(f.clone(), |n| n.to_string_lossy().into())
+                    })
+                    .collect();
+                let folders = match (access, names.is_empty()) {
+                    (false, _) => "Needs All files access".to_owned(),
+                    (true, true) => "Folders anywhere on the phone".to_owned(),
+                    (true, false) => names.join(", "),
+                };
+                let (room, size) = (before(button_rect), FontSize::Pt10.points() as u8);
+                shrink(
+                    ui.painter(),
+                    m,
+                    room,
+                    Align2::LEFT_CENTER,
+                    &folders,
+                    size,
+                    text,
+                );
+                let button = if access { "Add folder" } else { "Allow access" };
+                self.library_tap |= light_button(ui, button_rect, button, true);
+            }
+            Kind::RemoveLibraryFolder => {
+                let rect = Rect::from_center_size(r.center(), vec2(r.width(), m.u(BUTTON_H)));
+                let some = !s.library_folders.is_empty();
+                if light_button(ui, rect, row.label, some) && some {
+                    self.menu = Some((Menu::LibraryFolders, rect.center()));
+                }
+            }
             Kind::ForgetPluginFolders => {
                 let rect = Rect::from_center_size(r.center(), vec2(r.width(), m.u(BUTTON_H)));
                 let some = !s.plugin_folders.is_empty();
@@ -1082,12 +1208,17 @@ impl SettingsTab {
         }
     }
 
-    /// Shows the open dropdown's popup and applies the pick.
+    /// Shows the open dropdown's popup and applies the pick. A question is centred on the screen, as the app's other
+    /// questions are, with equal margins each side (#81).
     fn popup(&mut self, ui: &Ui, cx: &UiCtx, s: &mut Settings) {
         let Some((menu, at)) = self.menu else {
             return;
         };
         let ctx = ui.ctx();
+        let at = match menu {
+            Menu::Restore | Menu::ThemeConfirm => ctx.content_rect().center(),
+            _ => at,
+        };
         // `Audio input:` shows once the app has listed the inputs, after the frame that opened it.
         let inputs = match (menu, &self.audio_inputs) {
             (Menu::AudioInput, None) => return ctx.request_repaint(),
@@ -1139,6 +1270,9 @@ impl SettingsTab {
                 s.audio_input = index
                     .checked_sub(1)
                     .map_or_else(String::new, |i| inputs[i].clone());
+            }
+            (Menu::LibraryFolders, Some(index)) if index < s.library_folders.len() => {
+                s.library_folders.remove(index);
             }
             // What the first run did stays done: the demos are not written over the user's copies at the next start,
             // and What's New does not show again.
@@ -1256,6 +1390,18 @@ impl Choice {
     }
 }
 
+/// A light button showing `name`, which is the user's or a device's and of any length: shrink drawing in the button, in
+/// the ink the button would give a label of its own. The name it draws itself is its name for accessibility tools too.
+fn shrunk_button(ui: &mut Ui, cx: &UiCtx, id: Id, rect: Rect, name: &str) -> Response {
+    let (m, colors) = (cx.m, &cx.theme.colors);
+    let response = button(ui, cx, &Button::new(id, rect, "", false, colors), true);
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, name));
+    let room = rect.shrink2(vec2(m.u(BUTTON_PAD), 0.0));
+    let (ink, pt) = (colors.menu_fill.to_color32(), FontSize::Pt10.points() as u8);
+    shrink(ui.painter(), m, room, Align2::CENTER_CENTER, name, pt, ink);
+    response
+}
+
 /// The metronome slider in `rect`: a double click resets it to the default level, and it fills from its low end
 /// (`Control::new` reads the 0.5 default as bipolar). It is bound to no parameter, so its long-press menu is
 /// `Reset` alone.
@@ -1306,13 +1452,21 @@ fn popup_items(
                 PopupItem::new(CONFIRM_NO, 0, 2, "No"),
             ];
         }
+        Menu::LibraryFolders => {
+            let folders = s.library_folders.iter().enumerate();
+            let items = folders.map(|(i, f)| PopupItem::new(i, 0, i + 1, f.clone()));
+            return std::iter::once(PopupItem::header(0, 0, REMOVE_LIBRARY_FOLDER))
+                .chain(items)
+                .collect();
+        }
         Menu::ThemeConfirm => {
-            let [warning, line] = THEME_WARNING;
+            let [warning, line, rest] = THEME_WARNING;
             return vec![
                 PopupItem::header(0, 0, warning),
                 PopupItem::header(0, 1, line),
-                PopupItem::new(CONFIRM_YES, 0, 2, "OK"),
-                PopupItem::new(CONFIRM_NO, 0, 3, "Cancel"),
+                PopupItem::header(0, 2, rest),
+                PopupItem::new(CONFIRM_YES, 0, 3, "OK"),
+                PopupItem::new(CONFIRM_NO, 0, 4, "Cancel"),
             ];
         }
     };
@@ -1365,6 +1519,7 @@ mod tests {
                 "Sample memory limit:",
                 "Recording:",
                 "Audio input:",
+                "Input gain",
                 "Enable audio recording latency compensation",
                 "Enable multitrack recording",
                 "Enable count-in when recording",
@@ -1376,14 +1531,17 @@ mod tests {
                 "Scaling:",
                 "Scale is currently limited to",
                 "Animation:",
+                "Show value while dragging",
                 "Application:",
                 "Enable ghost notes",
                 "Show key names on keyboard and piano roll",
                 "Set middle C to C4",
                 "Show range labels on keyboard",
+                "Keyboard in pickers",
                 "Continuous scrolling during playback",
                 "Show hidden tracks",
                 "Show CPU and RAM meters",
+                "Show performance overlay",
                 "Project version size limit:",
                 "Enable sharing files with nearby devices",
                 "MCP:",
@@ -1431,7 +1589,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(toggles.len(), if cfg!(target_os = "ios") { 13 } else { 12 });
+        assert_eq!(toggles.len(), if cfg!(target_os = "ios") { 16 } else { 15 });
         for (label, field) in &toggles {
             let mut s = Settings::default();
             *field(&mut s) = !*field(&mut s);
@@ -1560,7 +1718,7 @@ mod tests {
     impl Rig {
         /// Tall enough to show every row (2 U each) without scrolling.
         fn new() -> Self {
-            Self::with_height(3000.0)
+            Self::with_height(3200.0)
         }
 
         fn with_height(height: f32) -> Self {
@@ -1976,7 +2134,7 @@ mod tests {
             let (u, t) = (m.u(1.0), m.t());
             let column_right = rig.width - 2.0 * u;
             let fills = fills(&rig);
-            assert_eq!(toggles().count(), 17);
+            assert_eq!(toggles().count(), 20);
             for r in toggles() {
                 let at = format!("ppp {ppp} scale {scale}: `{}`", r.label);
                 let control = rig.rect_of(row_id(index(r.label)));
@@ -2337,32 +2495,43 @@ mod tests {
         );
     }
 
+    /// Honeydew change (#129, #130): ON compensates (the earlier toggle compensated while OFF); it is ON by default.
     #[test]
-    fn the_latency_toggle_shows_on_while_unset_and_stores_what_a_tap_sets() {
-        // Unset shows ON, so the first tap turns it OFF (compensation on).
+    fn the_latency_toggle_is_on_while_it_compensates_and_a_tap_turns_it_off() {
         let mut rig = Rig::new();
         let label = "Enable audio recording latency compensation";
         rig.click_row(label);
-        assert_eq!(rig.settings.latency_compensation, Some(false));
+        assert!(!rig.settings.latency_compensation);
         assert!(rig.take_changed());
         rig.click_row(label);
-        assert_eq!(rig.settings.latency_compensation, Some(true));
+        assert!(rig.settings.latency_compensation);
     }
 
     #[test]
-    fn calibrate_shows_only_while_the_latency_toggle_is_off_and_a_tap_asks_the_app() {
-        // Compensation is on exactly when the toggle is OFF, and `Calibrate` is visible only then; unset shows ON. The
-        // toggle is then 2.5 U shorter and `Calibrate`, 2.5 U wide, takes the right end of the row.
+    fn calibrate_shows_only_while_the_latency_toggle_is_on_and_a_tap_asks_the_app() {
+        // Compensation is on exactly when the toggle is ON (Honeydew change, #129), and `Calibrate` is visible only
+        // then, on phones too. The toggle is then 2.5 U shorter and `Calibrate`, 2.5 U wide, takes the right end of the
+        // row.
         let mut rig = Rig::new();
         let label = "Enable audio recording latency compensation";
-        assert!(!rig.texts().contains(&"Calibrate".to_owned()), "unset");
-        let on = rig.rect_of(row_id(index(label)));
+        assert!(
+            rig.texts().contains(&"Calibrate".to_owned()),
+            "ON by default"
+        );
         rig.click_row(label);
-        assert_eq!(rig.settings.latency_compensation, Some(false));
+        assert!(!rig.settings.latency_compensation);
+        rig.frame(vec![]);
+        assert!(!rig.texts().contains(&"Calibrate".to_owned()), "OFF");
+        let off = rig.rect_of(row_id(index(label)));
+        rig.click_row(label);
+        assert!(rig.settings.latency_compensation);
         rig.frame(vec![]);
         let calibrate = rig.rect_of(row_id(index(label)).with("calibrate"));
         let toggle = rig.rect_of(row_id(index(label)));
-        assert_eq!(toggle, on, "the toggle is as short with `Calibrate` hidden");
+        assert_eq!(
+            toggle, off,
+            "the toggle is as short with `Calibrate` hidden"
+        );
         assert_eq!(calibrate.width(), 2.5 * 32.0);
         // The rig's page is under 20 U wide: the column is 0.5 U in.
         assert_eq!(calibrate.right(), rig.width - 0.5 * 32.0);
@@ -2377,11 +2546,11 @@ mod tests {
         assert!(!rig.tab.calibrate);
         rig.click(calibrate.center());
         assert!(rig.tab.calibrate, "the app starts it and clears this");
-        assert_eq!(rig.settings.latency_compensation, Some(false), "no toggle");
-        // ON again: hidden.
+        assert!(rig.settings.latency_compensation, "no toggle");
+        // OFF again: hidden.
         rig.click_row(label);
         rig.frame(vec![]);
-        assert_eq!(rig.settings.latency_compensation, Some(true));
+        assert!(!rig.settings.latency_compensation);
         assert!(!rig.texts().contains(&"Calibrate".to_owned()));
     }
 
@@ -2465,17 +2634,20 @@ mod tests {
             rig.frame(vec![]);
             assert_eq!(rig.tab.menu.map(|(m, _)| m), Some(Menu::ThemeConfirm));
             assert_eq!(rig.settings.custom_theme, edits);
+            // Centred on the screen (#81), not on the `Theme:` button: its cells are the popup's width.
+            let x = item(rig, 3).x - rig.width / 2.0;
+            assert!(x.abs() < 1.0, "{x}");
         };
         // `Cancel` keeps the edits; `OK` puts Mint in use.
         pick_mint(&mut rig);
-        rig.click(item(&rig, 3));
+        rig.click(item(&rig, 4));
         assert_eq!(
             (rig.settings.theme, &rig.settings.custom_theme),
             (0, &edits)
         );
         assert_eq!(rig.tab.menu, None);
         pick_mint(&mut rig);
-        rig.click(item(&rig, 2));
+        rig.click(item(&rig, 3));
         assert_eq!(
             (rig.settings.theme, rig.settings.custom_theme.as_str()),
             (6, "")
