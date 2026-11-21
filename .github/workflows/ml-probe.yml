@@ -10,7 +10,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo metadata --format-version 1 > /dev/null
       - run: git diff Cargo.lock > lock.patch; wc -l lock.patch
-      - uses: actions/upload-artifact@v4
-        with: { name: lock, path: lock.patch }
+      - run: echo LOCKBEGIN; base64 -w120 lock.patch | sed 's/^/LK /'; echo LOCKEND
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev || true
       - run: cargo check -p honeydew --lib --keep-going 2>&1 | tail -150
