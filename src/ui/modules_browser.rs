@@ -47,7 +47,6 @@ use crate::ui::preset_picker::{modal, natural};
 use crate::ui::search_bar::{self, RowLook, SearchBar};
 use crate::ui::widgets::{shrink, truncated};
 use crate::ui::{Finger, UiCtx, anim, fingers, focus, focus_lost};
-use honeydew_audio::lemon;
 
 use Entry::Module as M;
 use SynthKind as S;
@@ -132,7 +131,7 @@ impl Row {
 }
 
 /// Lemon Studio's built-in plugins ([`crate::plugins::builtin`]), on every platform, each
-/// listed after the module it is Lemon's counterpart of (as Lemon Reverb and Lemon Limiter are), by CLAP id. One not
+/// listed after the module it is Lemon's counterpart of (as Lemon Reverb and Lemon Limiter are of Reverb 2 and Limiter), by CLAP id. One not
 /// here goes into its section ([`section_of`]) by name.
 const COUNTERPARTS: &[(&str, Entry)] = &[
     ("org.openstudio.open-3x-osc", Entry::Synth(S::ThreeXOsc)),
@@ -142,6 +141,10 @@ const COUNTERPARTS: &[(&str, Entry)] = &[
     ("org.openstudio.lemon-chorus", M(11)),
     ("org.openstudio.lemon-flanger", M(13)),
     ("org.openstudio.lemon-phaser", M(14)),
+    // Lemon Reverb and Lemon Limiter: the plugins, with Lemon's own editors, in place of Honeydew's old tabbed panels
+    // (those stay for the songs that have them: `honeydew_audio::lemon`).
+    ("org.openstudio.lemon-reverb", M(35)),
+    ("org.openstudio.lemon-limiter", M(28)),
     // Under the Slicer, so that the two slicers read as two.
     ("org.openstudio.lemon-slicer", Entry::Synth(S::Slicer)),
 ];
@@ -233,7 +236,6 @@ const SECTIONS: [(Option<&str>, &[Entry]); 7] = [
         &[
             M(32),
             M(35),
-            M(lemon::REVERB),
             M(honeydew_audio::dragonfly_fx::HALL),
             M(honeydew_audio::dragonfly_fx::ROOM),
             M(honeydew_audio::dragonfly_fx::PLATE),
@@ -253,7 +255,6 @@ const SECTIONS: [(Option<&str>, &[Entry]); 7] = [
             M(27),
             M(20),
             M(28),
-            M(lemon::LIMITER),
             M(36),
             M(41),
         ],

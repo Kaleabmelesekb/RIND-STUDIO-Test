@@ -63,6 +63,8 @@ lemon-slicer = { path = "vendor/lemon-studio/lemon-slicer", features = ["linked"
 lemon-drop = { path = "vendor/lemon-studio/lemon-drop", features = ["linked", "embed"] }
 lemon-soundfont = { path = "vendor/lemon-studio/lemon-soundfont", features = ["linked", "embed"] }
 smith = { path = "vendor/lemon-studio/smith", features = ["linked", "embed"] }
+lemon-limiter = { path = "vendor/lemon-studio/lemon-limiter", features = ["linked", "embed"] }
+lemon-reverb = { path = "vendor/lemon-studio/lemon-reverb", features = ["linked", "embed"] }
 os-plugkit = { path = "vendor/lemon-studio/os-plugkit", features = ["embed"] }
 os-ui = { path = "vendor/lemon-studio/os-ui" }
 os-theme = { path = "vendor/lemon-studio/os-theme" }
