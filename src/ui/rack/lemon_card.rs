@@ -5,7 +5,9 @@
 //! - The pointer over it is the editor's, in the editor's pixels: presses (a second one within 0.4 s and 12 points is a
 //!   double click), moves, releases (also outside, while a press it took is held) and the wheel. While the editor holds
 //!   the cursor (a knob drag) the moves go as movement and the cursor hides. Issue #68: a double click on a knob or
-//!   fader resets it, as a double tap does Honeydew's own.
+//!   fader resets it, as a double tap does Honeydew's own. PR #87: a long press ([`gesture::long_press`]) is a right
+//!   click at the press, so a phone reaches a knob's menu (Reset, …) as a secondary click does on the desktop; a tap
+//!   or a moved press stays a left one.
 //! - The editor's menus show over the card in Lemon's own look (`os_ui::kit::menu`), with their submenus; its "Type in
 //!   value" box is a text field there.
 //! - Issue #52: where the editor has no file dialog (Android, the browser), the app's sample picker opens its sample
@@ -23,9 +25,10 @@ use os_plugkit::embed::{self, Answer, Button, Input, MenuView, Modal};
 use os_ui::Canvas;
 use os_ui::kit::menu::{self as kmenu, MenuLayout};
 
+use crate::metrics::Metrics;
 use crate::plugins;
 use crate::plugins::builtin::Builtin;
-use crate::ui::{Finger, MOUSE, fingers, focus_lost};
+use crate::ui::{Finger, MOUSE, fingers, focus_lost, gesture};
 
 /// Two presses closer than this (seconds and points) are a double click: a finger's second tap lands a little off.
 const DOUBLE_S: f64 = 0.4;
@@ -54,6 +57,9 @@ pub(crate) struct LemonCard {
     size: (u32, u32),
     /// The button of the press the editor took: its moves and release are the editor's wherever they are.
     pressed: Option<Button>,
+    /// That press's long press went as a right click (PR #87), the left press released with it: its release, where
+    /// the right click opened no modal, pairs the right click with an up.
+    long_menu: bool,
     /// That press is a finger's other than the pointer's ([`other_finger`]): its id and the pass it was last seen in.
     finger: Option<(u64, u64)>,
     /// The pointer's last position, and whether it was over the editor.
@@ -109,6 +115,7 @@ pub(crate) fn show(
     instance_id: i32,
     plugin: &Builtin,
     card: &mut LemonCard,
+    m: &Metrics,
 ) -> bool {
     let ctx = ui.ctx().clone();
     let ppp = ctx.pixels_per_point();
@@ -136,7 +143,7 @@ pub(crate) fn show(
     );
     // Global (an editor shows in one card at a time): tests and render harnesses find the card by its editor.
     let id = Id::new(("lemon editor", editor));
-    let response = ui.interact(rect, id, Sense::click_and_drag());
+    let mut response = ui.interact(rect, id, Sense::click_and_drag());
     // Editor pixels per point.
     let k = card.size.0 as f32 / rect.width();
     let modal = embed::modal(editor);
@@ -144,9 +151,30 @@ pub(crate) fn show(
         // The pointer and one more finger.
         other_finger(ui, card, &response, rect, k);
         forward(ui, card, rect, k, response.hovered());
+        // PR #87: a long press on the editor is a right click at the press (a phone has no secondary button). The left
+        // press is released with it: where the right click opens a menu, its answer replays the right click only.
+        let long = gesture::long_press(ui, &mut response, m);
+        if long && card.pressed == Some(Button::Left) && card.finger.is_none() && !card.long_menu {
+            let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(card.last);
+            let (x, y) = ((origin.x - rect.left()) * k, (origin.y - rect.top()) * k);
+            let held = mods(ui.input(|i| i.modifiers));
+            let btn = Button::Right;
+            embed::input(
+                editor,
+                Input::Down {
+                    x,
+                    y,
+                    btn,
+                    dbl: false,
+                },
+                held,
+            );
+            embed::input(editor, Input::Up { btn: Button::Left }, held);
+            card.long_menu = true;
+        }
     } else {
         // The press that asked is the modal's (its answer delivers it again, with its release): the next press is new.
-        (card.pressed, card.finger) = (None, None);
+        (card.pressed, card.finger, card.long_menu) = (None, None, false);
     }
     embed::pump(editor);
     // Issue #72: only what changed goes into the texture (a whole frame is megabytes, a knob turn a small patch of
@@ -382,6 +410,11 @@ fn forward(ui: &Ui, card: &mut LemonCard, rect: Rect, k: f32, hovered: bool) {
                 ..
             } if card.pressed.is_some() && card.pressed == button(b) => {
                 let btn = card.pressed.take().expect("held");
+                // A long press's right click that opened no modal ends with this release; the left up repeats the one
+                // sent with the right click, harmlessly.
+                if std::mem::take(&mut card.long_menu) {
+                    send(Input::Up { btn: Button::Right }, modifiers);
+                }
                 send(Input::Up { btn }, modifiers);
             }
             Event::MouseWheel {
@@ -596,7 +629,7 @@ fn show_menu(
 }
 
 /// Shows the editor's "Type in value" box at editor pixel `at` over the editor in `rect`, starting with `text`: Enter
-/// answers with what was typed, Escape or a press outside cancels.
+/// or its `OK` answers with what was typed, Escape or a press outside cancels.
 #[allow(clippy::too_many_arguments)]
 fn type_in(
     ctx: &egui::Context,
@@ -622,18 +655,30 @@ fn type_in(
         .order(Order::Foreground)
         .fixed_pos(min)
         .show(ctx, |ui| {
-            let r = ui.add(TextEdit::singleline(typed).id(field).desired_width(width));
-            // The whole text starts selected: typing replaces it. The release of the press that opened it keeps it.
-            if fresh || (opening && r.lost_focus()) {
-                r.request_focus();
-                let mut state = TextEditState::load(ui.ctx(), field).unwrap_or_default();
-                let all = CCursorRange::two(CCursor::new(0), CCursor::new(typed.chars().count()));
-                state.cursor.set_char_range(Some(all));
-                state.store(ui.ctx(), field);
-            }
-            done = r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-            cancel = ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
-                || (r.lost_focus() && !done && !fresh && !opening);
+            ui.horizontal(|ui| {
+                let mut r = ui.add(TextEdit::singleline(typed).id(field).desired_width(width));
+                // The whole text starts selected: typing replaces it. The release of the press that opened it keeps
+                // it.
+                if fresh || (opening && r.lost_focus()) {
+                    r.request_focus();
+                    let mut state = TextEditState::load(ui.ctx(), field).unwrap_or_default();
+                    let all =
+                        CCursorRange::two(CCursor::new(0), CCursor::new(typed.chars().count()));
+                    state.cursor.set_char_range(Some(all));
+                    state.store(ui.ctx(), field);
+                }
+                // Issue #91: Android has no keyboard for an egui field; its text editor types the value (the Lemon
+                // Slicer's BPM and BEATS have no other way in on a phone), and its OK is this field's Enter.
+                crate::android_text::edit(&mut r, typed, usize::MAX);
+                // Issue #166: an OK beside it, so a touch never depends on a soft keyboard's Enter reaching egui.
+                // Twice as wide as tall, for a finger.
+                let h = r.rect.height();
+                let ok = ui.add(egui::Button::new("OK").min_size(vec2(2.0 * h, h)));
+                let ok = ok.clicked();
+                done = ok || (r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)));
+                cancel = ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
+                    || (r.lost_focus() && !done && !fresh && !opening);
+            });
         })
         .response
         .rect;
@@ -655,6 +700,7 @@ mod tests {
     use lemon_sampler::view;
 
     use super::*;
+    use crate::metrics::DEFAULT_UI_SCALE;
     use crate::plugins::builtin::named;
     use crate::song::{ChannelKind, Song};
 
@@ -733,7 +779,8 @@ mod tests {
                         Some(screen) => fit(screen, shown_size(Some(card), sampler)),
                         None => Rect::from_min_size(Pos2::ZERO, vec2(width, 500.0)),
                     };
-                    assert!(show(ui, content, channel, module, sampler, card));
+                    let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
+                    assert!(show(ui, content, channel, module, sampler, card, &m));
                 });
             });
         }
@@ -894,6 +941,56 @@ mod tests {
         );
     }
 
+    /// PR #87: a long press on a knob is a right click: the editor's menu (Reset, …) opens at the knob, and a quick tap
+    /// does not. The lift of the press that opened it does not pick; a press outside cancels; a press that moves on
+    /// before its long press is a drag, never a menu.
+    #[test]
+    fn a_long_press_on_a_knob_opens_its_menu_but_a_tap_does_not() {
+        let mut rig = Rig::new("Lemon Sampler");
+        let editor = rig.card.editor;
+        // The sample page's `START OFFSET` knob, in editor pixels (the card shows the view cropped).
+        let knob = pos2(
+            45.0 - view::CROP_X as f32,
+            view::y(286.0) - view::CROP_Y as f32,
+        );
+        rig.tap(knob);
+        rig.frame(vec![]);
+        assert!(embed::modal(editor).is_none(), "a tap opens no menu");
+        // Past the double tap's 0.4 s (a second press within it resets the knob instead).
+        for _ in 0..4 {
+            rig.frame(vec![]);
+        }
+        // A long press: down, then 0.4 s of frames with the finger unmoved.
+        rig.frame(finger(TouchPhase::Start, knob));
+        for _ in 0..4 {
+            rig.frame(vec![]);
+        }
+        assert!(
+            matches!(embed::modal(editor), Some(Modal::Menu { .. })),
+            "the long press opened the knob's menu"
+        );
+        assert!(rig.card.menu.is_some(), "the card shows it");
+        rig.frame(finger(TouchPhase::End, knob));
+        rig.frame(vec![]);
+        assert!(
+            matches!(embed::modal(editor), Some(Modal::Menu { .. })),
+            "the lift left the menu open"
+        );
+        rig.tap(pos2(700.0, 550.0));
+        rig.frame(vec![]);
+        assert_eq!(embed::modal(editor), None, "the outside press cancelled");
+        for _ in 0..4 {
+            rig.frame(vec![]);
+        }
+        rig.frame(finger(TouchPhase::Start, knob));
+        rig.frame(finger(TouchPhase::Move, knob + vec2(30.0, 0.0)));
+        for _ in 0..4 {
+            rig.frame(vec![]);
+        }
+        rig.frame(finger(TouchPhase::End, knob + vec2(30.0, 0.0)));
+        assert!(embed::modal(editor).is_none(), "a moved press is a drag");
+    }
+
     /// A text field the editor opens a type-in for at a press (Lemon Formula Controller's
     /// formula) keeps it open past that press's release, for the finger's typing.
     #[test]
@@ -926,6 +1023,24 @@ mod tests {
         rig.frame(finger(TouchPhase::Start, at));
         rig.frame(vec![]);
         let typed = matches!(embed::modal(editor), Some(Modal::TypeIn { text, .. }) if text == "t");
+        assert!(typed, "{:?}", embed::modal(editor));
+        // Issue #166: its OK, at the box's right end, answers it too, with no Enter from the keyboard.
+        rig.frame(finger(TouchPhase::End, at));
+        for _ in 0..3 {
+            rig.frame(vec![]);
+        }
+        rig.frame(vec![Event::Text("u".into())]);
+        let area = Id::new(("lemon editor", editor)).with("type in area");
+        let shown = rig
+            .ctx
+            .memory(|m| m.area_rect(area))
+            .expect("the box shows");
+        rig.tap(shown.right_center() - vec2(8.0, 0.0));
+        rig.frame(vec![]);
+        assert_eq!(embed::modal(editor), None, "OK answered it");
+        rig.frame(finger(TouchPhase::Start, at));
+        rig.frame(vec![]);
+        let typed = matches!(embed::modal(editor), Some(Modal::TypeIn { text, .. }) if text == "u");
         assert!(typed, "{:?}", embed::modal(editor));
     }
 }

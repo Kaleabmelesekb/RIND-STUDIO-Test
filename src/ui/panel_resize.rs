@@ -14,9 +14,10 @@
 //!   their range. Any touch-down in the panel stops it (as in the mixer), a key's among them.
 //! - The sizes are kept in U ([`crate::settings::Settings`]), not in pixels, so that the panel keeps its
 //!   size in U across UI scales.
-//! - #57: the panel's greatest height M is not the window's: it leaves the ruler (the top bar, with
-//!   the main menu and the logo) and one 2 U track row of the view under it ([`full`]), in either orientation. A
-//!   height kept from a taller window is capped at every layout, so a portrait size never covers a landscape screen.
+//! - #57, #92: the panel's greatest height M is not the window's: it leaves the ruler (the top bar,
+//!   with the main menu and the logo) under a clip editor's colour band, and nothing more ([`full`]), in either
+//!   orientation. A height kept from a taller window is capped at every layout, so a portrait size never covers a
+//!   landscape screen.
 
 use eframe::egui::{Id, Pos2, Rect, Sense, Ui, Vec2};
 
@@ -35,18 +36,17 @@ const THROW: f32 = 10.0;
 /// The least last move, in U, that flings the keys, and the fling's speed kept per frame.
 const FLING_MIN_U: f32 = 0.125;
 const DECAY: f32 = 0.9;
-/// The view the panel always leaves at the window's top, in U: the ruler and one 2 U track row (#57).
-const VIEW_MIN: f32 = RULER_H + 2.0;
 
 /// c, the collapsed panel's height (the transport bar alone, `rows` rows of 1.75 U): trunc(c · U) px, in points.
 pub fn collapsed(rows: u8, m: &Metrics) -> f32 {
     (m.u_px() * TRANSPORT_H * f32::from(rows)).trunc() / m.ppp()
 }
 
-/// M, the panel's greatest height on a screen `screen_h` points tall: the screen less the control bar (the collapsed
-/// height `c` again) and [`VIEW_MIN`] (whole pixels), at least the collapsed `c`.
+/// M, the panel's greatest height on a screen `screen_h` points tall, at least the collapsed `c`: the screen less the
+/// view it always leaves at the top (#57), the ruler in whole pixels under a clip editor's t tall colour band, which
+/// an editor needs to lay its rows out under, and no track row (#92).
 pub fn full(screen_h: f32, c: f32, m: &Metrics) -> f32 {
-    (screen_h - c - (VIEW_MIN * m.u_px()).ceil() / m.ppp()).max(c)
+    (screen_h - (RULER_H * m.u_px()).ceil() / m.ppp() - m.t()).max(c)
 }
 
 /// The height a resize let go at `h` settles at, after a last move of `last_dy` points, for the collapsed height `c` on
@@ -199,6 +199,16 @@ impl PanelGrab {
         self.touch.is_some_and(|t| t.mode == Mode::Resize)
     }
 
+    /// The touch scrolls the keys: it left the calm zone sideways.
+    pub fn scrolling(&self) -> bool {
+        self.touch.is_some_and(|t| t.mode == Mode::Scroll)
+    }
+
+    /// A touch is down that has left neither calm distance yet.
+    pub fn calm(&self) -> bool {
+        self.touch.is_some_and(|t| t.mode == Mode::Calm)
+    }
+
     /// One frame of the grab over `zone` (the last frame's, so that a resize lays the panel out in the frame it moves):
     /// the pointer's drags and the wheel, read from the input with no widget. `covered`: an overlay lies over the
     /// pointer. Any touch-down stops the fling. The tap is [`tap`]'s.
@@ -311,12 +321,12 @@ mod tests {
      {
         for ppp in [1.0, 2.0] {
             let m = metrics(ppp);
-            let (u, screen) = (m.u(1.0), 660.0);
+            let (u, screen) = (m.u(1.0), 540.0);
             for rows in [1, 2] {
                 let c = collapsed(rows, &m);
-                // M: the screen less the control bar (c), the ruler and a track row, ceil(3.65 U) px (#57).
+                // M: the screen less the ruler, ceil(1.65 U) px, and the editor's colour band t (#57, #92).
                 let full = full(screen, c, &m);
-                assert_eq!(full, screen - c - (3.65 * m.u_px()).ceil() / ppp);
+                assert_eq!(full, screen - (1.65 * m.u_px()).ceil() / ppp - m.t());
                 assert_eq!(c, (1.75 * f32::from(rows) * m.u_px()).trunc() / ppp);
                 // Still: h' = h; the last move 3 points up throws it 30 points taller.
                 assert_eq!(released(8.0 * u, 0.0, c, screen, &m), 8.0 * u);
@@ -350,29 +360,29 @@ mod tests {
         // max(recent, c + strip + 6.5 U), at most M.
         let strip = 3.0 * u;
         assert_eq!(
-            strip_opened(8.0 * u, 5.0 * u, one, strip, 600.0, false, &m),
+            strip_opened(8.0 * u, 5.0 * u, one, strip, 540.0, false, &m),
             None
         );
         let opened = Some(one + strip + 6.5 * u);
         assert_eq!(
-            strip_opened(8.0 * u, 5.0 * u, one, strip, 600.0, true, &m),
+            strip_opened(8.0 * u, 5.0 * u, one, strip, 540.0, true, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one, 5.0 * u, one, strip, 600.0, false, &m),
+            strip_opened(one, 5.0 * u, one, strip, 540.0, false, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one + strip, 5.0 * u, one, strip, 600.0, false, &m),
+            strip_opened(one + strip, 5.0 * u, one, strip, 540.0, false, &m),
             opened
         );
         assert_eq!(
-            strip_opened(one, 12.0 * u, one, strip, 600.0, false, &m),
+            strip_opened(one, 12.0 * u, one, strip, 540.0, false, &m),
             Some(12.0 * u)
         );
         assert_eq!(
             strip_opened(one, 5.0 * u, one, strip, 300.0, false, &m),
-            Some(300.0 - one - (3.65 * u).ceil())
+            Some(300.0 - (1.65 * u).ceil() - m.t())
         );
     }
 

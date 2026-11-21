@@ -54,6 +54,7 @@ pub(super) mod de_esser;
 pub(super) mod denoise;
 pub(super) mod dragonfly;
 pub(super) mod dynamic_eq;
+pub(super) mod half_time;
 pub(super) mod lemon;
 pub(super) mod modulator;
 

@@ -7,7 +7,7 @@ use eframe::egui::{Id, Rect};
 
 use super::rack_wiring::{
     BROWSER, DW, PICKER, browser_row, click_row, close_picker, instance_id, layout, pick_keys,
-    picker_row, preset_button, types, with_dw_files, with_effects, worker_done,
+    picker_root, picker_row, preset_button, types, with_dw_files, with_effects, worker_done,
 };
 use super::*;
 use crate::audio_engine::slicer::detects_here;
@@ -91,6 +91,197 @@ fn an_instrument_pick_is_silent_then_a_touch_on_its_row_plays_the_x_note_on_its_
     }
     assert_eq!(rig.overlays(), [Overlay::Rack(1), open]);
     // No undo step.
+    assert_eq!(rig.app.history.steps(), steps);
+}
+
+#[test]
+fn an_instrument_pickers_keys_play_its_channel_before_and_after_a_pick() {
+    // Issue #98: the keys at the bottom of an instrument's picker play its channel, as the audition strip does
+    // (velocity 1, held until the lift): the preset it has, then the one a tap on a name picked.
+    let mut rig = with_bass();
+    let id = instance_id(&rig, 1, 0);
+    rig.click_id(preset_button(1, id));
+    row(&mut rig, 0);
+    let keys = rig.ctx.read_response(Id::new(PICKER).with("keys"));
+    let keys = keys.expect("the keys are drawn").rect;
+    // Middle C is the middle white key.
+    let c = pos2(keys.center().x, keys.bottom() - 0.25 * keys.height());
+    let play = |rig: &mut Rig| {
+        rig.press(c);
+        let on = rig.take();
+        rig.release(c);
+        [on, rig.take()]
+    };
+    let note = [["NoteOn 1 60 127"], ["NoteOff 1 60"]];
+    assert_eq!(play(&mut rig), note);
+    // `My Files`, then `Bass`.
+    picker_row(&mut rig, 0);
+    picker_row(&mut rig, 0);
+    rig.take();
+    assert_eq!(rig.app.song.channels[1].rack.modules[0].params[1], 0.25);
+    assert_eq!(play(&mut rig), note);
+}
+
+#[test]
+fn a_sideways_drag_pans_a_pickers_keys_silently_and_the_wheel_and_a_pinch_zoom_about_the_pointer() {
+    // The picker's keys pan and zoom as the keyboard panel's do. A press plays its key, and holds it while
+    // calm; past the 0.5 U calm zone sideways the touch pans them (its note stops, no other plays) and flings; the wheel or a pinch zooms them
+    // about the pointer, the pinch once its fingers' spread leaves the calm zone (two fingers held still are a chord).
+    use crate::ui::keyboard::KeyView;
+    use crate::ui::picker_preview::VIEW;
+    use egui::TouchPhase::{End, Move, Start};
+    let mut rig = with_bass();
+    let id = instance_id(&rig, 1, 0);
+    rig.click_id(preset_button(1, id));
+    row(&mut rig, 0);
+    let keys = rig.ctx.read_response(Id::new(PICKER).with("keys"));
+    let keys = keys.expect("the keys are drawn").rect;
+    let view = |rig: &Rig| rig.ctx.data(|d| d.get_temp::<KeyView>(Id::new(VIEW)));
+    let view = |rig: &Rig| view(rig).expect("the keys' view");
+    // The white key slot (from MIDI 0) under `x`: middle C's is 35 … 36.
+    let slot = |v: KeyView, x: f32| v.left + (x - keys.left()) / (U * v.white_w);
+    let c = pos2(keys.center().x, keys.bottom() - 0.25 * keys.height());
+    // Pressed near C's right edge, it holds C while still calm, over D too (no glissando).
+    let at = c + vec2(10.0, 0.0);
+    rig.press(at);
+    assert_eq!(rig.take(), ["NoteOn 1 60 127"]);
+    rig.drag_to(at + vec2(12.0, 0.0));
+    assert_eq!(rig.take(), Vec::<String>::new());
+    rig.drag_to(at + vec2(20.0, 0.0));
+    assert_eq!(rig.take(), ["NoteOff 1 60"]);
+    // Middle C still in the middle, 1 U wide: then the keys follow the finger, and it plays nothing.
+    assert!((slot(view(&rig), c.x) - 35.5).abs() < 1e-4);
+    assert_eq!(view(&rig).white_w, 1.0);
+    let left = view(&rig).left;
+    let to = at + vec2(20.0 + 2.0 * U, 0.0);
+    rig.drag_to(to);
+    assert!((view(&rig).left - (left - 2.0)).abs() < 1e-4);
+    rig.release(to);
+    rig.frame(vec![]);
+    assert!(
+        (view(&rig).left - (left - 2.0 - 0.9 * 2.0)).abs() < 1e-4,
+        "it flings"
+    );
+    rig.frame(vec![egui::Event::PointerMoved(c)]);
+    assert_eq!(rig.take(), Vec::<String>::new());
+    // The wheel: dy 100 makes them 1/0.9 as wide, the key under the pointer staying put.
+    let before = view(&rig);
+    rig.frame(vec![egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: vec2(0.0, 100.0),
+        modifiers: Default::default(),
+    }]);
+    let after = view(&rig);
+    assert!((after.white_w - 1.0 / 0.9).abs() < 1e-4, "{after:?}");
+    assert!((slot(after, c.x) - slot(before, c.x)).abs() < 1e-4);
+    // Two fingers 3 U apart hold two keys; spread 1 U more, they pinch: both notes stop and the keys zoom about the
+    // pointer (the first finger).
+    let touch = |id, phase, pos| egui::Event::Touch {
+        device_id: egui::TouchDeviceId(1),
+        id: egui::TouchId(id),
+        phase,
+        pos,
+        force: None,
+    };
+    let button = |pressed| button_event(c, pressed);
+    let b = c + vec2(3.0 * U, 0.0);
+    rig.frame(vec![touch(1, Start, c), button(true)]);
+    rig.frame(vec![touch(2, Start, b)]);
+    let on = rig.take();
+    assert!(
+        on.len() == 2 && on.iter().all(|n| n.starts_with("NoteOn 1")),
+        "{on:?}"
+    );
+    let before = view(&rig);
+    rig.frame(vec![touch(2, Move, b + vec2(U, 0.0))]);
+    let off = rig.take();
+    assert!(
+        off.len() == 2 && off.iter().all(|n| n.starts_with("NoteOff 1")),
+        "{off:?}"
+    );
+    let after = view(&rig);
+    assert!(after.white_w > before.white_w * 1.2, "{after:?}");
+    assert!((slot(after, c.x) - slot(before, c.x)).abs() < 1e-4);
+    rig.frame(vec![touch(2, End, b), touch(1, End, c), button(false)]);
+    assert_eq!(rig.take(), Vec::<String>::new());
+}
+
+#[test]
+fn a_key_held_on_the_channel_elsewhere_lights_held_on_its_pickers_keys() {
+    // The picker's keys light what its channel plays as the keyboard panel's do: a typed key is held (T = 1).
+    let mut rig = with_bass();
+    let id = instance_id(&rig, 1, 0);
+    rig.click_id(preset_button(1, id));
+    row(&mut rig, 0);
+    rig.take();
+    rig.type_key(egui::Key::Z, true);
+    let on = rig.take();
+    assert!(on.len() == 1 && on[0].starts_with("NoteOn 1 48 "), "{on:?}");
+    for _ in 0..5 {
+        rig.frame(vec![]);
+    }
+    let press = Id::new(PICKER).with("keys").with("press");
+    let press = rig.ctx.data(|d| d.get_temp::<[f32; 128]>(press));
+    assert_eq!(press.map(|p| (p[48], p[50])), Some((1.0, 0.0)));
+}
+
+#[test]
+fn keyboard_in_pickers_off_hides_the_keys_and_the_list_takes_their_room() {
+    // SETTINGS `Keyboard in pickers` off, an instrument's picker has no keys and its list reaches down to
+    // where their bottom was.
+    let open = |on: bool| {
+        let mut rig = with_bass();
+        rig.app.settings.picker_keys = on;
+        let id = instance_id(&rig, 1, 0);
+        rig.click_id(preset_button(1, id));
+        row(&mut rig, 0);
+        let rect = |what: &str| {
+            rig.ctx
+                .read_response(Id::new(PICKER).with(what))
+                .map(|r| r.rect)
+        };
+        (rect("keys"), rect("list").expect("the list is drawn"))
+    };
+    let (keys, list) = open(true);
+    let keys = keys.expect("the keys are drawn");
+    assert_eq!(list.bottom(), keys.top());
+    let (none, full) = open(false);
+    assert_eq!(none, None);
+    assert_eq!((full.top(), full.bottom()), (list.top(), keys.bottom()));
+}
+
+#[test]
+fn a_cards_arrows_step_round_its_presets_folder_with_no_undo_step() {
+    // Issue #98 (Honeydew addition): ◀ and ▶ beside a card's preset name load the folder's previous and next preset,
+    // round and round, each as a pick of it loads.
+    let mut rig = with_bass();
+    let mut lead = ModuleInstance::new(0, 0);
+    lead.params[1] = 0.75;
+    let path = Path::new("My Presets/MiniSynth/Lead.flmpst");
+    let bytes = crate::flm::write_preset(&lead).unwrap();
+    rig.app.files.keep_user_file(path, bytes);
+    let id = instance_id(&rig, 1, 0);
+    rig.click_id(preset_button(1, id));
+    picker_row(&mut rig, 0);
+    picker_row(&mut rig, 0);
+    close_picker(&mut rig);
+    rig.take();
+    let steps = rig.app.history.steps();
+    let card = Id::new(("rack", 1_usize)).with(("rack card", id));
+    for (arrow, name, value) in [
+        ("Next preset", "Lead", 0.75),
+        ("Next preset", "Bass", 0.25),
+        ("Previous preset", "Lead", 0.75),
+    ] {
+        rig.click_id(card.with(arrow));
+        rig.frame(vec![]);
+        let module = &rig.app.song.channels[1].rack.modules[0];
+        assert_eq!(
+            (module.file.preset_name.as_str(), module.params[1]),
+            (name, value)
+        );
+        assert_eq!(rig.take(), ["ReplaceSong adopting no-resync"]);
+    }
     assert_eq!(rig.app.history.steps(), steps);
 }
 
@@ -748,6 +939,41 @@ fn a_later_slicer_loop_replaces_one_still_loading() {
     assert_eq!(decodes_here(), 0);
 }
 
+/// Issue #109: the DW Sampler's sample name is the quick way to swap its sample. Its `My Files` is the whole user
+/// folder, and its picker opens in `My Samples`, then at the sample it plays.
+#[test]
+fn a_dw_samplers_picker_opens_in_my_samples_then_at_its_samples_folder() {
+    let mut rig = with_dw_files();
+    for path in [
+        "My Samples/Clap.wav",
+        "My Samples/Drums/Kick.wav",
+        "My Recordings/Take.wav",
+    ] {
+        rig.app.files.keep_user_file(Path::new(path), wav(4410));
+    }
+    let id = instance_id(&rig, DW, 0);
+    rig.click_id(preset_button(DW, id));
+    row(&mut rig, 0);
+    assert!(rig.painted("Clap") && rig.painted("Drums"), "in My Samples");
+    // `Drums` (folders first), then `Kick`, which loads.
+    picker_row(&mut rig, 0);
+    picker_row(&mut rig, 0);
+    worker_done(&mut rig);
+    let module = &rig.app.song.channels[DW].rack.modules[0];
+    assert_eq!(module.file.preset_name, "Kick");
+    let blob = module.file.custom_data.as_deref().unwrap_or_default();
+    assert!(blob.windows(25).any(|w| w == b"My Samples/Drums/Kick.wav"));
+    close_picker(&mut rig);
+    // Again: at its folder.
+    rig.click_id(preset_button(DW, id));
+    row(&mut rig, 0);
+    assert!(rig.painted("Kick") && !rig.painted("Clap"));
+    rig.click_id(Id::new(PICKER).with("back"));
+    rig.click_id(Id::new(PICKER).with("back"));
+    rig.frame(vec![]);
+    assert!(rig.painted("My Samples") && rig.painted("My Recordings"));
+}
+
 #[test]
 fn a_later_pick_on_the_ui_thread_replaces_a_pick_still_loading() {
     // `Keys` (a DW program, on the worker), then `Default` (at once): `Keys` must not land over it.
@@ -759,7 +985,7 @@ fn a_later_pick_on_the_ui_thread_replaces_a_pick_still_loading() {
     rig.frame(vec![]);
     assert!(rig.app.slots.preset_picker.loading());
     // Back to the root (`My Files`, `My Instruments`), then `Default`, which loads on the UI thread at once.
-    rig.click_id(Id::new(PICKER).with("back"));
+    picker_root(&mut rig);
     picker_row(&mut rig, 2);
     let last = rig.app.song.channels[DW].rack.modules[0].clone();
     assert!(
@@ -933,4 +1159,43 @@ fn add_drums_new_pad_and_an_empty_cell_browses_later_pick_are_changes() {
     rig.app.files.saved();
     picker_row(&mut rig, 1);
     assert!(rig.app.files.modified(), "the browse's later pick");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_modules_picker_reopens_where_it_was_left_while_the_app_runs() {
+    // Issue #131: in the folder and at the scroll it was left at, for its module type, through a song
+    // load (which resets the pickers' state) too.
+    let home = super::songs_archive::Home::new("picker-place");
+    let user = home.0.join("user");
+    let deep = user.join("My Presets/MiniSynth/Leads/Deep");
+    std::fs::create_dir_all(&deep).unwrap();
+    let bytes = crate::flm::write_preset(&ModuleInstance::new(0, 0)).unwrap();
+    for i in 0..40 {
+        std::fs::write(deep.join(format!("P{i:02}.flmpst")), &bytes).unwrap();
+    }
+    let mut rig = Rig::with_synth();
+    rig.app.files = without_factory(ProjectFiles::on_disk(&user));
+    rig.open_rack(1);
+    rig.slide_rack();
+    let id = instance_id(&rig, 1, 0);
+    rig.click_id(preset_button(1, id));
+    // `My Files`, `Leads`, `Deep`, then the list dragged to its end.
+    for _ in 0..3 {
+        picker_row(&mut rig, 0);
+    }
+    let list = row(&mut rig, 0).center();
+    rig.press(list);
+    rig.drag_to(list - eframe::egui::vec2(0.0, 3000.0));
+    rig.release(list - eframe::egui::vec2(0.0, 3000.0));
+    rig.frame(vec![]);
+    assert!(rig.painted("P39") && !rig.painted("P00"));
+    close_picker(&mut rig);
+    rig.app.slots.preset_picker = Default::default();
+    rig.frame(vec![]);
+    rig.click_id(preset_button(1, id));
+    for _ in 0..3 {
+        rig.frame(vec![]);
+    }
+    assert!(rig.painted("P39") && !rig.painted("P00"));
 }

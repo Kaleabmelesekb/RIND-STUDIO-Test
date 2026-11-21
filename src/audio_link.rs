@@ -93,7 +93,8 @@ impl AudioSink for AudioOutput<SongAudioEngine> {
         input: Option<&LiveInput>,
         mode: BufferMode,
     ) -> Result<(), String> {
-        AudioOutput::reopen_with_mode(self, mode, |rate| {
+        // At the project's rate (PR #87), where the device takes it; 0 follows the device.
+        AudioOutput::reopen_with_mode_at(self, mode, song.sample_rate, |rate| {
             SongAudioEngine::with_input(song, rate as f32, samples, input)
         })
         .map_err(|err| format!("{err:?}"))
@@ -112,23 +113,22 @@ pub fn open_device_with_latency(
     samples: &SampleCache,
     low_latency: bool,
 ) -> Option<Box<dyn AudioSink>> {
-    match AudioOutput::start_with_latency(low_latency, |rate| {
-        SongAudioEngine::with_samples(song, rate as f32, samples)
-    }) {
-        Ok(output) => Some(Box::new(output)),
-        Err(err) => {
-            warn(&format!("audio is off: {err:?}"));
-            None
-        }
-    }
+    let mode = if low_latency {
+        BufferMode::Fast
+    } else {
+        BufferMode::Native
+    };
+    open_device_with_mode(song, samples, mode)
 }
 
+/// [`open_device`] with the output buffer profile `mode`, at the song's sample rate where the device takes it (PR
+/// #87; 0 follows the device).
 pub fn open_device_with_mode(
     song: &Song,
     samples: &SampleCache,
     mode: BufferMode,
 ) -> Option<Box<dyn AudioSink>> {
-    match AudioOutput::start_with_mode(mode, |rate| {
+    match AudioOutput::start_with_mode_at(mode, song.sample_rate, |rate| {
         SongAudioEngine::with_samples(song, rate as f32, samples)
     }) {
         Ok(output) => Some(Box::new(output)),
@@ -182,6 +182,9 @@ pub struct AudioLink {
     sink: Option<Box<dyn AudioSink>>,
     /// The output's stream failed (its snapshot says so). Commands are dropped until a [`Self::start`] reopens it.
     stream_failed: bool,
+    /// The project sample rate the output was last opened for (PR #87; 0: the device's own), which it may have fallen
+    /// back from: a song at another rate reopens it ([`Self::replace_song_keeping`]).
+    requested_rate: Option<u32>,
     /// The selected output buffer target index; zero keeps the device default.
     low_latency: u8,
     /// Stored sound-mode id; 2=UltraSafe, 0=Safe, 1=Fast, 3=Native.
@@ -214,6 +217,9 @@ pub struct AudioLink {
     counting_in: bool,
     /// The last snapshot's transport tick.
     tick: u64,
+    /// #92: the last snapshot's tick heard now (`OutputSnapshot::heard_tick`), behind [`Self::tick`] by the output's
+    /// latency: the playhead draws it while playing.
+    heard: u64,
     /// The tick the last poll saw when `Play` went out with [`Self::count_in`] set: the transport is held there until
     /// the count-in ends. A poll that finds it moved with no count-in on has seen it end, whether or not a poll ever
     /// saw it run (one shorter than a frame, or a snapshot that missed it).
@@ -237,9 +243,10 @@ pub struct AudioLink {
     /// Each sample a `Preview` sent, kept until the engine has let go of it ([`Self::poll`]), so the audio thread never
     /// frees one: the picker's strip may drop its own first.
     previews: Vec<Arc<SampleData>>,
-    /// The playhead the editors draw ([`Self::advance_playhead`]), and how far it runs ahead of the last snapshot.
+    /// The playhead the editors draw ([`Self::advance_playhead`]), and how far it is from the last snapshot's tick:
+    /// behind it by about the output's latency, ahead of it by up to a buffer.
     clock: clock::PlayheadClock,
-    lead: u64,
+    lead: i64,
     /// The last seek on its way to the engine: its tick, and the sink's [`AudioSink::sent`] count once it went out. Until
     /// a snapshot shows the audio thread has taken it (up to a buffer later), the snapshot's tick is that tick: REV, Play's
     /// start point and an edit's engine count from where the transport is going, not from where it was.
@@ -337,13 +344,24 @@ impl AudioLink {
                 (self.count_in, self.held) = (Some(beats).filter(|b| *b > 0), None);
             }
             // A poll that sees no count-in after this has not seen one end (a new one may be on its way).
-            AudioCommand::Stop => (self.count_in, self.counting_in) = (None, false),
+            AudioCommand::Stop => {
+                (self.count_in, self.counting_in) = (None, false);
+                // #92: the transport stops where it is heard, not where the output has rendered to (a Bluetooth
+                // headset's latency ahead): there the line stops, and Play goes on from there.
+                if self.heard < self.tick && self.running() {
+                    // The Stop sent here then goes as any other.
+                    let heard = std::mem::replace(&mut self.heard, self.tick);
+                    self.send(AudioCommand::Stop);
+                    self.send(AudioCommand::Seek(heard));
+                    return;
+                }
+            }
             // ponytail: the tick the last poll saw, not a Seek sent since: a snapshot taken after that Seek and before
             // this Play reached the engine would read as the end. Both go out in one frame here, so the window is a
             // callback landing between two sends; an engine-side count-in serial in the snapshot would close it.
             AudioCommand::Play => self.held = self.count_in.map(|_| self.tick),
             // One clone a sample (the play button sends it again): two would keep each other past `poll`'s count.
-            AudioCommand::Preview(Some((ref data, _)))
+            AudioCommand::Preview(Some((ref data, _))) | AudioCommand::PreviewMore(ref data, _)
                 if !self.previews.iter().any(|p| Arc::ptr_eq(p, data)) =>
             {
                 self.previews.push(Arc::clone(data))
@@ -560,6 +578,7 @@ impl AudioLink {
         let mode = self.buffer_mode();
         let Some(sink) = &mut self.sink else {
             self.sink = open(song, &self.samples, low_latency);
+            self.requested_rate = self.sink.as_ref().map(|_| song.sample_rate);
             // The arm before Play: a recording's engine does not wrap at the song end.
             self.resend_metronome();
             // The play button works without audio; the new engine starts stopped.
@@ -574,6 +593,7 @@ impl AudioLink {
         match sink.reopen(song, &self.samples, self.input.as_ref(), mode) {
             Ok(()) => {
                 self.stream_failed = false;
+                self.requested_rate = Some(song.sample_rate);
                 self.built_input.clone_from(&self.input);
                 self.resend_metronome();
                 // The reopen restores the transport as last sent; the play button may have changed since.
@@ -603,6 +623,7 @@ impl AudioLink {
             return;
         }
         self.stream_failed = false;
+        self.requested_rate = Some(song.sample_rate);
     }
 
     /// Reopens the running output in place, the transport kept (iOS: after an interruption, or when a device came or
@@ -617,6 +638,9 @@ impl AudioLink {
             warn(&format!("could not reopen the audio stream: {err}"));
         }
         self.stream_failed = reopened.is_err();
+        if reopened.is_ok() {
+            self.requested_rate = Some(song.sample_rate);
+        }
     }
 
     /// Records the preference before the first stream exists; an active stream is changed by [`Self::set_low_latency`].
@@ -637,6 +661,24 @@ impl AudioLink {
             self.stream_failed = true;
         } else {
             self.stream_failed = false;
+            self.requested_rate = Some(song.sample_rate);
+        }
+    }
+
+    /// Reopens the running output at `song`'s sample rate (PR #87), the transport kept, the samples already loaded.
+    /// A failure leaves it failed, as a sound-mode change does; without an output the next one opens at the rate.
+    fn set_sample_rate(&mut self, song: &Song) {
+        let mode = self.buffer_mode();
+        let Some(sink) = &mut self.sink else { return };
+        self.seeking = None;
+        if let Err(err) = sink.reopen(song, &self.samples, self.input.as_ref(), mode) {
+            warn(&format!("could not change the sample rate: {err}"));
+            self.stream_failed = true;
+        } else {
+            self.stream_failed = false;
+            self.requested_rate = Some(song.sample_rate);
+            self.built_input.clone_from(&self.input);
+            self.resend_metronome();
         }
     }
 
@@ -704,7 +746,7 @@ impl AudioLink {
         let mut snapshot = self.sink.as_mut().map(|s| s.snapshot());
         let failed = snapshot.as_ref().is_some_and(|s| s.stream_failed);
         if failed && !self.stream_failed {
-            warn("the audio stream failed; the next click restarts it");
+            warn("the audio stream failed; it reopens");
             self.pending.clear();
         }
         self.stream_failed = failed;
@@ -717,25 +759,28 @@ impl AudioLink {
             if !s.counting_in && (self.counting_in || moved) {
                 (self.count_in, self.held) = (None, None);
             }
-            (self.counting_in, self.tick) = (s.counting_in, s.transport_tick);
+            (self.counting_in, self.tick, self.heard) =
+                (s.counting_in, s.transport_tick, s.heard_tick);
         }
         snapshot
     }
 
     /// Once a frame after [`Self::poll`], at egui time `now`: steps the drawn playhead ([`clock::PlayheadClock`]) on
-    /// from the last snapshot's tick, while the transport is `playing` at `bpm` on a running output and not counting in,
-    /// never past `end`, the tick the engine wraps at (`None`: it plays on).
+    /// from the last snapshot's tick heard now (#92: what plays is drawn as it is heard, a Bluetooth headset's latency
+    /// later), while the transport is `playing` at `bpm` on a running output and not counting in, never past `end`, the
+    /// tick the engine wraps at (`None`: it plays on). Stopped, it is the transport's tick.
     pub fn advance_playhead(&mut self, now: f64, playing: bool, bpm: f64, end: Option<u64>) {
         let runs = playing && self.running() && !self.counting_in;
         let rate = runs.then_some(bpm / 60.0 * f64::from(crate::song::PPQ));
         let end = end.map_or(f64::INFINITY, |e| e as f64);
-        self.lead = self.clock.advance(now, self.tick, rate, end) - self.tick;
+        let from = if runs { self.heard } else { self.tick };
+        self.lead = self.clock.advance(now, from, rate, end) as i64 - self.tick as i64;
     }
 
-    /// How many ticks past this frame's snapshot the editors draw the playhead (while following): 0 unless playing. For
-    /// drawing only (the line, the disc, follow playhead and the clip editors' folding); edits, seeks and recording use
-    /// The snapshot's tick.
-    pub fn playhead_lead(&self) -> u64 {
+    /// How many ticks past this frame's snapshot the editors draw the playhead (while following), negative behind it:
+    /// 0 unless playing. For drawing only (the line, the disc, follow playhead, the automation shown and the clip
+    /// editors' folding); edits, seeks and recording use the snapshot's tick.
+    pub fn playhead_lead(&self) -> i64 {
         self.lead
     }
 
@@ -772,6 +817,13 @@ impl AudioLink {
         read: &Reader<'_>,
         how: Handover,
     ) -> bool {
+        // A song at another project rate (PR #87: PROJECT's `Samplerate:`, a song opened, an undo) reopens the output
+        // at it first, once: a device that falls back keeps its own rate until the song's rate changes again.
+        if self.running() && self.requested_rate != Some(song.sample_rate) {
+            self.samples.load_live(song, keep, read);
+            crate::plugins::sync(keep);
+            self.set_sample_rate(song);
+        }
         let rate = match &self.sink {
             Some(sink) if self.running() => sink.sample_rate(),
             _ => {
@@ -910,12 +962,16 @@ pub(crate) mod testing {
         /// How many more commands the queue takes; `None` is unlimited.
         pub(crate) room: Option<usize>,
         pub(crate) tick: u64,
+        /// The tick heard now, behind `tick` by the output's latency; `None`: `tick` (no latency).
+        pub(crate) heard: Option<u64>,
         /// The stream failed; a successful reopen clears it.
         pub(crate) failed: bool,
         /// Reopening fails.
         pub(crate) no_device: bool,
         /// Reopen attempts, failed ones included.
         pub(crate) reopens: usize,
+        /// The project rate each reopen asked for, failed ones included (PR #87).
+        pub(crate) reopen_rates: Vec<u32>,
         /// Each `SetParam` sent, as (channel, instance id, index, value).
         pub(crate) params: Vec<(usize, i32, i32, f32)>,
         /// Each `LiveLane` sent, as (channel, notes lane); kept out of `log`, which tests read command by command.
@@ -932,6 +988,8 @@ pub(crate) mod testing {
         pub(crate) sample_rate: Option<u32>,
         /// The commands the audio thread has taken, held here (a long callback); `None`: every command sent.
         pub(crate) taken: Option<u64>,
+        /// The callbacks that overran since the stream started.
+        pub(crate) underruns: u64,
     }
 
     impl Recorder {
@@ -998,6 +1056,9 @@ pub(crate) mod testing {
                 format!("Preview {} frames from {from}", data.frames())
             }
             AudioCommand::Preview(None) => "Preview stop".into(),
+            AudioCommand::PreviewMore(data, more) => {
+                format!("Preview on in {} frames, more {more}", data.frames())
+            }
             AudioCommand::SetTempo(bpm) => format!("SetTempo {bpm:.3}"),
             AudioCommand::LiveParam {
                 channel,
@@ -1100,6 +1161,7 @@ pub(crate) mod testing {
             let r = self.0.borrow();
             OutputSnapshot {
                 transport_tick: r.tick,
+                heard_tick: r.heard.unwrap_or(r.tick),
                 stream_failed: r.failed,
                 module_meters: r.meters.clone(),
                 counting_in: r.engine.as_ref().is_some_and(|e| e.counting_in()),
@@ -1114,6 +1176,7 @@ pub(crate) mod testing {
                     .flat_map(|e| e.modulated().to_vec())
                     .collect(),
                 taken: r.taken.unwrap_or(r.all.len() as u64),
+                underruns: r.underruns,
                 ..OutputSnapshot::default()
             }
         }
@@ -1135,6 +1198,7 @@ pub(crate) mod testing {
         ) -> Result<(), String> {
             let mut r = self.0.borrow_mut();
             r.reopens += 1;
+            r.reopen_rates.push(song.sample_rate);
             if r.no_device {
                 return Err("no device".into());
             }
@@ -1189,13 +1253,31 @@ mod tests {
         link
     }
 
+    /// PR #87: a song at another project rate reopens the output at it, once: an output that fell back (the recorder
+    /// stays at 48 kHz) is not asked again until the song's rate changes; a song that follows the output (0) asks too.
+    #[test]
+    fn a_new_project_rate_reopens_the_output_once_even_after_a_fallback() {
+        let rec = Recorder::default();
+        let mut link = started(&rec);
+        let mut song = Song::default();
+        assert!(fresh(&mut link, &song, false, 0));
+        assert_eq!(rec.0.borrow().reopen_rates, [0; 0], "the rate it opened at");
+        song.sample_rate = 96_000;
+        assert!(fresh(&mut link, &song, false, 0));
+        assert!(fresh(&mut link, &song, false, 0));
+        assert_eq!(rec.0.borrow().reopen_rates, [96_000]);
+        song.sample_rate = 0;
+        assert!(fresh(&mut link, &song, false, 0));
+        assert_eq!(rec.0.borrow().reopen_rates, [96_000, 0]);
+    }
+
     #[test]
     fn multi_core_switches_live_and_is_resent_to_new_streams() {
         let rec = Recorder::default();
         let mut link = AudioLink::default();
         link.set_multi_core(true);
         if !link.multi_core {
-            return; // A single-core or non-desktop host has no worker pool.
+            return; // A single-core host, the web and iOS have no worker pool.
         }
         link.start(&Song::default(), false, &|_| None, |_, _| rec.sink());
         assert_eq!(rec.take(), ["SetMultiCore true"]);
@@ -1652,6 +1734,24 @@ mod tests {
             rec.take();
             assert_eq!(rebuilt(&mut link, false), ["ReplaceSong"]);
         }
+    }
+
+    /// #92: Stop with the output's latency: the transport goes back to the tick heard, where the line stops; with none,
+    /// it stays put.
+    #[test]
+    fn stop_seeks_the_transport_back_to_the_tick_heard() {
+        let rec = Recorder::default();
+        let mut link = started(&rec);
+        link.send(AudioCommand::Play);
+        (rec.0.borrow_mut().tick, rec.0.borrow_mut().heard) = (1_000, Some(900));
+        link.poll();
+        rec.take();
+        link.send(AudioCommand::Stop);
+        assert_eq!(rec.take(), ["Stop", "Seek 900"]);
+        rec.0.borrow_mut().heard = None;
+        link.poll();
+        link.send(AudioCommand::Stop);
+        assert_eq!(rec.take(), ["Stop"]);
     }
 
     #[test]

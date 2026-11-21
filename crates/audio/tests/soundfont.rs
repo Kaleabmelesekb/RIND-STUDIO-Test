@@ -385,6 +385,188 @@ fn pitch_bend_is_two_semitones_and_slides_add_to_sounding_voices_only() {
     assert!(close(left[479], 0.5, 1e-4), "{}", left[479]);
 }
 
+#[test]
+fn fine_tune_and_transpose_move_sounding_voices() {
+    // Param 6, Fine Tune, Honeydew's own (issue #90): 200v − 100 cents, 0.5 in tune, 1 is 100 cents up, 0.25 is 50
+    // down. Param 11, Transpose (issue #102): round(48v) − 24 semitones on top. SFZ voices too.
+    use honeydew_audio::sample::SampleData;
+    let tone = (0..44_000).map(|i| (std::f32::consts::TAU * i as f32 / 100.0).sin() * 0.5);
+    let sample = Arc::new(SampleData {
+        sample_rate: 44_000,
+        left: tone.collect::<Vec<_>>().into(),
+        right: None,
+        meta: Default::default(),
+    });
+    let parsed = honeydew_audio::sfz::parse("<region> sample=a.wav pitch_keycenter=69", &|_| None);
+    let regions = (parsed.regions.into_iter()).map(|r| (r, sample.clone().into()));
+    let sfz = SoundFont::sfz("Test", regions.collect(), &parsed.control);
+    for font in [font(sine_bank()), Arc::new(sfz)] {
+        for (v, transpose, cents) in [
+            (0.5, 0.5, 0.0),
+            (1.0, 0.5, 100.0),
+            (0.25, 0.5, -50.0),
+            (0.5, 31.0 / 48.0, 700.0),
+            (1.0, 0.0, -2300.0),
+        ] {
+            let mut player = SoundFontPlayer::new(RATE, Some((font.clone(), 0)));
+            player.note_on(69, 1.0, 0.5);
+            player.set_parameter(6, v);
+            player.set_parameter(11, transpose);
+            let (left, _) = render(&mut player, 24_000);
+            let (got, want) = (pitch(&left[4_800..]), 440.0 * 2f32.powf(cents / 1200.0));
+            assert!(
+                close(got, want, 0.002),
+                "{v} {transpose}: {got} Hz, want {want}"
+            );
+        }
+    }
+}
+
+/// An SFZ of one region (`opcodes` after its sample) playing `tone` at 44 kHz, its key center 69.
+fn sfz_of(tone: Vec<f32>, opcodes: &str) -> Arc<SoundFont> {
+    use honeydew_audio::sample::SampleData;
+    let sample = Arc::new(SampleData {
+        sample_rate: 44_000,
+        left: tone.into(),
+        right: None,
+        meta: Default::default(),
+    });
+    let text = format!("<region> sample=a.wav pitch_keycenter=69 {opcodes}");
+    let parsed = honeydew_audio::sfz::parse(&text, &|_| None);
+    let regions = (parsed.regions.into_iter()).map(|r| (r, sample.clone().into()));
+    Arc::new(SoundFont::sfz("Test", regions.collect(), &parsed.control))
+}
+
+/// The pitch of each cycle of `samples` against 440 Hz (cents), from its rising zero crossings, with its start (s).
+fn cents_per_cycle(samples: &[f32]) -> Vec<(f32, f32)> {
+    let rising = (1..samples.len()).filter(|&i| samples[i - 1] <= 0.0 && samples[i] > 0.0);
+    let at = |i: usize| (i - 1) as f32 + samples[i - 1] / (samples[i - 1] - samples[i]);
+    let crossings: Vec<f32> = rising.map(at).collect();
+    let cents = |w: &[f32]| 1200.0 * (RATE / (w[1] - w[0]) / 440.0).log2();
+    crossings
+        .windows(2)
+        .map(|w| (w[0] / RATE, cents(w)))
+        .collect()
+}
+
+/// A vibrato's depth (cents) and rate (Hz) over `cycles`: half its swing, and how often it rises through ±half the
+/// depth.
+fn vibrato_of(cycles: &[(f32, f32)]) -> (f32, f32) {
+    let (lo, hi) = (cycles.iter()).fold((f32::MAX, f32::MIN), |(lo, hi), c| {
+        (lo.min(c.1), hi.max(c.1))
+    });
+    let depth = (hi - lo) / 2.0;
+    let (mut low, mut rises) = (false, Vec::new());
+    for &(t, c) in cycles {
+        if c < -depth / 2.0 {
+            low = true;
+        } else if low && c > depth / 2.0 {
+            low = false;
+            rises.push(t);
+        }
+    }
+    let rate = match rises[..] {
+        [first, .., last] => (rises.len() - 1) as f32 / (last - first),
+        _ => 0.0,
+    };
+    (depth, rate)
+}
+
+#[test]
+fn vibrato_moves_the_pitch_at_its_rate_and_depth() {
+    // Issue #102. A SoundFont's own vibrato LFO: vibLfoToPitch (6) 30 cents at freqVibLFO (24) −1200 abs cents
+    // (8.176 / 2 Hz), after delayVibLFO (23) 0 tc (1 s).
+    let zone = vec![
+        amount(MODES, 1),
+        amount(6, 30),
+        amount(24, -1200),
+        amount(23, 0),
+        amount(SAMPLE, 0),
+    ];
+    let own = one_instrument(vec![], vec![zone], &[sine_sample()]);
+    let tone = (0..44_000).map(|i| (std::f32::consts::TAU * i as f32 / 100.0).sin() * 0.5);
+    let sfz = sfz_of(tone.collect(), "");
+    // Font, mod wheel, the Vib Rate, Depth and Delay params (7–9); the depth and rate heard, and the delay (s).
+    let user = Some([0.5, 0.5, 0.25]);
+    let cases = [
+        (font(own), 0.0, None, (30.0, 8.176 / 2.0), 1.0),
+        // The mod wheel (CC 1, channel param 8) adds 50 cents, SoundFont 2's default modulator, at the vibrato LFO's
+        // default 8.176 Hz.
+        (font(sine_bank()), 1.0, None, (50.0, 8.176), 0.0),
+        // The module's own (Honeydew's): 5 Hz, 50 cents, after 0.5 s, on a SoundFont and on an SFZ.
+        (font(sine_bank()), 0.0, user, (50.0, 5.0), 0.5),
+        (sfz, 0.0, user, (50.0, 5.0), 0.5),
+    ];
+    for (i, (font, wheel, params, (depth, rate), delay)) in cases.into_iter().enumerate() {
+        let mut player = SoundFontPlayer::new(RATE, Some((font, 0)));
+        player.set_controller(8, wheel);
+        for (p, v) in (7..).zip(params.unwrap_or([0.5, 0.0, 0.0])) {
+            player.set_parameter(p, v);
+        }
+        player.note_on(69, 1.0, 0.5);
+        let (left, _) = render(&mut player, 3 * RATE as usize);
+        let cycles = cents_per_cycle(&left[480..]);
+        let still = cycles.iter().filter(|c| c.0 < delay - 0.02);
+        assert!(
+            still.clone().all(|c| c.1.abs() < 1.0),
+            "{i}: moved before its delay"
+        );
+        let moving: Vec<_> = cycles.into_iter().filter(|c| c.0 > delay + 0.1).collect();
+        let (got_depth, got_rate) = vibrato_of(&moving);
+        assert!(
+            close(got_depth, depth, 0.05),
+            "{i}: {got_depth} cents, want {depth}"
+        );
+        assert!(
+            close(got_rate, rate, 0.02),
+            "{i}: {got_rate} Hz, want {rate}"
+        );
+    }
+}
+
+#[test]
+fn high_quality_interpolates_a_sample_closer_than_linear() {
+    // Issue #102: Quality (param 10) High reads the samples by cubic interpolation, Linear (the default) as before. A
+    // sine of 8 frames a cycle at 44 kHz, at its root key at 48 kHz: the frames fall between the sample's.
+    let sine8 = Sample {
+        data: sine(8, 50),
+        loop_points: (0, 400),
+        rate: 44_000,
+        root: 69,
+        correction: 0,
+    };
+    let bytes = one_instrument(
+        vec![],
+        vec![vec![amount(MODES, 1), amount(SAMPLE, 0)]],
+        &[sine8],
+    );
+    let amplitude = 16000.0 / 32768.0;
+    let tone = (0..400).map(|i| (std::f32::consts::TAU * i as f32 / 8.0).sin() * amplitude);
+    let sfz = sfz_of(
+        tone.collect(),
+        "loop_mode=loop_continuous loop_start=0 loop_end=399",
+    );
+    for font in [font(bytes), sfz] {
+        let error = |quality: f32| {
+            let mut player = SoundFontPlayer::new(RATE, Some((font.clone(), 0)));
+            player.set_parameter(10, quality);
+            player.note_on(69, 1.0, 0.5);
+            let (left, _) = render(&mut player, 4_800);
+            let step = 44_000.0 / f64::from(RATE) / 8.0;
+            let want =
+                |n: usize| f64::from(amplitude) * (std::f64::consts::TAU * n as f64 * step).sin();
+            (480..4_800)
+                .map(|n| (f64::from(left[n]) - want(n)).abs())
+                .fold(0.0, f64::max)
+        };
+        let (linear, high) = (error(0.0), error(1.0));
+        assert!(
+            linear > 0.02 && high < linear / 5.0,
+            "linear {linear}, high {high}"
+        );
+    }
+}
+
 // ---- zones ----
 
 #[test]

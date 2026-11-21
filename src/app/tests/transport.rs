@@ -226,12 +226,12 @@ fn playing_the_playlists_line_moves_on_every_frame_between_the_outputs_steps() {
             "frame {i}: {lead}"
         );
         // The line is drawn there, on the nearest pixel.
-        let x = knob(tick + lead).x;
+        let x = knob(tick.saturating_add_signed(lead)).x;
         assert!(
             line(&rig).is_some_and(|l| (l - x).abs() <= 0.5),
             "frame {i}: {x}"
         );
-        drawn.push(tick + lead);
+        drawn.push(tick.saturating_add_signed(lead));
     }
     assert!(drawn[8..].windows(2).all(|w| w[1] > w[0]), "{drawn:?}");
     // A loop wrap: back at once.
@@ -258,7 +258,7 @@ fn play_blocks(rig: &mut Rig, from: u64, wrap: Option<(u64, u64)>) -> Vec<u64> {
             rig.at(tick);
             rig.next_frame_at(t0 + t);
             rig.frame(vec![]);
-            tick + rig.app.audio.playhead_lead()
+            tick.saturating_add_signed(rig.app.audio.playhead_lead())
         })
         .collect();
     rig.click(PLAY);
@@ -989,5 +989,29 @@ fn playing_outside_a_clipped_loop_seeks_to_its_start_and_a_recording_keeps_its_e
             &[]
         };
         assert_eq!(log[1..], [&["Play"], seek].concat(), "{tick} {recording}");
+    }
+}
+
+/// #172: a playing phone asks for its next frame a 60th of a second after this one began, net of the frame time egui
+/// takes off a delay; elsewhere at once.
+#[test]
+fn a_playing_phone_redraws_at_most_60_times_a_second() {
+    for phone in [true, false] {
+        let ctx = egui::Context::default();
+        // A fresh context's first passes ask for repaints of their own.
+        let pass = || {
+            let out = ctx.run(egui::RawInput::default(), |ctx| {
+                repaint_playing(ctx, os_plugkit::time::Instant::now(), phone)
+            });
+            out.viewport_output[&egui::ViewportId::ROOT].repaint_delay
+        };
+        pass();
+        pass();
+        let ms = pass().as_secs_f64() * 1e3;
+        if phone {
+            assert!((15.0..16.7).contains(&ms), "{ms}");
+        } else {
+            assert_eq!(ms, 0.0);
+        }
     }
 }

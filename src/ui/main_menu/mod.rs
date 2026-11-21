@@ -49,10 +49,12 @@ pub(crate) use file_ops::{
 pub use library::{MemoryLibrary, SONGS_FOLDER, SongEntry, SongLibrary};
 #[cfg(not(target_arch = "wasm32"))]
 pub use library::{NativeLibrary, app_data_dir, songs_dir, user_dir};
-pub use project::{ProjectInfo, TEMPO_RANGE, duration, link_url, meta_secs, meta_time, tempo_step};
-pub use songs::Sort;
+pub use project::{
+    ProjectInfo, TEMPO_RANGE, duration, link_url, meta_secs, meta_time, tempo_step, thousands,
+};
 pub(crate) use songs::bin_crumb;
 pub use songs::visible;
+pub use songs::{SongsPreview, Sort};
 
 // Sizes in U.
 const PANEL_W: f32 = 20.0;
@@ -138,6 +140,9 @@ pub enum MainMenuAction {
     Unzip(std::path::PathBuf),
     /// PROJECT `-` / `+`: the new tempo in BPM, already kept in [`TEMPO_RANGE`].
     SetTempo(f64),
+    /// PROJECT `Samplerate:` (PR #87): the project's new sample rate in Hz, one of [`crate::song::SAMPLE_RATES`], or 0
+    /// for the output's own.
+    SetSampleRate(u32),
     /// PROJECT `Reset` next to the time spent. The app asks, then sets it to 0.
     ResetTimeSpent,
     /// PROJECT `Hide` next to the time spent. The app asks, then sets it to −1 (META@256).
@@ -170,6 +175,13 @@ pub enum MainMenuAction {
     ImportTheme,
     /// PROJECT `View project versions` (#69): the versions window.
     ViewVersions,
+    /// SONGS: a tap previews the audio file at this path (#106, #123). Decode it for the sample strip
+    /// ([`SongsPreview::decoded`]), which plays it.
+    Preview(std::path::PathBuf),
+    /// SONGS `Send to playlist` (#106): each of these audio files on a new audio track, its clip at the playhead.
+    SendToPlaylist(Vec<std::path::PathBuf>),
+    /// PROJECT Performance `Clear`: the app's counters start from zero (#124).
+    ClearPerformance,
 }
 
 /// The Help menu's links, after `What's new`: the project's own pages.
@@ -272,6 +284,11 @@ impl MainMenu {
     /// The folder open in the SONGS tab, `None` at its root.
     pub fn songs_folder(&self) -> Option<&std::path::Path> {
         self.songs.folder()
+    }
+
+    /// SONGS' preview of an audio file (#106).
+    pub fn songs_preview(&mut self) -> &mut SongsPreview {
+        &mut self.songs.preview
     }
 
     /// The answer to [`MainMenuAction::ConfirmDelete`]'s question: `yes` deletes for good. Returns a failure's

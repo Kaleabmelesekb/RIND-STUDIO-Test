@@ -166,6 +166,28 @@ fn the_header_is_the_title_at_the_root_and_the_breadcrumb_in_a_folder() {
     assert_eq!(picker.header(), "     Reverb | My Files | Vocal");
 }
 
+/// Honeydew change (#144, #155, #165): `My Files` ends in the library folders added, after its own rows; one opens to
+/// its presets.
+#[test]
+fn my_files_ends_in_the_library_folders() {
+    let lib = library(&[
+        "My Racks/",
+        "My Racks/Zed/",
+        "My Racks/Bass.flmrack",
+        "/Phone/Racks/",
+        "/Phone/Racks/Lead.flmrack",
+        "/Phone/Racks/notes.txt",
+    ]);
+    crate::ui::main_menu::library::set_library_folders(None, &["/Phone/Racks".into()]);
+    let mut picker = PresetPicker::new(RACK_TITLE, Some("My Racks".into()), RACK_EXT, false);
+    open(&mut picker, &lib, MY_FILES);
+    assert_eq!(names(&picker, ""), ["Zed", "Bass", "Racks"]);
+    assert_eq!(names(&picker, "ac"), ["Racks"]);
+    open(&mut picker, &lib, "Racks");
+    assert_eq!(names(&picker, ""), ["Lead"]);
+    assert!(picker.in_library_folder());
+}
+
 #[test]
 fn a_my_files_folder_that_does_not_exist_yet_lists_as_empty() {
     let lib = library(&[]);
@@ -741,6 +763,46 @@ fn a_dw_programs_sample_folder_is_left_out() {
     picker.read_factory(&lib);
     open(&mut picker, &lib, "Guitar");
     assert_eq!(names(&picker, ""), ["Other", "Gen Guitar"]);
+}
+
+/// A Honeydew addition (#109, #123): a folder and any other file each carry their mark at the row's end; the picker's
+/// own preset files, every plain row of a preset list, carry none. An audio file's is its extension too, even in the
+/// sample picker, whose own files they are.
+#[test]
+fn rows_mark_folders_and_files_by_extension() {
+    use crate::ui::search_bar::Mark;
+    let lib = library(&[
+        "Mine/",
+        "Mine/Sub/",
+        "Mine/Kick.wav",
+        "Mine/Strings.sf2",
+        "Mine/Keys.sfz",
+        "Mine/Pad.flmpst",
+    ]);
+    let mut picker = PresetPicker::new("DW Sampler", Some("Mine".into()), PRESET_EXT, true)
+        .of_exts(&[PRESET_EXT, "wav", "sf2", "sfz"]);
+    fn marks(p: &PresetPicker) -> Vec<Option<Mark<'_>>> {
+        p.rows("").into_iter().map(|i| i.mark(p.exts[0])).collect()
+    }
+    assert_eq!(marks(&picker), [Some(Mark::Folder), None]);
+    open(&mut picker, &lib, MY_FILES);
+    assert_eq!(
+        names(&picker, ""),
+        ["Sub", "Keys", "Kick", "Pad", "Strings"]
+    );
+    assert_eq!(
+        marks(&picker),
+        [
+            Some(Mark::Folder),
+            Some(Mark::Ext("sfz")),
+            Some(Mark::Ext("wav")),
+            None,
+            Some(Mark::Ext("sf2")),
+        ]
+    );
+    let rows = picker.rows("");
+    let kick = rows.iter().find(|i| i.name() == "Kick").unwrap();
+    assert_eq!(kick.mark("wav"), Some(Mark::Ext("wav")));
 }
 
 #[test]

@@ -29,8 +29,9 @@ fn lane_key(lane: &Lane) -> (LaneKind, Option<AutomationTarget>, &str) {
 }
 
 fn lane_views(lane: &mut Lane, from: &Lane) {
-    // Hidden, as a zipped channel: each person's own view.
+    // Hidden or collapsed, as a zipped channel: each person's own view.
     lane.hidden = from.hidden;
+    lane.collapsed = from.collapsed;
     let to = &mut lane.file;
     let old = &from.file;
     local_fields!(LaneFileState, to, old; current_clip_id; flag, custom_label, unknown_chunks, desc_extra);
@@ -76,7 +77,8 @@ fn views(song: &mut Song, local: Option<&Song>) {
     let default = Song::default();
     let from = local.unwrap_or(&default);
     local_fields!(Song, song, from; play_loop, groups;
-        title, tempo_bpm, time_sig, channels, key_root, key_scale, file, master_below, markers);
+        title, tempo_bpm, time_sig, channels, key_root, key_scale, file, master_below, markers, sections,
+        sample_rate);
     let to = &mut song.file;
     let from = &from.file;
     local_fields!(SongFileState, to, from;
@@ -86,7 +88,7 @@ fn views(song: &mut Song, local: Option<&Song>) {
     let to = &mut song.file.meta;
     let from = &from.meta;
     local_fields!(MetaState, to, from; created, modified, editing_seconds;
-        author, display_title, locked, info_url, extra);
+        author, display_title, locked, info_url, extra, album, genre, year, comment);
     let to = &mut song.file.keyboard;
     let from = &local.unwrap_or(&default).file.keyboard;
     local_fields!(KeyboardState, to, from; vertical_mode, octave_shift, velocity, timing, hold;
@@ -185,7 +187,8 @@ pub fn merge(base: &Song, current: &Song, edited: &Song) -> Result<Song, Conflic
     let (b, c, e) = (shared(base), shared(current), shared(edited));
     let mut out = c.clone();
     fields!(Song, b, c, e, out, "song";
-        title, tempo_bpm, time_sig, key_root, key_scale, play_loop, master_below, markers; channels, file, groups);
+        title, tempo_bpm, time_sig, key_root, key_scale, play_loop, master_below, markers, sections, sample_rate;
+        channels, file, groups);
     out.file = merge_file(&b.file, &c.file, &e.file)?;
     let bar = out.time_sig.bar_beats();
     out.channels = keyed(
@@ -276,7 +279,8 @@ fn merge_file(
     let (b, c, e) = (&b.meta, &c.meta, &e.meta);
     let mut meta = c.clone();
     fields!(MetaState, b, c, e, meta, "metadata";
-        created, editing_seconds, author, display_title, locked, info_url, modified, extra;);
+        created, editing_seconds, author, display_title, locked, info_url, modified, extra, album, genre, year,
+        comment;);
     out.meta = meta;
     Ok(out)
 }
@@ -377,7 +381,7 @@ fn merge_channel(
 
 fn merge_lane(b: &Lane, c: &Lane, e: &Lane, path: &str, bar: u32) -> Result<Lane, Conflict> {
     let mut out = c.clone();
-    fields!(Lane, b, c, e, out, path; kind, target, label, swing, grid, hidden, file; clips, last_clip_id);
+    fields!(Lane, b, c, e, out, path; kind, target, label, swing, grid, hidden, file, collapsed; clips, last_clip_id);
     out.last_clip_id = b.last_clip_id.max(c.last_clip_id).max(e.last_clip_id);
     out.clips = keyed(
         &b.clips,

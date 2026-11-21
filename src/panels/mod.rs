@@ -477,6 +477,7 @@ pub fn panel_for(type_id: u16) -> Option<&'static Panel> {
             (honeydew_audio::dragonfly_fx::ROOM, fx::dragonfly::room()),
             (honeydew_audio::dragonfly_fx::PLATE, fx::dragonfly::plate()),
             (honeydew_audio::dragonfly_fx::EARLY, fx::dragonfly::early()),
+            (honeydew_audio::half_time::HALF_TIME, fx::half_time::panel()),
         ];
         fx.chain(inst).chain(lemon).collect()
     });
@@ -769,7 +770,7 @@ pub fn show(
                 widgets::arc_slider(ui, cx, &c, &arc, value!(), text).changed()
             }
             Widget::GraphKnob { falling } => {
-                widgets::graph_knob(ui, cx, &c, value!(), falling).changed()
+                widgets::graph_knob(ui, cx, &c, value!(), falling, text).changed()
             }
             Widget::VSlider => widgets::v_slider(ui, cx, &c, value!(), text).changed(),
             Widget::Tag { faces_right } => {

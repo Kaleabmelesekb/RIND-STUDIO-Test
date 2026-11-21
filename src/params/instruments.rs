@@ -141,6 +141,13 @@ const MINISYNTH: &[P] = &[
 
 // ---- 1 DW Sampler ----
 
+/// The Filter and Pitch Env. Amounts' text, as LFO Amount's: trunc(200·v − 100) in double precision, `%d`.
+const ENV_AMOUNT: Display = Display::Trunc64 {
+    min: -100.0,
+    max: 100.0,
+    unit: "",
+};
+
 const DW_SAMPLER: &[P] = &[
     P::ENABLE,                // 0
     P::plain("Attack", 0.0),  // 1
@@ -176,14 +183,15 @@ const DW_SAMPLER: &[P] = &[
     P::plain("Filter Decay", 1.0),     // 18
     P::plain("Filter Sustain", 1.0),   // 19
     P::plain("Filter Release", 1.0),   // 20
-    P::plain("Filter Env. Amount", 0.5), // 21
-    P::plain("Pitch Attack", 0.0),     // 22
-    P::plain("Pitch Decay", 1.0),      // 23
-    P::plain("Pitch Sustain", 1.0),    // 24
-    P::plain("Pitch Release", 1.0),    // 25
-    P::plain("Pitch Env. Amount", 0.5), // 26
+    // A Honeydew change (#102): −100 … 0 … 100 like LFO Amount, not v×100 (50 at the centre).
+    P::cont("Filter Env. Amount", 0.5, ENV_AMOUNT), // 21
+    P::plain("Pitch Attack", 0.0),                  // 22
+    P::plain("Pitch Decay", 1.0),                   // 23
+    P::plain("Pitch Sustain", 1.0),                 // 24
+    P::plain("Pitch Release", 1.0),                 // 25
+    P::cont("Pitch Env. Amount", 0.5, ENV_AMOUNT),  // 26
     P::menu_by("LFO Shape", 0.0, LFO_SHAPES_4, half_up_index::<3>), // 27
-    P::cont("LFO Rate", 0.0, LFO_RATE), // 28
+    P::cont("LFO Rate", 0.0, LFO_RATE),             // 28
     P::menu_by("LFO Mode", 0.0, LFO_MODES, trunc_index::<2>), // 29
     P::menu_by(
         "LFO Sync Rate",
@@ -1017,8 +1025,9 @@ fn soundfont_time(v: f32) -> String {
 
 const SOUNDFONT_TIME: Display = Display::Custom(soundfont_time);
 
-// The UI binds indices 1-5. The Envelope toggle is off (Original: the SoundFont's own envelopes), and reads
-// Original up to 0.5, Custom above.
+// The UI binds indices 1-11. The Envelope toggle is off (Original: the SoundFont's own envelopes), and reads
+// Original up to 0.5, Custom above. Fine Tune (6), the vibrato (7-9), Quality (10) and Transpose (11) are Honeydew
+// additions (#90, #102).
 const SOUNDFONT_PLAYER: &[P] = &[
     P::ENABLE,
     P::cont("Attack", 0.0, SOUNDFONT_TIME),
@@ -1033,6 +1042,27 @@ const SOUNDFONT_PLAYER: &[P] = &[
         items: &["Original", "Custom"],
         index: |v| usize::from(v > 0.5),
     }),
+    P::cont(
+        "Fine Tune",
+        0.5,
+        Display::linear(-100.0, 100.0, 0, " cents"),
+    ),
+    P::cont("Vib Rate", 0.5, Display::linear(0.0, 10.0, 1, " Hz")),
+    P::cont("Vib Depth", 0.0, Display::linear(0.0, 100.0, 0, " cents")),
+    P::cont("Vib Delay", 0.0, Display::linear(0.0, 2.0, 2, " s")),
+    P::toggle("Quality", 0.0).with_automation(ParamKind::MenuBy {
+        items: &["Linear", "High"],
+        index: |v| usize::from(v > 0.5),
+    }),
+    P::cont(
+        "Transpose",
+        0.5,
+        Display::Steps {
+            min: -24,
+            count: 49,
+            fmt: Fmt::new(0, " st").sign(Sign::Positive),
+        },
+    ),
 ];
 
 pub static MODULES: &[ModuleSpec] = &[

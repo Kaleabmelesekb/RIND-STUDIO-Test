@@ -438,7 +438,7 @@ fn wave() -> Id {
         .with("loop")
 }
 
-/// `LOAD SAMPLE`, then the picker's row `row` (1–6: our loops).
+/// `LOAD SAMPLE`, then the picker's row `row` (1–6: our loops), which its close loads.
 fn load_loop(rig: &mut Rig, row: usize) {
     rig.frame(vec![]);
     rig.click_id(
@@ -448,7 +448,13 @@ fn load_loop(rig: &mut Rig, row: usize) {
     );
     assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), loop_picker()]);
     picker_row(rig, row);
+    close_picker(rig);
     assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL)]);
+}
+
+/// Closes the open picker (Escape): a module's loads its last pick.
+fn close_picker(rig: &mut Rig) {
+    super::rack_wiring::close_picker(rig);
 }
 
 #[test]
@@ -486,11 +492,19 @@ fn load_sample_opens_the_picker_whose_loop_pick_sets_the_path_with_no_undo_step(
         .collect();
     assert!(order.is_sorted(), "{shown:?}");
     picker_row(&mut rig, 1);
+    // Issue #93: the pick plays, the picker stays, and its close loads it.
+    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), loop_picker()]);
+    assert_eq!(loop_of(&rig), None);
+    rig.take();
+    close_picker(&mut rig);
     assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL)]);
     let dust = app_path("Built-in/Loops/Dust Break 84.wav");
     assert_eq!(loop_of(&rig), Some(dust.clone()));
     assert_eq!(sens_of(&rig), Some(sens.clone()));
-    assert_eq!(rig.take(), ["ReplaceSong adopting no-resync"]);
+    assert_eq!(
+        rig.take(),
+        ["Preview stop", "ReplaceSong adopting no-resync"]
+    );
     // The waveform takes the button's place: one column a device pixel.
     rig.frame(vec![]);
     assert!(!texts(&rig).iter().any(|t| t == "LOAD SAMPLE"));
@@ -526,6 +540,7 @@ fn a_tap_on_the_waveform_opens_the_picker_again_and_escape_changes_nothing() {
     // Another loop replaces it.
     rig.click_id(wave());
     picker_row(&mut rig, 4);
+    close_picker(&mut rig);
     assert_eq!(
         loop_of(&rig),
         Some(app_path("Built-in/Loops/Pocket Groove 92.wav"))
@@ -548,6 +563,7 @@ fn a_user_loop_takes_its_user_path_and_the_channel_going_closes_the_picker() {
     for row in [0, 1, 0] {
         picker_row(&mut rig, row);
     }
+    close_picker(&mut rig);
     assert_eq!(loop_of(&rig), Some(user_path(file)));
     // A new Slicer gets a new module's Sensitivity with its loop: 0.25, AUTO on.
     assert_eq!(
@@ -621,8 +637,8 @@ fn a_new_slicer_on_a_factory_loop_plays_its_slices() {
 
 #[test]
 fn a_loop_decodes_on_the_worker_and_lands_with_autos_clip_in_one_undo_step() {
-    // `LOAD SAMPLE`'s pick decodes on the worker; its picker closes on the pick, hidden and taking every click until
-    // it lands: the loop, and AUTO's clip in one undo step.
+    // `LOAD SAMPLE`'s pick decodes on the worker; its picker closed meanwhile waits, hidden and taking every click
+    // until it lands: the loop, and AUTO's clip in one undo step.
     let mut rig = with_slicer();
     let file = Path::new("My Samples/Beat.wav");
     let beat = wav(&[0, 9000, 0, -9000, 0, 6000, 0, -6000]);
@@ -640,6 +656,9 @@ fn a_loop_decodes_on_the_worker_and_lands_with_autos_clip_in_one_undo_step() {
     super::rack_wiring::click_row(&mut rig, 0);
     rig.frame(vec![]);
     assert!(rig.app.slots.sample_picker.loading());
+    assert!(rig.painted(LOADING), "the picked row pulses");
+    rig.frame(escape());
+    rig.frame(vec![]);
     assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), loop_picker()]);
     assert!(!rig.painted("Beat") && !rig.painted(LOADING), "hidden");
     assert_eq!((loop_of(&rig), clip(&rig, id)), (None, &before));
@@ -685,6 +704,7 @@ fn a_loop_picks_slices_are_detected_on_the_worker() {
     let detects = crate::audio_engine::slicer::detects_here();
     super::rack_wiring::click_row(&mut rig, 0);
     super::rack_wiring::worker_done(&mut rig);
+    close_picker(&mut rig);
     assert_eq!(loop_of(&rig), Some(user_path("My Samples/Beat.wav")));
     let (_, notes) = auto_clip(&rig);
     assert!(!notes.is_empty());
@@ -731,6 +751,9 @@ fn import_in_the_module_sample_picker_keeps_an_audio_file_in_my_samples() {
         rig.frame(vec![]);
         assert!(rig.color_of("Mine").is_some(), "{kind:?} lists it");
         picker_row(&mut rig, 0);
+        if kind == SynthKind::Slicer {
+            close_picker(&mut rig);
+        }
         assert!(!rig.overlays().contains(&picker), "{kind:?}");
         let module = slicer(&rig);
         let path = crate::audio_engine::slicer::loop_path(module).or_else(|| shape_path(module));
@@ -864,6 +887,7 @@ fn auto_writes_the_clip_the_piano_roll_edits() {
     rig.frame(vec![]);
     rig.app.navigate(Nav::Open(loop_picker()));
     picker_row(&mut rig, 1);
+    close_picker(&mut rig);
     assert_eq!(
         loop_of(&rig),
         Some(app_path("Built-in/Loops/Dust Break 84.wav"))
@@ -1051,10 +1075,11 @@ fn tesla_opens_from_the_picker_and_saves_into_my_recordings() {
         module,
     };
     assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), picker]);
-    // My Files, My Samples, the file.
+    // My Files, My Samples, the file, which the close opens.
     for row in [0, 1, 0] {
         picker_row(&mut rig, row);
     }
+    close_picker(&mut rig);
     rig.frame(vec![]);
     ctrl(&mut rig, editor, 's');
     ctrl(&mut rig, editor, 's');
@@ -1064,10 +1089,58 @@ fn tesla_opens_from_the_picker_and_saves_into_my_recordings() {
     }
 }
 
-/// Issue #52: where there is no file dialog (Android, the browser; here a phone's), Lemon Trio's sample page opens the
-/// sample picker, and the plugin opens its pick (one the session keeps in memory, as the browser's are).
+/// #117: Tesla's `Send to arranger as audio clip` (Shift+C) keeps its sample in My Recordings and puts it on a new
+/// Audio channel at the playhead, as SONGS' `Send to playlist` does, in one undo step.
 #[test]
-fn a_lemon_trios_sample_page_opens_the_sample_picker() {
+fn teslas_send_to_the_arranger_puts_its_sample_on_a_new_track_at_the_playhead() {
+    use os_plugkit::embed::{self, Input};
+    let mut rig = Rig::with_synth();
+    rig.app.add_bare_channel(ChannelKind::Instrument, 0);
+    let channel = &mut rig.app.song.channels[CHANNEL];
+    let id = channel.id;
+    let uid = crate::plugins::builtin::named("Tesla").uid;
+    let module = crate::plugins::add(&mut channel.rack, id, uid, 0).unwrap();
+    rig.app.song_edited(SongEdit::Final, 0);
+    rig.open_rack(CHANNEL);
+    rig.slide_rack();
+    let editor = crate::plugins::lemon_open(id, module).expect("its card shows its editor") as _;
+    // A sample dropped on Tesla's window.
+    let name = format!("tesla-send-{}", std::process::id());
+    let file = std::env::temp_dir().join(format!("{name}.wav"));
+    std::fs::write(&file, wav(&[0, 9000, 0, -9000])).unwrap();
+    let path = file.to_string_lossy().into_owned();
+    embed::input(editor, Input::Drop { path }, (false, false, false));
+    rig.frame(vec![]);
+    rig.rec.0.borrow_mut().tick = 2 * u64::from(crate::song::PPQ);
+    let (channels, steps) = (rig.app.song.channels.len(), rig.app.history.steps());
+    let key = Input::Key {
+        sym: 'c' as u32,
+        text: Some('C'),
+    };
+    embed::input(editor, key, (false, true, false));
+    rig.frame(vec![]);
+    crate::ui::views::preset_picker::join_workers();
+    rig.frame(vec![]);
+    rig.frame(vec![]);
+    let user = (rig.app.files.user_dir().unwrap()).join(crate::project_files::RECORDINGS_FOLDER);
+    let kept = user.join(format!("{name}.wav"));
+    assert!(rig.app.files.user_file_exists(&kept));
+    let song = &rig.app.song;
+    assert_eq!(song.channels.len(), channels + 1);
+    let new = song.channels.last().unwrap();
+    assert_eq!(new.kind, ChannelKind::AudioClip);
+    let starts: Vec<u32> = new.lanes[0].clips.iter().map(|c| c.start_tick).collect();
+    assert_eq!(starts, [2 * crate::song::PPQ]);
+    assert_eq!(rig.app.history.steps(), steps + 1);
+    let _ = std::fs::remove_file(file);
+}
+
+/// Issue #52: where there is no file dialog (Android, the browser; here a phone's), Lemon Trio's sample page opens the
+/// sample picker, and the plugin opens its pick (one the session keeps in memory, as the browser's are). Issue #93: each
+/// pick only plays on the preview player and the picker stays; its close stops the preview and the plugin opens the
+/// last pick.
+#[test]
+fn a_lemon_trios_sample_picker_previews_each_pick_and_the_plugin_opens_the_last() {
     use lemon_3x_osc::view::{CROP_X, CROP_Y, rr, sample_card};
     use os_plugkit::embed::{self, Button, Input};
     embed::set_host_files(true);
@@ -1078,10 +1151,13 @@ fn a_lemon_trios_sample_page_opens_the_sample_picker() {
     let uid = crate::plugins::builtin::named("Lemon Trio").uid;
     let module = crate::plugins::add(&mut channel.rack, id, uid, 0).unwrap();
     rig.app.song_edited(SongEdit::Final, 0);
-    let file = "My Samples/Kick.wav";
+    let (kick, snare) = ("My Samples/Kick.wav", "My Samples/Snare.wav");
     rig.app
         .files
-        .keep_user_file(Path::new(file), wav(&[0, 9000, 0, -9000]));
+        .keep_user_file(Path::new(kick), wav(&[0, 9000, 0, -9000]));
+    rig.app
+        .files
+        .keep_user_file(Path::new(snare), wav(&[4000; 44_100]));
     rig.open_rack(CHANNEL);
     rig.slide_rack();
     let editor = crate::plugins::lemon_open(id, module).expect("its card shows its editor") as _;
@@ -1114,18 +1190,33 @@ fn a_lemon_trios_sample_page_opens_the_sample_picker() {
         channel: CHANNEL,
         module,
     };
-    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), picker]);
-    // My Files, My Samples, the file.
+    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), picker.clone()]);
+    let opened = |rig: &mut Rig, file: &str| {
+        crate::plugins::store_states(&mut rig.app.song);
+        let module = rig.app.song.channels[CHANNEL].rack.get(module).unwrap();
+        let state = &module.file.plugin.as_ref().unwrap().state;
+        String::from_utf8_lossy(state).contains(file)
+    };
+    // My Files, My Samples, Kick: it plays, and the picker stays.
     for row in [0, 1, 0] {
         picker_row(&mut rig, row);
     }
     rig.frame(vec![]);
-    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL)]);
-    crate::plugins::store_states(&mut rig.app.song);
-    let module = rig.app.song.channels[CHANNEL].rack.get(module).unwrap();
-    let state = &module.file.plugin.as_ref().unwrap().state;
+    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), picker.clone()]);
+    assert!(rig.take().contains(&"Preview 4 frames from 0".to_owned()));
+    // Snare (a second long) replaces it; the plugin has neither yet.
+    picker_row(&mut rig, 1);
+    rig.frame(vec![]);
+    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL), picker]);
     assert!(
-        String::from_utf8_lossy(state).contains(file),
-        "the plugin opened the pick"
+        rig.take()
+            .contains(&"Preview 44100 frames from 0".to_owned())
     );
+    assert!(!opened(&mut rig, kick) && !opened(&mut rig, snare));
+    // The close stops the preview, and the plugin opens the last pick.
+    close_picker(&mut rig);
+    rig.frame(vec![]);
+    assert_eq!(rig.overlays(), [Overlay::Rack(CHANNEL)]);
+    assert!(rig.take().contains(&"Preview stop".to_owned()));
+    assert!(opened(&mut rig, snare), "the plugin opened the last pick");
 }

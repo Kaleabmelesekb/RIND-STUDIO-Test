@@ -41,12 +41,12 @@ use crate::params::{self, Role};
 use crate::song::{ModuleInstance, Rack, SynthKind};
 use crate::theme::DISABLED_ALPHA;
 use crate::ui::buttons::{close_x, outline_circle_button};
-use crate::ui::picker_preview::{Audition, STRIP_H, SampleStrip};
+use crate::ui::picker_preview::{Audition, KEYS_H, KeyStrip, STRIP_H, SampleStrip};
 use crate::ui::popup::{PopupItem, PopupResult};
 use crate::ui::preset_picker::{modal, natural};
-use crate::ui::search_bar::{self, RowLook, SearchBar};
+use crate::ui::search_bar::{self, Mark, RowLook, SearchBar};
 use crate::ui::widgets::{shrink, truncated};
-use crate::ui::{Finger, UiCtx, anim, fingers, focus, focus_lost};
+use crate::ui::{Finger, UiCtx, anim, fingers, focus, focus_lost, scroller};
 
 use Entry::Module as M;
 use SynthKind as S;
@@ -130,88 +130,25 @@ impl Row {
     }
 }
 
-/// Lemon Studio's built-in plugins ([`crate::plugins::builtin`]), on every platform, each
-/// listed after the module it is Lemon's counterpart of (as Lemon Reverb and Lemon Limiter are of Reverb 2 and Limiter), by CLAP id. One not
-/// here goes into its section ([`section_of`]) by name.
-const COUNTERPARTS: &[(&str, Entry)] = &[
-    ("org.openstudio.open-3x-osc", Entry::Synth(S::ThreeXOsc)),
-    ("org.openstudio.open-sampler", Entry::Synth(S::DwSampler)),
-    ("org.openstudio.open-parametric-eq-2", M(3)),
-    ("org.openstudio.lemon-filter", M(9)),
-    ("org.openstudio.lemon-chorus", M(11)),
-    ("org.openstudio.lemon-flanger", M(13)),
-    ("org.openstudio.lemon-phaser", M(14)),
-    // Lemon Reverb and Lemon Limiter: the plugins, with Lemon's own editors, in place of Honeydew's old tabbed panels
-    // (those stay for the songs that have them: `honeydew_audio::lemon`).
-    ("org.openstudio.lemon-reverb", M(35)),
-    ("org.openstudio.lemon-limiter", M(28)),
-    // Under the Slicer, so that the two slicers read as two.
-    ("org.openstudio.lemon-slicer", Entry::Synth(S::Slicer)),
-];
-
-/// The name a section's entry sorts by when a built-in plugin goes in by name: a plugin listed after its counterpart
-/// sorts as that counterpart, so that the pair stays together.
-fn sort_name(entry: &Entry) -> &'static str {
-    let counterpart = |p: &PluginEntry| {
-        let of = COUNTERPARTS
-            .iter()
-            .find(|(id, _)| p.uid.strip_prefix("clap:") == Some(*id));
-        of.map(|(_, of)| of.name())
-    };
-    match entry {
-        Entry::Plugin(p) => counterpart(p).unwrap_or(p.name),
-        e => e.name(),
-    }
-}
-
-/// The section a built-in plugin goes into, by its CLAP features: an instrument into SYNTH, an effect by what it does
-/// as the sections' modules (distortion is LEVEL's, as Distortion and Waveshaper), else MISC (modulation, pitch,
-/// analyzers, utilities). `stereo` is a CLAP channel layout, not the Stereoizer's kind.
-fn section_of(plugin: &crate::plugins::builtin::Builtin) -> &'static str {
-    let has = |kinds: &[&str]| (plugin.desc.features.iter()).any(|f| kinds.contains(&f.as_str()));
-    if plugin.instrument() {
-        "SYNTH"
-    } else if has(&["delay", "reverb"]) {
-        "ECHO"
-    } else if has(&[
-        "compressor",
-        "limiter",
-        "gate",
-        "expander",
-        "transient-shaper",
-        "distortion",
-        "restoration",
-    ]) {
-        "LEVEL"
-    } else if has(&["equalizer", "filter"]) {
-        "FILTER"
-    } else {
-        "MISC"
-    }
-}
-
-/// The Modules sections: [`SECTIONS`] with the built-in plugins in theirs.
+/// The Modules sections: [`SECTIONS`], then Lemon Studio's built-in plugins ([`crate::plugins::builtin`]), on every
+/// platform, in their own, LEMON STUDIO (#86): the instruments, then the effects, each by name.
 fn sections() -> Vec<(Option<&'static str>, Vec<Entry>)> {
-    let mut sections: Vec<_> = (SECTIONS.iter())
-        .map(|&(header, entries)| (header, entries.to_vec()))
-        .collect();
-    for plugin in crate::plugins::builtin::all() {
-        let header = Some(section_of(plugin));
-        let Some((_, entries)) = sections.iter_mut().find(|(h, _)| *h == header) else {
-            continue;
-        };
-        let after = (COUNTERPARTS.iter().find(|(id, _)| *id == plugin.clap_id()))
-            .and_then(|(_, of)| entries.iter().position(|e| e == of));
-        let by_name = || (entries.iter()).position(|e| natural(sort_name(e), plugin.name).is_gt());
-        let at = (after.map(|i| i + 1).or_else(by_name)).unwrap_or(entries.len());
-        let entry = Entry::Plugin(PluginEntry {
+    let mut lemon: Vec<_> = (crate::plugins::builtin::all().iter())
+        .map(|plugin| PluginEntry {
             uid: plugin.uid,
             name: plugin.name,
             instrument: plugin.instrument(),
-        });
-        entries.insert(at, entry);
-    }
-    sections
+        })
+        .collect();
+    lemon.sort_by(|a, b| (b.instrument.cmp(&a.instrument)).then_with(|| natural(a.name, b.name)));
+    let lemon = (
+        Some("LEMON STUDIO"),
+        lemon.into_iter().map(Entry::Plugin).collect(),
+    );
+    (SECTIONS.iter())
+        .map(|&(header, entries)| (header, entries.to_vec()))
+        .chain([lemon])
+        .collect()
 }
 
 /// The Modules sections, in order. The first group has no header. Ids by display name; where a name is shared
@@ -279,6 +216,7 @@ const SECTIONS: [(Option<&str>, &[Entry]); 7] = [
             M(26),
             M(11),
             M(13),
+            M(honeydew_audio::half_time::HALF_TIME),
             M(honeydew_audio::modulator::MODULATOR),
             M(4),
             M(14),
@@ -485,7 +423,6 @@ const BUTTON_APART: f32 = 0.25;
 const BUTTON_LABEL_PT: u8 = 8;
 /// Left padding of the title and the name field's text (a row's own is [`search_bar::paint_row`]'s).
 const PAD_X: f32 = 0.5;
-const SCROLLBAR_W: f32 = 0.15;
 /// Icon size factor of the close X (as the transport's), and of the ≡ button's icon (as SONGS').
 const CLOSE_ICON: f32 = 0.7;
 const MENU_ICON: f32 = 0.6;
@@ -498,8 +435,7 @@ const TAIL_K: usize = 5;
 const CRUMB_TAIL_K: usize = 40;
 /// The Back arrow's icon size factor.
 const BACK_ICON: f32 = 0.7;
-/// `text` alphas: the scrollbar thumb, a section header's band (disabled rows: [`DISABLED_ALPHA`]).
-const SCROLLBAR_ALPHA: f32 = 0.5;
+/// `text` alpha of a section header's band (disabled rows: [`DISABLED_ALPHA`]).
 const SECTION_ALPHA: f32 = 0.05;
 /// Every row's name: folders and items alike, one size in every side browser (the folder rows' FontSize 4); a found
 /// row with a path is the exception ([`search_bar::paint_row`]). A section header's label is FontSize 3.
@@ -616,6 +552,7 @@ impl ModulesBrowser {
                     Row::Item(entry) => RowKind::Enabled(entry),
                 },
                 picked: matches!(row, Row::Item(e) if Some(e) == picked),
+                mark: None,
             };
             rows(query, sort, takes).into_iter().map(row).collect()
         })?;
@@ -723,6 +660,8 @@ pub(crate) struct PanelRow<'a, T> {
     /// sits over a picked item row while it is on, and its loading pulse (a `text` fill under `menuFill` text) over a
     /// plain one: a picked row is not inverted while it loads.
     pub picked: bool,
+    /// Its mark at the right end (the pickers' folders and files).
+    pub mark: Option<Mark<'a>>,
 }
 
 /// What the user clicked in the panel this frame.
@@ -767,6 +706,8 @@ pub(crate) struct SidePanel {
     pub audition: Audition,
     /// The sample strip at the bottom (sample pickers), once a sample is picked.
     pub sample: Option<SampleStrip>,
+    /// The keys at the bottom (an instrument's presets, #98).
+    pub keys: Option<KeyStrip>,
     /// Row flash on pick: the item row last tapped, by index and name (a list read again may move another row to that
     /// index: the flash then shows on none), and when (input time, in seconds), while its flash runs.
     flash: Option<(usize, String, f64)>,
@@ -1046,6 +987,11 @@ impl SidePanel {
                     list.max.y -= m.u(STRIP_H);
                     strip.show(ui, cx, at.panel, id);
                 }
+                // As do the keys.
+                if let Some(keys) = &mut self.keys {
+                    list.max.y -= m.u(KEYS_H);
+                    keys.show(ui, cx, at.panel, id);
+                }
                 if self.search.shown() {
                     list.min.y += m.u(search_bar::DROP);
                     if self.search.show(ui, cx, field, browser) {
@@ -1147,6 +1093,7 @@ impl SidePanel {
                         hovered: false,
                         select: None,
                         bold: false,
+                        mark: row.mark,
                     };
                     match row.kind {
                         RowKind::Section => {
@@ -1254,17 +1201,9 @@ impl SidePanel {
                         false => self.flash = None,
                     }
                 }
-                if content_h > list.height() {
-                    let w = m.u(SCROLLBAR_W);
-                    let thumb = Rect::from_min_size(
-                        pos2(
-                            list.right() - w,
-                            list.top() + scroll / content_h * list.height(),
-                        ),
-                        vec2(w, list.height() * list.height() / content_h),
-                    );
-                    painter.rect_filled(thumb, 0.0, text.gamma_multiply(SCROLLBAR_ALPHA));
-                }
+                // Over the rows: a finger on the thumb drags it (#111).
+                let (bar, u) = (id.with("scrollbar"), m.u(1.0));
+                scroller::list_scrollbar(ui, bar, list, u, content_h, &mut self.scroll_y, text);
                 focus::close(ctx, browser_id);
                 // The audition strip is no part of the browser: a focus target of its own, over the picked row, in view
                 // or not.

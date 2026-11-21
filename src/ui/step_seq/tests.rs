@@ -646,7 +646,7 @@ impl Rig {
                 .frame(egui::Frame::NONE)
                 .show(ctx, |ui| {
                     action = view.show(ui, &cx, song, CH, kit);
-                    view.graph_knob(ui, &cx, SCREEN, egui::Color32::WHITE);
+                    view.graph_knob(ui, &cx, SCREEN, egui::Color32::WHITE, &mut 0.0);
                 });
         });
         self.shapes = output.shapes;
@@ -1123,10 +1123,24 @@ fn level_meters_stand_at_the_headers_right_edge_until_the_mixer_is_fully_out() {
     let [l, r] = meter_bars(header, page, false, [1.0, 0.5], t);
     assert_eq!(l, Rect::from_min_max(pos2(86.0, 48.0), pos2(90.0, 111.0)));
     assert_eq!(r, Rect::from_min_max(pos2(92.0, 79.5), pos2(96.0, 111.0)));
-    // Fully out: horizontal bars at the bottom of the page area, filling from the left.
+    // Fully out: horizontal bars at the bottom of the page area, filling from the left, in the room the strip's 75 %
+    // page row leaves under it: no control of any page covers them (#85). This 2 U row (U = 32 px) has 7.875 px there.
     let [l, r] = meter_bars(header, page, true, [1.0, 0.5], t);
-    assert_eq!(l, Rect::from_min_max(pos2(96.0, 101.0), pos2(480.0, 105.0)));
-    assert_eq!(r, Rect::from_min_max(pos2(96.0, 107.0), pos2(288.0, 111.0)));
+    assert_eq!(
+        (l.x_range(), r.x_range()),
+        (page.x_range(), (96.0..=288.0).into())
+    );
+    assert_eq!(r.bottom(), page.bottom());
+    assert!(l.bottom() < r.top() && l.height() == r.height() && l.height() > 0.0);
+    let strip = header.union(page);
+    for p in crate::ui::drums::StripPage::ALL {
+        for (ctl, c) in crate::ui::drums::place_strip(p, strip, 32.0).1 {
+            for bar in [l, r] {
+                let under = bar.intersect(c);
+                assert!(!under.is_positive(), "{p:?} {ctl:?} {c:?} covers {bar:?}");
+            }
+        }
+    }
     // At rest (silence: no meter feed yet) both are empty, either way.
     for full in [false, true] {
         assert!(
@@ -2908,10 +2922,11 @@ fn a_touch_and_each_move_paint_the_current_rows_step_under_x() {
     rig.open_lane();
     let header = rig.header(1);
     rig.click(header);
-    // The Snare row (hits on 4 and 12): halfway up on 4, above the lane on 8 (the top), at the bottom on 12.
+    // The Snare row (hits on 4 and 12): halfway up on 4, a move sideways to 8 (which leaves the column: #127), at the
+    // bottom on 12.
     rig.stroke(&[
         pos2(rig.step_x(4), lane_y(0.5)),
-        pos2(rig.step_x(8), 300.0),
+        pos2(rig.step_x(8), lane_y(0.5)),
         pos2(rig.step_x(12), 598.0),
     ]);
     // Step 8 holds no Snare hit: nothing to send there.
@@ -2938,6 +2953,34 @@ fn a_touch_and_each_move_paint_the_current_rows_step_under_x() {
         "{bar:?} in {:?}",
         rig.rects(ink)
     );
+}
+
+/// Honeydew change (#127): a drag keeps to the column it started on while it drifts sideways, until it moves
+/// clearly sideways (past the 0.5 U calm distance, more across than up or down).
+#[test]
+fn a_mostly_vertical_lane_drag_that_drifts_sideways_paints_only_its_column() {
+    let mut rig = Rig::new(pattern());
+    let at = rig.cell(1, 5);
+    rig.click(at);
+    rig.open_lane();
+    let header = rig.header(1);
+    rig.click(header);
+    rig.actions.clear();
+    // Step 4 is 195..219 and step 5, which now holds a Snare hit too, 219..243: going up, the finger drifts 30 px
+    // (U is 32 px) into step 5.
+    let x = rig.step_x(4);
+    rig.stroke(&[
+        pos2(x, lane_y(0.2)),
+        pos2(x + 30.0, lane_y(0.6)),
+        pos2(x + 30.0, lane_y(0.9)),
+    ]);
+    let steps: Vec<usize> = (rig.actions.iter())
+        .filter_map(|a| match *a {
+            StepAction::Graph { step, .. } => Some(step),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps, [4, 4, 4], "{:?}", rig.actions);
 }
 
 /// A pinch before any paint ends a touch that changed nothing: its own undo re-syncs.
@@ -4886,4 +4929,26 @@ fn a_copy_stays_on_its_step_at_fractional_step_widths() {
     c.events = vec![drum(0, 13)];
     assert_eq!(copy_steps(&mut c, &[(0, 1)], sig), [(0, 2)]);
     assert_eq!(c.events[1].pos(), 39);
+}
+
+/// PR #87's rotation panic: on a screen shorter than the ruler the rows' top lies below the lane's bottom, and the
+/// playhead line's span must still clamp (`f32::clamp` panics when min is above max).
+#[test]
+fn a_lane_shorter_than_its_ruler_draws_its_playhead_without_a_panic() {
+    let mut rig = Rig::new(odd_hit());
+    let (theme, m) = (theme_by_id(0), metrics());
+    let cx = UiCtx {
+        theme: &theme,
+        m: &m,
+    };
+    let (view, song, kit) = (&mut rig.view, &rig.song, &rig.kit);
+    let raw = RawInput {
+        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 20.0))),
+        ..Default::default()
+    };
+    let _ = rig.ctx.run(raw, |ctx| {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ctx, |ui| view.show(ui, &cx, song, CH, kit));
+    });
 }

@@ -35,6 +35,8 @@ pub struct InputRing {
     peaks_done: AtomicU64,
     /// The stream filling the ring has failed: it fills no more.
     failed: AtomicBool,
+    /// Honeydew change (#129): the recording's input gain, linear, as f32 bits; every sample pushed is scaled by it.
+    gain: AtomicU32,
 }
 
 fn atomics(len: usize) -> Box<[AtomicU32]> {
@@ -59,6 +61,7 @@ impl InputRing {
             peaks: atomics(PEAK_SLOTS * channels),
             peaks_done: AtomicU64::new(0),
             failed: AtomicBool::new(false),
+            gain: AtomicU32::new(1f32.to_bits()),
         }
     }
 
@@ -80,8 +83,14 @@ impl InputRing {
         self.written.load(Ordering::Acquire)
     }
 
-    /// Appends interleaved samples; a trailing partial frame is dropped. The single producer's call (the input
-    /// callback, or a test): two pushes at once would interleave their frames. Never allocates or blocks.
+    /// Scales every sample pushed from now on by `gain` (linear; 1 at first): what readers and the peaks see.
+    pub fn set_gain(&self, gain: f32) {
+        self.gain.store(gain.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Appends interleaved samples, scaled by the gain ([`Self::set_gain`]); a trailing partial frame is dropped. The
+    /// single producer's call (the input callback, or a test): two pushes at once would interleave their frames. Never
+    /// allocates or blocks.
     pub fn push(&self, mut samples: impl ExactSizeIterator<Item = f32>) {
         let channels = self.channels;
         let frames = samples.len() / channels;
@@ -95,9 +104,10 @@ impl InputRing {
         fence(Ordering::Release);
         let mut slot = (start % self.capacity as u64) as usize;
         let mut fill = self.fill.load(Ordering::Relaxed) as usize;
+        let gain = f32::from_bits(self.gain.load(Ordering::Relaxed));
         for _ in 0..frames {
             for port in 0..channels {
-                let x = samples.next().unwrap_or(0.0);
+                let x = samples.next().unwrap_or(0.0) * gain;
                 self.samples[slot * channels + port].store(x.to_bits(), Ordering::Relaxed);
                 let open = &self.open_peaks[port];
                 let peak = f32::from_bits(open.load(Ordering::Relaxed)).max(x.abs());
@@ -255,7 +265,7 @@ mod native {
     use std::sync::Arc;
 
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-    use cpal::{FromSample, Sample, SampleFormat, SampleRate, SizedSample};
+    use cpal::{FromSample, Sample, SampleFormat, SizedSample};
 
     use super::{InputDevice, InputRing};
 
@@ -267,9 +277,9 @@ mod native {
         NoDevice,
         /// The device cannot capture at the output's rate (no resampling, the open fails).
         Rate(u32),
-        Configs(cpal::SupportedStreamConfigsError),
-        Build(cpal::BuildStreamError),
-        Play(cpal::PlayStreamError),
+        Configs(cpal::Error),
+        Build(cpal::Error),
+        Play(cpal::Error),
         UnsupportedSampleFormat,
     }
 
@@ -281,11 +291,20 @@ mod native {
         };
         devices
             .filter_map(|device| {
-                let name = device.name().ok()?;
+                let name = name(&device)?;
                 let channels = device.default_input_config().ok()?.channels();
                 Some(InputDevice { name, channels })
             })
             .collect()
+    }
+
+    /// The name a device is listed, picked and stored by, as cpal 0.16 named it: ALSA's PCM (`default`, `hw:CARD=…`),
+    /// elsewhere the device's own name.
+    fn name(device: &cpal::Device) -> Option<String> {
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        return device.id().ok().map(|id| id.id().to_owned());
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        device.description().ok().map(|d| d.name().to_owned())
     }
 
     /// The config at `rate` with the default config's port count, else with the most ports; f32 first among equals.
@@ -295,7 +314,7 @@ mod native {
         default_channels: Option<u16>,
     ) -> Option<cpal::SupportedStreamConfig> {
         configs
-            .filter_map(|c| c.try_with_sample_rate(SampleRate(rate)))
+            .filter_map(|c| c.try_with_sample_rate(rate))
             .max_by_key(|c| {
                 let channels = c.channels();
                 let f32 = c.sample_format() == SampleFormat::F32;
@@ -315,7 +334,7 @@ mod native {
             Some(name) => host
                 .input_devices()
                 .ok()
-                .and_then(|mut devices| devices.find(|d| d.name().is_ok_and(|n| n == name))),
+                .and_then(|mut devices| devices.find(|d| self::name(d).is_some_and(|n| n == name))),
         }
         .ok_or(InputError::NoDevice)?;
         let default_channels = device.default_input_config().ok().map(|c| c.channels());
@@ -331,17 +350,17 @@ mod native {
         ));
         let (config, r) = (supported.config(), ring.clone());
         let stream = match supported.sample_format() {
-            SampleFormat::I8 => build::<i8>(&device, &config, r),
-            SampleFormat::I16 => build::<i16>(&device, &config, r),
-            SampleFormat::I24 => build::<cpal::I24>(&device, &config, r),
-            SampleFormat::I32 => build::<i32>(&device, &config, r),
-            SampleFormat::I64 => build::<i64>(&device, &config, r),
-            SampleFormat::U8 => build::<u8>(&device, &config, r),
-            SampleFormat::U16 => build::<u16>(&device, &config, r),
-            SampleFormat::U32 => build::<u32>(&device, &config, r),
-            SampleFormat::U64 => build::<u64>(&device, &config, r),
-            SampleFormat::F32 => build::<f32>(&device, &config, r),
-            SampleFormat::F64 => build::<f64>(&device, &config, r),
+            SampleFormat::I8 => build::<i8>(&device, config, r),
+            SampleFormat::I16 => build::<i16>(&device, config, r),
+            SampleFormat::I24 => build::<cpal::I24>(&device, config, r),
+            SampleFormat::I32 => build::<i32>(&device, config, r),
+            SampleFormat::I64 => build::<i64>(&device, config, r),
+            SampleFormat::U8 => build::<u8>(&device, config, r),
+            SampleFormat::U16 => build::<u16>(&device, config, r),
+            SampleFormat::U32 => build::<u32>(&device, config, r),
+            SampleFormat::U64 => build::<u64>(&device, config, r),
+            SampleFormat::F32 => build::<f32>(&device, config, r),
+            SampleFormat::F64 => build::<f64>(&device, config, r),
             _ => return Err(InputError::UnsupportedSampleFormat),
         }
         .map_err(InputError::Build)?;
@@ -351,9 +370,9 @@ mod native {
 
     fn build<T>(
         device: &cpal::Device,
-        config: &cpal::StreamConfig,
+        config: cpal::StreamConfig,
         ring: Arc<InputRing>,
-    ) -> Result<cpal::Stream, cpal::BuildStreamError>
+    ) -> Result<cpal::Stream, cpal::Error>
     where
         T: SizedSample,
         f32: FromSample<T>,
@@ -364,19 +383,23 @@ mod native {
             move |data: &[T], _: &cpal::InputCallbackInfo| {
                 ring.push(data.iter().map(|&s| f32::from_sample(s)));
             },
-            move |_| failed.set_failed(),
+            move |error| {
+                if crate::device::stops(&error) {
+                    failed.set_failed();
+                }
+            },
             None,
         )
     }
 
     #[cfg(test)]
     mod tests {
-        use cpal::{SampleFormat, SampleRate, SupportedBufferSize, SupportedStreamConfigRange};
+        use cpal::{SampleFormat, SupportedBufferSize, SupportedStreamConfigRange};
 
         use super::pick_config;
 
         fn range(channels: u16, format: SampleFormat) -> SupportedStreamConfigRange {
-            let (min, max) = (SampleRate(8_000), SampleRate(96_000));
+            let (min, max) = (8_000, 96_000);
             SupportedStreamConfigRange::new(
                 channels,
                 min,
@@ -399,7 +422,7 @@ mod native {
                     picked.sample_format(),
                     picked.sample_rate()
                 ),
-                (2, SampleFormat::F32, SampleRate(48_000))
+                (2, SampleFormat::F32, 48_000)
             );
             // No default, or none at its count: the most ports, f32 first.
             let most = pick_config(plug(), 48_000, None).expect("a config");

@@ -836,10 +836,11 @@ mod audio {
     }
 
     #[test]
-    fn without_a_calibration_a_take_drops_the_engines_buffer_size_and_with_the_toggle_on_nothing() {
-        // L = the engine's audio buffer size, 256 frames here, while compensating (the toggle unset or OFF); nothing
-        // with the toggle ON.
-        for (toggle, dropped) in [(None, 256), (Some(false), 256), (Some(true), 0)] {
+    fn without_a_calibration_a_take_drops_the_engines_buffer_size_and_with_the_toggle_off_nothing()
+    {
+        // L = the engine's audio buffer size, 256 frames here, while compensating (the toggle ON, Honeydew change
+        // #129); nothing with the toggle OFF.
+        for (toggle, dropped) in [(true, 256), (false, 0)] {
             let mut a = AudioRig::new("buffer", false);
             a.rig.rec.0.borrow_mut().buffer_frames = 256;
             a.rig.app.settings.latency_compensation = toggle;
@@ -855,6 +856,29 @@ mod audio {
             let ends: Vec<_> = a.rig.app.main_screen.takes.iter().map(|t| t.end).collect();
             assert_eq!(ends, [BEAT as f64], "{toggle:?}");
         }
+    }
+
+    #[test]
+    fn the_input_gain_raises_the_input_before_it_records() {
+        // Honeydew change (#129): `Input gain` at +6 dB doubles what records (0.25 alone writes 8191).
+        let mut a = AudioRig::new("gain", false);
+        a.rig.app.settings.input_gain_db = 6.0;
+        a.rig.app.settings.count_in = false;
+        a.rig.frame(vec![]);
+        a.rig.click(PLAY);
+        a.feed(FRAMES_PER_BEAT, 0.25);
+        a.at(BEAT);
+        a.rig.click(PLAY);
+        let bytes = std::fs::read(a.user.join("My Recordings").join("Rec.wav")).unwrap();
+        let samples: Vec<i16> = (bytes[46..].as_chunks::<2>().0.iter())
+            .map(|b| i16::from_le_bytes(*b))
+            .collect();
+        assert!(!samples.is_empty());
+        assert!(
+            (samples.iter()).all(|&x| (f32::from(x) / 8191.0 - 2.0).abs() < 0.01),
+            "{:?}",
+            &samples[..4]
+        );
     }
 
     #[test]
@@ -1265,7 +1289,7 @@ fn notes_record_at_the_song_position_with_no_latency_compensation() {
     // buffer size moves it, though they move an audio take of the same pass earlier.
     let mut rig = note_rig(false, 5 * BEAT + 3);
     rig.app.latency = Some(480);
-    rig.app.settings.latency_compensation = None;
+    rig.app.settings.latency_compensation = true;
     rig.rec.0.borrow_mut().buffer_frames = 256;
     rig.click(REC);
     rig.click(PLAY);
@@ -1513,4 +1537,76 @@ fn a_held_note_shows_live_in_the_playlist_and_the_open_piano_roll_as_the_take_th
         3.0
     );
     assert_eq!(rig.app.slots.piano_roll.rolls[&2].clip_id, Some(clip));
+}
+
+/// #74: a monitoring channel that a MIDI send reaches records, while REC records,
+/// what the send brings it, as if played into it. The MiniSynth B (2, current) plays a clip of two notes and a CC #1
+/// ramp into the MiniSynth A (3, monitoring) through its send: at Stop A has the notes, where and as long and hard as
+/// B played them, in a clip of its own, and the ramp in a CC #1 lane of its own. B is as it was.
+#[test]
+fn a_monitoring_channel_records_the_notes_and_ccs_a_midi_send_brings_it() {
+    use crate::song::points::{self, PointKey};
+    use crate::song::{Event, MidiSend};
+    let mut rig = note_rig(false, 0);
+    rig.app
+        .add_bare_channel(ChannelKind::Synth(SynthKind::MiniSynth), 0);
+    rig.app.selected_channel = 2;
+    const CC1: AutomationTarget = AutomationTarget {
+        instance_id: 0,
+        param: 8,
+    };
+    let song = &mut rig.app.song;
+    song.channels[3].file.input_monitoring = true;
+    let target_channel_id = song.channels[3].id;
+    (song.channels[2].file.midi_sends).push(MidiSend {
+        target_channel_id,
+        enabled: true,
+    });
+    let b = &mut song.channels[2];
+    let note = |pos, len_beats, key, velocity| Event::Note {
+        pos,
+        len_beats,
+        key,
+        velocity,
+        pan: Event::DEFAULT_PAN,
+        slide: false,
+    };
+    (b.lanes[0].add_clip(0, 4.0).events)
+        .extend([note(0, 1.0, 60, 200), note(2 * PPQ, 0.5, 64, 100)]);
+    let ramp = &mut b.add_automation_lane(CC1).add_clip(0, 4.0).events;
+    for (pos, value) in [(0, 0.0), (2 * PPQ, 1.0)] {
+        ramp.push(Event::Automation {
+            pos,
+            value,
+            control: true,
+        });
+    }
+    let b = rig.app.song.channels[2].clone();
+    rig.app.song_edited(SongEdit::Final, 0);
+    rig.click(REC);
+    rig.click(PLAY);
+    for tick in (0..=4 * BEAT).step_by(16) {
+        rig.at_tick(tick);
+        rig.frame(vec![]);
+    }
+    rig.click(PLAY);
+    assert_eq!(
+        notes(&rig, 3),
+        [vec![(0, 0, 60, 200, 1.0), (0, 2 * PPQ, 64, 100, 0.5)]]
+    );
+    let lanes = rig.app.song.channels[3].lanes.iter();
+    let [cc] = &lanes.filter(|l| l.target == Some(CC1)).collect::<Vec<_>>()[..] else {
+        panic!("one CC #1 lane on A")
+    };
+    let pts = points::points(&cc.clips[0], PointKey::Automation);
+    let ends = (
+        pts.first().map(|p| (p.tick, p.value)),
+        pts.last().map(|p| (p.tick, p.value)),
+    );
+    let top = crate::app::auto_record::point_value(1.0);
+    assert_eq!(ends, (Some((0, 0)), Some((2 * PPQ, top))));
+    assert_eq!(
+        rig.app.song.channels[2], b,
+        "B's own clip and lanes as they were"
+    );
 }

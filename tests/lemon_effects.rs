@@ -1,12 +1,12 @@
 //! Lemon Studio's reverb and limiter as rack modules: in the song file, a rack preset and an FL Studio project. The
-//! Dynamic EQ, De-esser and Denoise, Honeydew's own effects, are saved as they are.
+//! Dynamic EQ, De-esser, Denoise and Half Time, Honeydew's own effects, are saved as they are.
 
 use honeydew::content::Factory;
 use honeydew::sample_cache::SampleCache;
 use honeydew::song::{ChannelKind, ModuleInstance, Song};
 use honeydew_audio::dynamic_eq::{self, band};
 use honeydew_audio::lemon::{self, dynamics, norm, reverb};
-use honeydew_audio::{de_esser, denoise, dragonfly_fx};
+use honeydew_audio::{de_esser, denoise, dragonfly_fx, half_time};
 
 /// A song with a Lemon Reverb between two of the song format's own effects and a Lemon Limiter on the master, off
 /// their defaults.
@@ -73,6 +73,9 @@ fn a_saved_song_and_a_rack_preset_keep_them_where_fl_studio_mobile_skips_them() 
         let id = rack.add(type_id);
         rack.get_mut(id).unwrap().params[param] = 0.9;
     }
+    // And a Half Time at 1/16 bar.
+    let id = rack.add(half_time::HALF_TIME);
+    rack.get_mut(id).unwrap().params[half_time::LENGTH] = 0.0;
     let bytes = honeydew::flm::write(&song).unwrap();
     // Each one's `RMOd` is inside an `HDPm`, which a reader that does not know its type skips, never the rack's own.
     let rmods: Vec<usize> = (bytes.windows(4).enumerate())
@@ -81,7 +84,7 @@ fn a_saved_song_and_a_rack_preset_keep_them_where_fl_studio_mobile_skips_them() 
         })
         .map(|(i, _)| i)
         .collect();
-    assert_eq!(rmods.len(), 9);
+    assert_eq!(rmods.len(), 10);
     assert!(rmods.iter().all(|&i| &bytes[i - 16..i - 12] == b"HDPm"));
     // Read back, and written again byte for byte (as a live session's checkpoints require).
     let back = honeydew::flm::read(&bytes).unwrap();
@@ -97,6 +100,27 @@ fn a_saved_song_and_a_rack_preset_keep_them_where_fl_studio_mobile_skips_them() 
             .collect::<Vec<_>>()
     };
     assert_eq!(chain(&back), chain(modules));
+}
+
+/// A Half Time saved before 0.5.4 holds three params, its Length in param 1: a song and a rack preset load it at that
+/// Length, at Speed 1/2 and Smooth 10 ms, as it played (#122).
+#[test]
+fn an_older_half_time_loads_as_it_played() {
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::Instrument);
+    let rack = &mut song.channels[1].rack;
+    let id = rack.add(half_time::HALF_TIME);
+    // 1/2 bar and Mix 70 %, as 0.5.3 saved them.
+    rack.get_mut(id).unwrap().params = vec![1.0, 1.0 / 3.0, 0.7];
+    // 1/2 bar is item 3 of 1/16 bar … 8 bars.
+    let mut want = half_time::DEFAULTS;
+    want[..3].copy_from_slice(&[1.0, 1.0 / 3.0, 0.7]);
+    want[half_time::LENGTH] = 3.0 / 7.0;
+    let back = honeydew::flm::read(&honeydew::flm::write(&song).unwrap()).unwrap();
+    assert_eq!(back.channels[1].rack.modules[0].params, want);
+    let preset = honeydew::flm::write_rack(&song.channels[1].rack.modules).unwrap();
+    let back = honeydew::flm::read_rack(&preset, &mut 1).unwrap();
+    assert_eq!(back[0].params, want);
 }
 
 #[test]

@@ -2209,4 +2209,61 @@ fn markers_survive_a_save_and_load_and_a_song_without_any_writes_no_chunk() {
     let back = crate::flm::read(&bytes).unwrap();
     assert_eq!(back.markers, song.markers);
     assert!(back.file.unknown_chunks.is_empty());
+fn sections_are_saved_apart_and_a_song_with_none_writes_as_before() {
+    // An `HDSe` per section (#80), which FL Studio Mobile skips as an unknown chunk.
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::Synth(SynthKind::MiniSynth));
+    let before = crate::flm::write(&song).unwrap();
+    assert!(!before.windows(4).any(|w| w == b"HDSe"));
+    let intro = song.section_at(0, 16 * PPQ);
+    song.sections[intro].name = "Intro ✓".into();
+    let verse = song.section_at(16 * PPQ, 48 * PPQ);
+    assert_eq!(song.section_at(0, 16 * PPQ), intro, "a range's own section");
+    assert_eq!(song.sections[verse].name, "Section 2");
+    assert_ne!(song.sections[intro].hue, song.sections[verse].hue);
+    let bytes = crate::flm::write(&song).unwrap();
+    assert_eq!(bytes.windows(4).filter(|w| *w == b"HDSe").count(), 2);
+    assert_eq!(crate::flm::read(&bytes).unwrap().sections, song.sections);
+    song.sections.clear();
+    assert_eq!(crate::flm::write(&song).unwrap(), before);
+}
+
+#[test]
+fn a_collapsed_track_is_saved_apart_and_a_song_with_none_collapsed_writes_as_before() {
+    // An empty `HDCo` in the track's `TRKH` (#83), which FL Studio Mobile skips as an unknown chunk.
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::Synth(SynthKind::MiniSynth));
+    song.channels[1].lanes[0].add_clip(0, 4.0);
+    let before = crate::flm::write(&song).unwrap();
+    song.channels[1].lanes[0].collapsed = true;
+    let bytes = crate::flm::write(&song).unwrap();
+    assert_eq!(bytes.windows(4).filter(|w| *w == b"HDCo").count(), 1);
+    let read = crate::flm::read(&bytes).unwrap();
+    let collapsed: Vec<bool> = (read.channels.iter())
+        .map(|c| c.lanes[0].collapsed)
+        .collect();
+    assert_eq!(collapsed, [false, true]);
+    assert_eq!(read.channels[1].lanes[0].clips.len(), 1);
+    // Expanded again, the song writes what it wrote before.
+    song.channels[1].lanes[0].collapsed = false;
+    assert_eq!(crate::flm::write(&song).unwrap(), before);
+}
+
+#[test]
+fn the_tag_fields_are_saved_apart_and_a_song_with_none_writes_as_before() {
+    // #139: an `HDTg` of PROJECT's album, genre, year and comment, which FL Studio Mobile skips as an unknown chunk.
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::Synth(SynthKind::MiniSynth));
+    let before = crate::flm::write(&song).unwrap();
+    assert!(!before.windows(4).any(|w| w == b"HDTg"));
+    let meta = &mut song.file.meta;
+    meta.album = "Demos ✓".into();
+    meta.genre = "House".into();
+    meta.year = "2026".into();
+    meta.comment = "Made on a phone".into();
+    let bytes = crate::flm::write(&song).unwrap();
+    assert_eq!(bytes.windows(4).filter(|w| *w == b"HDTg").count(), 1);
+    assert_eq!(crate::flm::read(&bytes).unwrap().file.meta, song.file.meta);
+    song.file.meta = MetaState::default();
+    assert_eq!(crate::flm::write(&song).unwrap(), before);
 }

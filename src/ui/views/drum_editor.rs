@@ -306,7 +306,8 @@ pub fn show(state: &mut State, ui: &mut egui::Ui, app: &mut AppCtx, channel: usi
         let g = &state.grid;
         (g.mixer_w, g.fold.c, g.row_band(), g.graph)
     };
-    let room = crate::ui::split::ribbon_room(editor.right(), app.regions.screen.right(), m);
+    let (screen, shift) = (app.regions.screen.right(), app.settings.editor_ribbon_shift);
+    let room = crate::ui::split::ribbon_room(editor, screen, shift, m);
     if let Some(tabs) = tabs(editor, c, m, room) {
         let mut page = StripPage::ALL
             .iter()
@@ -356,15 +357,21 @@ pub fn show(state: &mut State, ui: &mut egui::Ui, app: &mut AppCtx, channel: usi
                     && let Some(wave) = app.audio.samples.waveform(slot, &read)
                 {
                     let painter = ui.painter_at(spacer);
-                    graph_lane::spacer_wave(&painter, spacer, &wave, slot.file.reverse, color, m);
+                    let colors = &app.cx.theme.colors;
+                    graph_lane::spacer_wave(&painter, spacer, (&wave, slot), (color, colors), m);
                 }
             }
         }
         // Over the strips.
+        let shift = &mut app.settings.graph_tab_shift;
         if steps {
-            state.step.graph_knob(&mut ui, &app.cx, editor, color);
+            state
+                .step
+                .graph_knob(&mut ui, &app.cx, editor, color, shift);
         } else {
-            state.grid.graph_knob(&mut ui, &app.cx, editor, color);
+            state
+                .grid
+                .graph_knob(&mut ui, &app.cx, editor, color, shift);
         }
     }
     state.drawn = true;
