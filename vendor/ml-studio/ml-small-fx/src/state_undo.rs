@@ -26,6 +26,8 @@ pub fn difference(before: &PluginState, after: &PluginState) -> Option<String> {
     if !changes.is_empty() { patch.insert("params".into(), serde_json::Value::Object(changes)); }
     (!patch.is_empty()).then(|| serde_json::Value::Object(patch).to_string())
 }
+/// The most state-edit patches a plugin keeps at once, in bytes.
+const STATE_EDIT_BUDGET: usize = 128 * 1024 * 1024;
 impl GuiContext for Context {
     fn plugin_api(&self) -> PluginApi { self.inner.plugin_api() }
     fn request_resize(&self) -> bool { self.inner.request_resize() }
@@ -38,8 +40,8 @@ impl GuiContext for Context {
         self.inner.set_state(state);
         if let Some(patch) = patch {
             if let Ok(mut queue) = self.edits.0.lock() {
-                if patch.len() <= os_hostlink::STATE_EDIT_BUDGET {
-                    while !queue.is_empty() && (queue.len() >= 128 || queue.iter().map(String::len).sum::<usize>() + patch.len() > os_hostlink::STATE_EDIT_BUDGET) { queue.remove(0); }
+                if patch.len() <= STATE_EDIT_BUDGET {
+                    while !queue.is_empty() && (queue.len() >= 128 || queue.iter().map(String::len).sum::<usize>() + patch.len() > STATE_EDIT_BUDGET) { queue.remove(0); }
                     queue.push(patch);
                 }
             }

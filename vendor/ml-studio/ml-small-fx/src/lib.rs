@@ -16,18 +16,10 @@
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
 pub mod tape;
-pub mod balance;
-pub mod chorus;
 pub mod editor;
 pub mod state_undo;
-pub mod fast_distortion;
 pub mod params;
-pub mod soft_clipper;
-pub mod stereo_enhancer;
-pub mod stereo_shaper;
-pub mod transient_processor;
 pub mod view;
-mod quality;
 pub use os_plugkit::visibility::STOCK_DSP_CONTROLS;
 
 use std::marker::PhantomData;
@@ -318,88 +310,4 @@ impl<K: Kind> ClapPlugin for SmallFx<K> {
 impl<K: Kind> Vst3Plugin for SmallFx<K> {
     const VST3_CLASS_ID: [u8; 16] = K::VST3_CLASS_ID;
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = K::VST3_SUBCATEGORIES;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    pub const SPECS: [&Spec; 8] = [
-        soft_clipper::SPEC,
-        fast_distortion::SPEC,
-        balance::SPEC,
-        stereo_enhancer::SPEC,
-        transient_processor::SPEC,
-        chorus::SPEC,
-        stereo_shaper::SPEC,
-        tape::SPEC,
-    ];
-
-    /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
-    #[test]
-    fn the_effects_are_described_whole() {
-        for s in SPECS {
-            assert!(s.settings.len() <= MAX, "{}", s.name);
-            for (k, set) in s.settings.iter().enumerate() {
-                assert_eq!(s.index(set.id), Some(k), "{} {}", s.name, set.id);
-                assert!((set.range.0..=set.range.1).contains(&set.start), "{} {}", s.name, set.id);
-                if let Some(m) = set.magnet {
-                    assert!((set.range.0..=set.range.1).contains(&m), "{} {}", s.name, set.id);
-                }
-                assert_eq!(s.controls.iter().filter(|c| c.id() == set.id).count(), 1, "{} {}", s.name, set.id);
-                // Every value has a text, and typing it in gives a value with the same text.
-                for v in set.range.0..=set.range.1 {
-                    let t = (s.text)(k, v);
-                    let back = (s.parse)(k, &t).unwrap_or_else(|| panic!("{} {} {v}: {t}", s.name, set.id));
-                    assert_eq!((s.text)(k, back), t, "{} {} {v}", s.name, set.id);
-                }
-            }
-            assert!(s.name.starts_with("ML "));
-        }
-        let ids = [
-            <tape::LemonTape as ClapPlugin>::CLAP_ID,
-            <soft_clipper::LemonSoftClipper as ClapPlugin>::CLAP_ID,
-            <fast_distortion::LemonFastDistortion as ClapPlugin>::CLAP_ID,
-            <balance::LemonBalance as ClapPlugin>::CLAP_ID,
-            <stereo_enhancer::LemonStereoEnhancer as ClapPlugin>::CLAP_ID,
-            <transient_processor::LemonTransientProcessor as ClapPlugin>::CLAP_ID,
-            <chorus::LemonChorus as ClapPlugin>::CLAP_ID,
-            <stereo_shaper::LemonStereoShaper as ClapPlugin>::CLAP_ID,
-        ];
-        let classes = [
-            <tape::LemonTape as Vst3Plugin>::VST3_CLASS_ID,
-            <soft_clipper::LemonSoftClipper as Vst3Plugin>::VST3_CLASS_ID,
-            <fast_distortion::LemonFastDistortion as Vst3Plugin>::VST3_CLASS_ID,
-            <balance::LemonBalance as Vst3Plugin>::VST3_CLASS_ID,
-            <stereo_enhancer::LemonStereoEnhancer as Vst3Plugin>::VST3_CLASS_ID,
-            <transient_processor::LemonTransientProcessor as Vst3Plugin>::VST3_CLASS_ID,
-            <chorus::LemonChorus as Vst3Plugin>::VST3_CLASS_ID,
-            <stereo_shaper::LemonStereoShaper as Vst3Plugin>::VST3_CLASS_ID,
-        ];
-        for i in 0..ids.len() {
-            for j in i + 1..ids.len() {
-                assert_ne!(ids[i], ids[j]);
-                assert_ne!(classes[i], classes[j]);
-            }
-        }
-        assert_eq!(<balance::LemonBalance as Plugin>::NAME, "ML Balance");
-    }
-
-    #[test]
-    fn editor_edits_reach_the_sound_and_stored_bytes_play_as_stored() {
-        let mut p = soft_clipper::LemonSoftClipper::default();
-        assert_eq!(&p.settings()[..2], &[100, 128]);
-        let id = p.params.p[0].as_ptr();
-        p.params.live.set(id, 0.5);
-        assert_eq!(p.settings()[0], 64);
-        // A stored threshold of 0 (below the knob's 1) plays as stored while the knob is not moved.
-        let q = FxParams::new(soft_clipper::SPEC);
-        q.set_raw(vec![0, 0, 0, 0, 128, 0, 0, 0]);
-        let mut p = soft_clipper::LemonSoftClipper { params: Arc::new(q), ..Default::default() };
-        // The parameter is at its start (100), the stored field (0) differs: the parameter wins (it was edited).
-        assert_eq!(p.settings()[0], 100);
-        let id = p.params.p[0].as_ptr();
-        p.params.live.set(id, 0.0);
-        assert_eq!(p.settings()[0], 0);
-    }
 }
