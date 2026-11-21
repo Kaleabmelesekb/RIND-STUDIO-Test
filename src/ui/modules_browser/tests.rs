@@ -278,7 +278,14 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
 fn search_keeps_matching_entries_and_hides_empty_sections() {
     assert_eq!(
         names(&rows("delay")),
-        ["ECHO", "Lemon Delay", "Tape Delay", "Trance Delay", "MISC", "ML Multiband Delay"]
+        [
+            "ECHO",
+            "Lemon Delay",
+            "Tape Delay",
+            "Trance Delay",
+            "MISC",
+            "ML Multiband Delay"
+        ]
     );
     // Case is ignored, on both sides.
     assert_eq!(names(&rows("DeLaY")), names(&rows("delay")));
