@@ -2328,37 +2328,9 @@ impl HoneydewApp {
                 if open > 0.0 && open < 1.0 {
                     ui.ctx().request_repaint();
                 }
-                // The docks: the Browser down the left and the Device Rack under the arrangement, before the side rack
-                // (which takes the rack's place while it is open) is laid over the view.
-                if self.slots.docks.enabled {
-                    let portrait = crate::metrics::is_portrait(screen);
-                    let (browser, bottom) =
-                        self.slots
-                            .docks
-                            .insets(regions.area, portrait, racked, &metrics);
-                    regions = regions.with_docks(browser, bottom, &metrics);
-                }
                 regions = regions.with_rack(open, &metrics);
                 // The keyboard settings strip takes its height off the top of the keys.
                 regions = regions.with_strip(strip, &metrics);
-                // The control bar's position, clock, metronome and time signature.
-                self.main_screen.bar = crate::ui::transport_pro::BarExtras {
-                    metronome: self.audio.metronome_flag(),
-                    looping: self.song.play_loop.is_some(),
-                    time_sig: self.song.time_sig,
-                    tick: snapshot
-                        .as_ref()
-                        .map_or(self.main_screen.play_start, |s| s.transport_tick),
-                    bpm: shown_bpm,
-                    marker_here: {
-                        let at = snapshot
-                            .as_ref()
-                            .map_or(self.main_screen.play_start, |s| s.transport_tick);
-                        u32::try_from(at).is_ok_and(|t| {
-                            crate::song::marker::index_at(&self.song.markers, t).is_some()
-                        })
-                    },
-                };
                 let input = ScreenInput {
                     view: self.nav.view,
                     tracks: &tracks,
@@ -2535,34 +2507,8 @@ impl HoneydewApp {
                 // A tap on an editor's playhead knob plays (`AppCtx::play`): before the transport's buttons, which may
                 // stop it this frame.
                 self.main_screen.playing |= app.playing;
-                // The dock's device chain: the selected track's generator and effects, as the rack lists them.
-                self.main_screen.devices = (app.song.channels.get(*app.selected))
-                    .map(|c| {
-                        (c.rack.modules.iter())
-                            .map(|d| crate::ui::main_screen::DeviceChip {
-                                title: d.title().to_owned(),
-                                on: d.params.first().is_none_or(|&enable| enable >= 0.5),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                self.main_screen.docks_on = self.slots.docks.enabled;
                 self.main_screen
                     .chrome(ui, &cx, input, &regions, &mut actions);
-                // A device chip's tap shows that card in the Device Rack, opening it if it was collapsed.
-                if let Some(chip) = self.main_screen.chip_tap.take() {
-                    self.slots.docks.reveal = Some(chip);
-                    self.slots.docks.rack_open = true;
-                    // The bottom rack is gone: the chip opens the side rack.
-                    if !racked {
-                        navs.push(Nav::Open(Overlay::Rack(input.selected)));
-                    }
-                }
-                // The docks, over the view and the keyboard panel's chrome and under every overlay.
-                let windowed =
-                    (self.nav.overlays.iter()).any(|o| matches!(o, Overlay::DeviceEditor { .. }));
-                let rows = self.main_screen.row_hits.clone();
-                navs.extend(self.slots.docks(ui, &mut app, (racked, windowed), &rows));
                 views::drum_editor::after_chrome(&mut self.slots.drum_editor, ui, &mut app);
                 // The corner buttons go over the rack and under the other overlays.
                 let hue = app.song.channels.get(input.selected).map_or(0.0, |c| c.hue);
@@ -2638,40 +2584,6 @@ impl HoneydewApp {
         }
         // The keymap's global actions, after the screens' own keys (`app/keys.rs`).
         self.global_keys(ctx, &mut actions.rewind, &mut navs);
-        // The control bar's metronome and TAP: the engine's metronome flag, and a tempo tapped in.
-        if actions.bar.metronome {
-            let (on, level) = (!self.audio.metronome_flag(), self.settings.metronome_level);
-            self.audio.send(AudioCommand::MetronomeFlag { on, level });
-        }
-        if actions.bar.looping {
-            // Four bars from the start, or no range.
-            let bar = crate::song::PPQ * self.song.time_sig.bar_beats();
-            self.song.play_loop = match self.song.play_loop {
-                Some(_) => None,
-                None => Some((0, 4 * bar)),
-            };
-        }
-        // The markers: Set puts one at the playhead or takes it away; the jumps seek (below, with the bar jumps).
-        let mut marker_seek = None;
-        match actions.bar.marker {
-            Some(crate::ui::transport_pro::MarkerAsk::Set) => {
-                if let Ok(at) = u32::try_from(tick) {
-                    self.song.toggle_marker(at);
-                    self.song_edited(SongEdit::Final, tick);
-                }
-            }
-            Some(crate::ui::transport_pro::MarkerAsk::Prev) => {
-                marker_seek = crate::song::marker::before(&self.song.markers, tick).or(Some(0));
-            }
-            Some(crate::ui::transport_pro::MarkerAsk::Next) => {
-                marker_seek = crate::song::marker::after(&self.song.markers, tick);
-            }
-            None => {}
-        }
-        if let Some(bpm) = actions.bar.tempo {
-            self.song.set_tempo(bpm);
-            self.song_edited(SongEdit::Final, tick);
-        }
         // After the screens: a focused text field keeps its own Ctrl+Z.
         let step = actions.step.or_else(|| history::shortcut(ctx));
         // The header's channel, then the keyboard's and the typed keys: every press of the frame can start playback
@@ -2720,9 +2632,6 @@ impl HoneydewApp {
         let mut seek = actions.seek;
         if let Some(next) = self.bar_jump.take() {
             seek = Some(keys::bar_jump(&self.song, tick, next));
-        }
-        if let Some(at) = marker_seek {
-            seek = Some(u64::from(at));
         }
         // A ruler tap that stops returns to the play-start point, as REV's first press.
         let stop_tap = actions.playhead.is_some() && was_playing;

@@ -122,6 +122,23 @@ pub struct TrackRow {
     pub hidden: bool,
     /// A collapsed track (`Collapse`, #83): a thin row.
     pub collapsed: bool,
+    /// The track group the channel is in, if any.
+    pub group: Option<GroupMark>,
+}
+
+/// A row's place in its track group ([`crate::song::group`]): what the header draws as the group's bracket.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroupMark {
+    pub id: i32,
+    /// The group's colour (a channel hue).
+    pub hue: f32,
+    /// The group's first and last row on screen.
+    pub first: bool,
+    pub last: bool,
+    /// The group is folded: this row is the head, standing for all `count` channels.
+    pub collapsed: bool,
+    /// How many channels the group has.
+    pub count: usize,
 }
 
 /// A collapsed track's row height, as a share of a full row's (#83): 5/8, 1.25 U at the default 2 U row, where the name
@@ -143,7 +160,24 @@ pub fn track_rows(song: &Song, show_hidden: bool) -> Vec<TrackRow> {
     let mut rows = Vec::new();
     for channel in song.playlist() {
         let ch = &song.channels[channel];
-        let shown = if ch.zipped { 1 } else { ch.lanes.len() };
+        // A folded group shows its head's primary track alone: the others' rows are not there.
+        let group = song
+            .group_of(ch.id)
+            .filter(|g| song.group_channels(g).len() >= 2);
+        let head = group.and_then(|g| song.group_head(g)) == Some(channel);
+        if group.is_some_and(|g| g.collapsed) && !head {
+            continue;
+        }
+        let mark = group.map(|g| GroupMark {
+            id: g.id,
+            hue: song.group_hue(g),
+            first: false,
+            last: false,
+            collapsed: g.collapsed,
+            count: g.size(),
+        });
+        let folded = mark.is_some_and(|g| g.collapsed);
+        let shown = if ch.zipped || folded { 1 } else { ch.lanes.len() };
         let lanes = ch.lanes.iter().enumerate().take(shown);
         for (lane, l) in lanes.filter(|(_, l)| show_hidden || !l.hidden) {
             rows.push(TrackRow {
@@ -158,7 +192,22 @@ pub fn track_rows(song: &Song, show_hidden: bool) -> Vec<TrackRow> {
                 armed: lane == 0 && ch.kind == ChannelKind::AudioRecord && ch.file.record_armed,
                 hidden: l.hidden,
                 collapsed: l.collapsed,
+                group: mark,
             });
+        }
+    }
+    // The first and last row of each group's run.
+    for i in 0..rows.len() {
+        let Some(id) = rows[i].group.map(|g| g.id) else {
+            continue;
+        };
+        let same = |r: Option<&TrackRow>| r.and_then(|r| r.group).is_some_and(|g| g.id == id);
+        let (first, last) = (
+            !same(i.checked_sub(1).and_then(|p| rows.get(p))),
+            !same(rows.get(i + 1)),
+        );
+        if let Some(g) = rows[i].group.as_mut() {
+            (g.first, g.last) = (first, last);
         }
     }
     rows
@@ -279,6 +328,8 @@ pub struct ScreenActions {
     /// A held track header's drag dropped: the channels' new playlist order, their indices top to bottom
     /// ([`Song::set_playlist`]). The rows show the drag live meanwhile.
     pub reorder: Option<Vec<usize>>,
+    /// A group's fold button was tapped: the group's id.
+    pub group_fold: Option<i32>,
     /// The keyboard keys held, and those tapped (pressed and lifted) within this frame, which sound for a short gate.
     pub keys: keyboard::Played,
     /// REWIND was clicked.
@@ -693,7 +744,23 @@ impl MainScreen {
             );
             let track = (i, channel, lane, at);
             self.header_gestures(ui, app, &mut response, track, scroll, tracks, actions);
+            // A group's first row has its fold button, over the header: it takes its own taps.
+            if let Some(g) = tracks[i].group.filter(|g| g.first) {
+                let fold = mini_mixer::fold_button(header, m);
+                let tap = ui.interact(
+                    fold.intersect(track_area),
+                    Id::new(("group_fold", i)),
+                    Sense::click(),
+                );
+                if tap.clicked() {
+                    actions.group_fold = Some(g.id);
+                }
+            }
             if !visible(at) {
+                continue;
+            }
+            // A folded group's head row stands for its channels: it shows no clips of its own.
+            if tracks[i].group.is_some_and(|g| g.collapsed) {
                 continue;
             }
             // Clips leave the 1-px gap under the row clear.

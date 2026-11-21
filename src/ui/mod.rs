@@ -42,7 +42,6 @@ pub mod keyboard_settings;
 mod offscreen;
 pub mod tempo;
 pub mod transport_extras;
-pub mod transport_pro;
 // The keyboard-area sample row.
 pub mod sample_row;
 // The shared long press and the menu and panel animations.
