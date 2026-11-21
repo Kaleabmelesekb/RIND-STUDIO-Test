@@ -25,7 +25,6 @@ use eframe::egui::{Color32, CornerRadius, Id, Painter, Rect, Sense, Stroke, Ui, 
 use crate::icons::{IconId, draw_icon};
 use crate::metrics::Metrics;
 use crate::theme::Rgba;
-use crate::ui::buttons::gradient;
 use crate::ui::main_screen::CLEAR_U;
 use crate::ui::timeline::ruler_h;
 use crate::ui::{UiCtx, step_seq, widgets};
