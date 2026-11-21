@@ -2446,6 +2446,10 @@ impl HoneydewApp {
                 if let Some(chip) = self.main_screen.chip_tap.take() {
                     self.slots.docks.reveal = Some(chip);
                     self.slots.docks.rack_open = true;
+                    // The bottom rack is gone: the chip opens the side rack.
+                    if !racked {
+                        navs.push(Nav::Open(Overlay::Rack(input.selected)));
+                    }
                 }
                 // The docks, over the view and the keyboard panel's chrome and under every overlay.
                 let windowed =

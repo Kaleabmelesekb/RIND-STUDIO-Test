@@ -191,16 +191,9 @@ impl Docks {
         } else {
             m.u(RAIL_W)
         };
-        let header = m.u(HEADER_H).min(area.height() * 0.5);
-        let rack = if racked {
-            0.0
-        } else if self.rack_open {
-            (m.u(HEADER_H + self.rack_body))
-                .min(area.height() * MAX_SHARE)
-                .max(header)
-        } else {
-            header
-        };
+        // The bottom Device Rack is gone: the side rack (the `Channel rack` tab) shows the same devices.
+        let _ = racked;
+        let rack = 0.0;
         (browser, rack)
     }
 
@@ -1327,11 +1320,7 @@ mod tests {
             rack_open: false,
             ..Docks::default()
         };
-        let header = m.u(HEADER_H).min(area().height() * 0.5);
-        assert_eq!(
-            docks.insets(area(), false, false, &m),
-            (m.u(RAIL_W), header)
-        );
+        assert_eq!(docks.insets(area(), false, false, &m), (m.u(RAIL_W), 0.0));
         docks.rack_open = true;
         assert_eq!(docks.insets(area(), false, true, &m).1, 0.0);
     }
