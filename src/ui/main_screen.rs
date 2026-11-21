@@ -177,7 +177,11 @@ pub fn track_rows(song: &Song, show_hidden: bool) -> Vec<TrackRow> {
             count: g.size(),
         });
         let folded = mark.is_some_and(|g| g.collapsed);
-        let shown = if ch.zipped || folded { 1 } else { ch.lanes.len() };
+        let shown = if ch.zipped || folded {
+            1
+        } else {
+            ch.lanes.len()
+        };
         let lanes = ch.lanes.iter().enumerate().take(shown);
         for (lane, l) in lanes.filter(|(_, l)| show_hidden || !l.hidden) {
             rows.push(TrackRow {

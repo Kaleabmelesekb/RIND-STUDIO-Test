@@ -135,7 +135,10 @@ mod tests {
         };
         assert!((len_beats - 1.0).abs() < 1e-9, "{len_beats}");
         // The last note reaches the end of its bar (#123).
-        let Event::Note { len_beats: last, .. } = c.events[1] else {
+        let Event::Note {
+            len_beats: last, ..
+        } = c.events[1]
+        else {
             panic!()
         };
         assert!(last > 0.25, "{last}");
