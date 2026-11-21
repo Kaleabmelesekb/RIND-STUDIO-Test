@@ -423,7 +423,7 @@ mod tests {
             ]
         );
         // ML Studio's (Michael Lane's fork of Lemon Studio) twelve, after them.
-        let ml: Vec<_> = got[28..].iter().map(|b| b.1.as_str()).collect();
+        let ml: Vec<_> = got[28..].iter().map(|b| b.1).collect();
         assert_eq!(
             ml,
             [
