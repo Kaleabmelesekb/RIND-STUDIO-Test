@@ -57,6 +57,8 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     lemon_drop,
     lemon_soundfont,
     smith,
+    lemon_limiter,
+    lemon_reverb,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -88,6 +90,8 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.openstudio.lemon-drop", b"LemonStudioDrops"),
     ("org.openstudio.lemon-soundfont", b"LemonStudioSFont"),
     ("org.openstudio.smith", b"LemonStudioSmith"),
+    ("org.openstudio.lemon-limiter", b"LemonStudioLimit"),
+    ("org.openstudio.lemon-reverb", b"LemonStudioRevrb"),
 ];
 
 /// The editor size of a plugin that reports none.
@@ -300,7 +304,7 @@ mod tests {
             ]
         );
         // 0.4.9's effects: Lemon Small FX's ten, one plugin each, Lemon Delay, Lemon Vocoder, Press and Pulp Filter, each
-        // with its VST3 copy's class id and its editor's size; only Lemon Vocoder has a sidechain input.
+        // with its VST3 copy's class id and its editor's size; only Lemon Vocoder and Lemon Limiter have a sidechain input.
         let added: Vec<_> = (got[9..23].iter())
             .map(|&(name, uid, class, _)| {
                 (
@@ -357,7 +361,7 @@ mod tests {
             .map(|(n, u, c)| (*n, u.as_str(), c.clone()))
             .collect();
         assert_eq!(added, want);
-        // Lemon Drop, Lemon SoundFont Player and Smith, last.
+        // Lemon Drop, Lemon SoundFont Player, Smith, Lemon Limiter and Lemon Reverb, last.
         assert_eq!(
             got[23..],
             [
@@ -379,6 +383,18 @@ mod tests {
                     Some(*b"LemonStudioSmith"),
                     (smith::view::W, smith::view::H)
                 ),
+                (
+                    "Lemon Limiter",
+                    "clap:org.openstudio.lemon-limiter",
+                    Some(*b"LemonStudioLimit"),
+                    (lemon_limiter::view::W, lemon_limiter::view::H)
+                ),
+                (
+                    "Lemon Reverb",
+                    "clap:org.openstudio.lemon-reverb",
+                    Some(*b"LemonStudioRevrb"),
+                    (lemon_reverb::view::W, lemon_reverb::view::H)
+                ),
             ]
         );
         for &(name, _, _, size) in &got[9..] {
@@ -391,7 +407,7 @@ mod tests {
             .filter(|b| b.sidechain())
             .map(|b| b.name)
             .collect();
-        assert_eq!(keyed, ["Lemon Vocoder"]);
+        assert_eq!(keyed, ["Lemon Vocoder", "Lemon Limiter"]);
         // Each one starts and plays a block (an instrument a note, an effect a sine), every sample finite.
         for b in super::all() {
             let plugin = b.lib.clone().create(&b.desc.id).unwrap();

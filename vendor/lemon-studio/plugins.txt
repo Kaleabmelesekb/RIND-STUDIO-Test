@@ -26,6 +26,8 @@ citrus
 lemon-drum-sampler
 lemon-slicer
 lemon-drop
+lemon-limiter
+lemon-reverb
 lemon-soundfont
 smith
 os-engine/src/clock.rs

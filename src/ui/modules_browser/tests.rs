@@ -1,8 +1,7 @@
 use super::*;
 
 /// The Modules browser's list: `Paste`, `Rack Preset`, `Instrument`, then the sections. The NOTE EFFECT section's five entries are
-/// all the note effects of the registry. Lemon Reverb and Lemon Limiter are Honeydew's own (`honeydew_audio::lemon`), as is
-/// the Dynamic EQ, the De-esser, Denoise and the four Dragonfly reverbs, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
+/// all the note effects of the registry. Lemon Reverb and Lemon Limiter are built-in plugins (the old tabbed panels of `honeydew_audio::lemon` are not listed any more); the Dynamic EQ, the De-esser, Denoise and the four Dragonfly reverbs, and Lemon Trio, Lemon Sampler, Lemon Parametric EQ, Tesla, the controllers,
 /// 0.4.9's effects and Citrus, Lemon Drum Sampler, Lemon Slicer, Lemon SoundFont Player, Smith and Lemon Drop its built-in plugins (`crate::plugins::builtin`), a
 /// Lemon plugin after its counterpart, the others by name.
 const SPEC: &[(&str, &[&str])] = &[
@@ -941,9 +940,8 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Randomizer",
             "Scale",
             "Arpeggiator",
-            // Honeydew's own: 1002 … 1011, then the built-in plugin.
-            "Lemon Reverb",
-            "Lemon Limiter",
+            // Honeydew's own: 1004 … 1011, then the built-in plugins (Lemon Reverb and Lemon Limiter among them: the
+            // plugins' editors, not the old tabbed panels, which only songs that have them still load).
             "Dynamic EQ",
             "Modulator",
             "De-esser",
@@ -960,9 +958,11 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Filter",
             "Lemon Flanger",
             "Lemon Formula Controller",
+            "Lemon Limiter",
             "Lemon Parametric EQ",
             "Lemon Peak Controller",
             "Lemon Phaser",
+            "Lemon Reverb",
             "Lemon Soft Clipper",
             "Lemon Stereo Enhancer",
             "Lemon Stereo Shaper",
