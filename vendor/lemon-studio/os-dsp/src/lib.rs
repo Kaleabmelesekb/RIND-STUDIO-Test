@@ -21,6 +21,7 @@
 // spec: audio/conventions.md, audio/mixer.md, audio/sampler.md, audio/time-stretch.md, audio/envelopes-and-lfos.md,
 // audio/channel-filter.md, plugins/image-line-curves.md, plugins/lemon-slicer.md §3
 
+pub mod debess;
 pub mod articulator;
 pub mod channel_filter;
 pub mod curve;

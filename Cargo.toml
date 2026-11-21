@@ -67,7 +67,6 @@ lemon-limiter = { path = "vendor/lemon-studio/lemon-limiter", features = ["linke
 lemon-reverb = { path = "vendor/lemon-studio/lemon-reverb", features = ["linked", "embed"] }
 # ML Studio (Michael Lane's fork of Lemon Studio), `vendor/ml-studio`.
 lemon-tape = { path = "vendor/ml-studio/lemon-tape", features = ["linked", "embed"] }
-lemon-chop = { path = "vendor/ml-studio/lemon-chop", features = ["linked", "embed"] }
 ml-de-esser = { path = "vendor/ml-studio/ml-de-esser", features = ["linked", "embed"] }
 ml-frequency-shift = { path = "vendor/ml-studio/ml-frequency-shift", features = ["linked", "embed"] }
 ml-meter = { path = "vendor/ml-studio/ml-meter", features = ["linked", "embed"] }

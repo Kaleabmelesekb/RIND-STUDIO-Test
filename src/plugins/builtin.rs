@@ -61,7 +61,6 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     lemon_reverb,
     // ML Studio (Michael Lane's fork of Lemon Studio).
     lemon_tape,
-    lemon_chop,
     ml_de_esser,
     ml_frequency_shift,
     ml_meter,
@@ -118,7 +117,6 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("com.mlstudio.reference", b"MLReference00001"),
     ("com.mlstudio.phase", b"MLStudioPhase001"),
     ("org.openstudio.lemon-tape", b"LemonStudioTape1"),
-    ("org.lemonstudio.lemon-chop", b"LemonStudioChop1"),
 ];
 
 /// The editor size of a plugin that reports none.
