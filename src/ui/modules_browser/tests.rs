@@ -117,7 +117,9 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Stereo Shaper",
             "Lemon Transient Processor",
             "Lemon Vocoder",
+            "ML Bitcrusher",
             "ML De-Esser",
+            "ML Exciter",
             "ML Frequency Shift",
             "ML Meter",
             "ML Multiband Delay",
@@ -125,6 +127,7 @@ const SPEC: &[(&str, &[&str])] = &[
             "ML Pitch Shift",
             "ML Reference",
             "ML Riser",
+            "ML Spectral Compressor",
             "ML Split",
             "ML Tape",
             "ML Tuner",
@@ -351,6 +354,7 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Lemon Parametric EQ",
             "Lemon Peak Controller",
             "Lemon Transient Processor",
+            "ML Spectral Compressor",
         ]
     );
     assert!(rows("zzz").is_empty());
@@ -1008,7 +1012,9 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Stereo Shaper",
             "Lemon Transient Processor",
             "Lemon Vocoder",
+            "ML Bitcrusher",
             "ML De-Esser",
+            "ML Exciter",
             "ML Frequency Shift",
             "ML Meter",
             "ML Multiband Delay",
@@ -1016,6 +1022,7 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "ML Pitch Shift",
             "ML Reference",
             "ML Riser",
+            "ML Spectral Compressor",
             "ML Split",
             "ML Tape",
             "ML Tuner",

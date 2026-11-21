@@ -78,6 +78,9 @@ ml-riser = { path = "vendor/ml-studio/ml-riser", features = ["linked", "embed"] 
 ml-split = { path = "vendor/ml-studio/ml-split", features = ["linked", "embed"] }
 ml-tuner = { path = "vendor/ml-studio/ml-tuner", features = ["linked", "embed"] }
 ml-waveshaper = { path = "vendor/ml-studio/ml-waveshaper", features = ["linked", "embed"] }
+ml-bitcrusher = { path = "vendor/ml-studio/ml-bitcrusher", features = ["linked", "embed"] }
+ml-exciter = { path = "vendor/ml-studio/ml-exciter", features = ["linked", "embed"] }
+ml-spectral-compressor = { path = "vendor/ml-studio/ml-spectral-compressor", features = ["linked", "embed"] }
 os-plugkit = { path = "vendor/lemon-studio/os-plugkit", features = ["embed"] }
 os-ui = { path = "vendor/lemon-studio/os-ui" }
 os-theme = { path = "vendor/lemon-studio/os-theme" }
