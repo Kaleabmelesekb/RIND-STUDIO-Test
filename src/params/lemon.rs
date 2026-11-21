@@ -89,7 +89,8 @@ pub static MODULES: [ModuleSpec; 2] = [
         lemon::REVERB,
         "Lemon Reverb",
         "Lemon Reverb",
-        false,
+        // Kept for the songs that have it: the Lemon Reverb plugin (Lemon's own editor) is what the list offers.
+        true,
         REVERB,
         &["ROOM", "TONE", "MIX"],
     ),
@@ -97,7 +98,8 @@ pub static MODULES: [ModuleSpec; 2] = [
         lemon::LIMITER,
         "Lemon Limiter",
         "Lemon Limiter",
-        false,
+        // Kept for the songs that have it: the Lemon Limiter plugin (Lemon's own editor) is what the list offers.
+        true,
         LIMITER,
         &["LIMIT", "COMP", "GATE"],
     ),
