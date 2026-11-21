@@ -1,0 +1,16 @@
+name: ML probe
+on:
+  push:
+    branches: [ml-probe]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo metadata --format-version 1 > /dev/null
+      - run: git diff Cargo.lock > lock.patch; wc -l lock.patch
+      - uses: actions/upload-artifact@v4
+        with: { name: lock, path: lock.patch }
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev || true
+      - run: cargo check -p honeydew --lib 2>&1 | tail -150

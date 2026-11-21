@@ -1,0 +1,36 @@
+[package]
+name = "lemon-chop"
+description = "Lemon Chop: a 32-pad slicing instrument as a VST3 / CLAP plugin"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "lemon_chop"
+doctest = false
+
+[features]
+# Compiled into Honeydew: no exported plugin entry points.
+linked = []
+# Honeydew (vendored addition): the editor draws into Honeydew's own window (`os-plugkit`'s `embed`).
+embed = ["os-hostlink/embed", "os-plugkit/embed"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+rfd = { package = "host-rfd", path = "../../lemon-studio/host-rfd" }
+crossbeam-queue = "0.3"
+nih_plug = { path = "../../nih-plug" }
+os-engine = { path = "../../lemon-studio/os-engine", features = ["plugins"] }
+os-dsp = { path = "../../lemon-studio/os-dsp" }
+os-model = { path = "../../lemon-studio/os-model" }
+os-hostlink = { path = "../../lemon-studio/os-hostlink" }
+os-plugkit = { path = "../../lemon-studio/os-plugkit" }
+os-ui = { path = "../../lemon-studio/os-ui" }
+os-theme = { path = "../../lemon-studio/os-theme" }
+os-paths = { path = "../../lemon-studio/os-paths" }
+
+[lints.rust]
+unknown_lints = "allow"
+dead_code = "allow"

@@ -59,6 +59,20 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     smith,
     lemon_limiter,
     lemon_reverb,
+    // ML Studio (Michael Lane's fork of Lemon Studio).
+    lemon_tape,
+    lemon_chop,
+    ml_de_esser,
+    ml_frequency_shift,
+    ml_meter,
+    ml_multiband_delay,
+    ml_phase,
+    ml_pitch_shift,
+    ml_reference,
+    ml_riser,
+    ml_split,
+    ml_tuner,
+    ml_waveshaper,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -92,6 +106,19 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.openstudio.smith", b"LemonStudioSmith"),
     ("org.openstudio.lemon-limiter", b"LemonStudioLimit"),
     ("org.openstudio.lemon-reverb", b"LemonStudioRevrb"),
+    ("com.mlstudio.waveshaper", b"MLWaveshaper0001"),
+    ("com.mlstudio.split", b"MLStudioSplit001"),
+    ("com.mlstudio.pitch-shift", b"MLStudioPitch001"),
+    ("com.mlstudio.meter", b"MLStudioMeter001"),
+    ("com.mlstudio.de-esser", b"MLStudioDeEss001"),
+    ("com.mlstudio.riser", b"MLRiser000000001"),
+    ("com.mlstudio.frequencyshift", b"MLFrequency00001"),
+    ("com.mlstudio.multibanddelay", b"MLMultidelay0001"),
+    ("com.mlstudio.tuner", b"MLStudioTuner001"),
+    ("com.mlstudio.reference", b"MLReference00001"),
+    ("com.mlstudio.phase", b"MLStudioPhase001"),
+    ("org.openstudio.lemon-tape", b"LemonStudioTape1"),
+    ("org.lemonstudio.lemon-chop", b"LemonStudioChop1"),
 ];
 
 /// The editor size of a plugin that reports none.

@@ -1,0 +1,83 @@
+desc:NULL Riser
+author: Christos Koulaxizis
+tags: riser build-up tension sweep transition edm pre-drop noise
+//category: One Slider
+//NULL JSFX v4.0 • https://nulljsfx.tech • MIT License
+
+slider1:0<0,100,1>Intensity (%)
+
+in_pin:Left
+in_pin:Right
+out_pin:Left
+out_pin:Right
+
+@init
+  ext_noinit = 1;              // play and seek keep tails and state, as in the VST3/CLAP
+  // Build-up in one control: automate Intensity from 0 to 100 into a drop.
+  //   - a resonant high-pass climbs from 20 Hz to 2.5 kHz (exponential, so the sweep sounds even),
+  //     with resonance rising as it goes
+  //   - a band of white noise swells in, centred an octave above the filter, so it rises with it
+  //   - the stereo image widens (side boosted up to +6 dB)
+  //   - a short diffuse wash (two allpass-smeared delays with feedback) blooms behind the sound
+  // All moves are smoothed (30 ms) so automation never zips. At 0 the signal is untouched.
+  bs = ceil(srate * 0.12) + 2;
+  memset(0, 0, bs * 2); freembuf(bs * 2);
+  dl = max(1, floor(0.083 * srate)); dr = max(1, floor(0.097 * srate));
+  pl = pr = 0;
+  sm = exp(-1 / (0.03 * srate));
+  seed = 12345;
+
+  function svf_set(f, q) ( this.g = tan($pi * min(f, 0.45 * srate) / srate); this.k = 1 / q; );
+  function svf_hp(x) local(v1, v2, v3)
+  (
+    v3 = (x - this.s2 - (this.k + this.g) * this.s1) / (1 + this.g * (this.k + this.g));
+    v1 = this.g * v3 + this.s1; v2 = this.g * v1 + this.s2;
+    this.s1 = 2 * v1 - this.s1; this.s2 = 2 * v2 - this.s2;
+    v3;
+  );
+  function svf_bp(x) local(v1, v2, v3)
+  (
+    v3 = (x - this.s2 - (this.k + this.g) * this.s1) / (1 + this.g * (this.k + this.g));
+    v1 = this.g * v3 + this.s1; v2 = this.g * v1 + this.s2;
+    this.s1 = 2 * v1 - this.s1; this.s2 = 2 * v2 - this.s2;
+    this.k * v1;
+  );
+
+@slider
+  target = slider1 / 100;
+
+@block
+  // coefficients follow the smoothed intensity once per block
+  a = amt * amt;
+  fc = 20 * 125 ^ amt;
+  hl.svf_set(fc, 0.707 + 2.3 * a); hr.svf_set(fc, 0.707 + 2.3 * a);
+  nl.svf_set(fc * 2 + 200, 1.5); nr.svf_set(fc * 2 + 200, 1.5);
+  noise = 0.35 * a;
+  width = 10 ^ (6 * amt / 20);
+  wash = 0.35 * amt;
+  fb = 0.55 * amt;
+
+@sample
+  amt = sm * amt + (1 - sm) * target;
+  amt < 0.0005 && target == 0 ? (
+    amt = 0;
+  ) : (
+    // filtered noise, decorrelated L/R
+    // Park-Miller generator in exact double arithmetic, so it gives the same noise on every CPU
+    seed *= 16807; seed -= floor(seed / 2147483647) * 2147483647; n1 = seed / 1073741824 - 1;
+    seed *= 16807; seed -= floor(seed / 2147483647) * 2147483647; n2 = seed / 1073741824 - 1;
+    l = hl.svf_hp(spl0) + noise * nl.svf_bp(n1);
+    r = hr.svf_hp(spl1) + noise * nr.svf_bp(n2);
+    // wider image
+    m = (l + r) * 0.5; s = (l - r) * 0.5 * width;
+    l = m + s; r = m - s;
+    // diffuse wash, cross-fed so it spreads across the stereo field
+    wl = 0[pl]; wr = bs[pr];
+    0[pl] = l + wr * fb; bs[pr] = r + wl * fb;
+    pl = (pl + 1) % dl; pr = (pr + 1) % dr;
+    l += wash * wl; r += wash * wr;
+    // fade from the untouched signal at very low settings
+    x = min(1, amt * 20);
+    spl0 += x * (l - spl0);
+    spl1 += x * (r - spl1);
+  );

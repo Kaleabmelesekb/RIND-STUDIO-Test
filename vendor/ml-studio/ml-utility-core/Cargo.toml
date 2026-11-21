@@ -1,0 +1,30 @@
+[package]
+name = "ml-utility-core"
+description = "ml-utility-core"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "ml_utility_core"
+doctest = false
+
+[features]
+# Compiled into Honeydew: no exported plugin entry points.
+linked = []
+# Honeydew (vendored addition): the editor draws into Honeydew's own window (`os-plugkit`'s `embed`).
+embed = ["lemon-small-fx/embed", "ml-mix-core/embed", "os-plugkit/embed"]
+
+[dependencies]
+nih_plug = { path = "../../nih-plug" }
+lemon-small-fx = { package = "ml-small-fx", path = "../ml-small-fx" }
+os-plugkit = { path = "../../lemon-studio/os-plugkit" }
+os-ui = { path = "../../lemon-studio/os-ui" }
+os-dsp = { path = "../../lemon-studio/os-dsp" }
+ml-mix-core = { path = "../ml-mix-core" }
+os-engine = { path = "../../lemon-studio/os-engine", features = ["plugins"] }
+
+[lints.rust]
+unknown_lints = "allow"
+dead_code = "allow"
