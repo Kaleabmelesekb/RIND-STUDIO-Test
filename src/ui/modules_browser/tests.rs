@@ -131,6 +131,9 @@ const SPEC: &[(&str, &[&str])] = &[
             "ML Waveshaper",
             "Press",
             "Pulp Filter",
+            "Rind Bitcrusher",
+            "Rind Exciter",
+            "Rind Spectral Compressor",
             "Tesla",
         ],
     ),
@@ -351,6 +354,7 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Lemon Parametric EQ",
             "Lemon Peak Controller",
             "Lemon Transient Processor",
+            "Rind Spectral Compressor",
         ]
     );
     assert!(rows("zzz").is_empty());
@@ -1022,6 +1026,9 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "ML Waveshaper",
             "Press",
             "Pulp Filter",
+            "Rind Bitcrusher",
+            "Rind Exciter",
+            "Rind Spectral Compressor",
             "Tesla",
         ]
     );
@@ -1152,7 +1159,7 @@ fn a_narrower_query_clamps_the_scroll_to_the_shorter_list() {
         let mut rig = Rig::new();
         let search = rig.layout().button(0);
         rig.click(search);
-        for _ in 0..12 {
+        for _ in 0..20 {
             rig.drag(pos2(200.0, 480.0), pos2(200.0, 120.0));
         }
         assert!(rig.shows("Tesla"));

@@ -13,3 +13,5 @@ ML Reference, ML Riser, ML Split, ML Tuner and ML Waveshaper.
   `../lemon-studio`; `ml-utility-core` has its own `Ring`.
 - Not brought over yet: Lemon Chop, the Plasma and Master Assistant (JUCE) plugins, ML Drums, Vocal Tune (AGPL), and the
   plugins that need C++ (NAM amp, FluidSynth, convolver).
+
+Honeydew's own additions in the same style (not from ML Studio): Rind Bitcrusher, Rind Exciter and Rind Spectral Compressor, in `ml-mix-core/src/extra.rs`.

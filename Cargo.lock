@@ -2012,7 +2012,9 @@ dependencies = [
  "libc",
  "midir",
  "miniz_oxide 0.9.1",
+ "ml-bitcrusher",
  "ml-de-esser",
+ "ml-exciter",
  "ml-frequency-shift",
  "ml-meter",
  "ml-multiband-delay",
@@ -2020,6 +2022,7 @@ dependencies = [
  "ml-pitch-shift",
  "ml-reference",
  "ml-riser",
+ "ml-spectral-compressor",
  "ml-split",
  "ml-tuner",
  "ml-waveshaper",
@@ -2862,10 +2865,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ml-bitcrusher"
+version = "0.0.1"
+dependencies = [
+ "ml-mix-core",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "ml-de-esser"
 version = "0.0.1"
 dependencies = [
  "ml-tools-core",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "ml-exciter"
+version = "0.0.1"
+dependencies = [
+ "ml-mix-core",
  "nih_plug",
  "os-plugkit",
 ]
@@ -2962,6 +2983,15 @@ dependencies = [
  "os-theme",
  "os-ui",
  "serde_json",
+]
+
+[[package]]
+name = "ml-spectral-compressor"
+version = "0.0.1"
+dependencies = [
+ "ml-mix-core",
+ "nih_plug",
+ "os-plugkit",
 ]
 
 [[package]]
