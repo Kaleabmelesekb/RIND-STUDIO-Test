@@ -388,7 +388,7 @@ mod tests {
         assert_eq!(added, want);
         // Lemon Drop, Lemon SoundFont Player, Smith, Lemon Limiter and Lemon Reverb, last.
         assert_eq!(
-            got[23..],
+            got[23..28],
             [
                 (
                     "Lemon Drop",
@@ -420,6 +420,25 @@ mod tests {
                     Some(*b"LemonStudioRevrb"),
                     (lemon_reverb::view::W, lemon_reverb::view::H)
                 ),
+            ]
+        );
+        // ML Studio's (Michael Lane's fork of Lemon Studio) twelve, after them.
+        let ml: Vec<_> = got[28..].iter().map(|b| b.1.as_str()).collect();
+        assert_eq!(
+            ml,
+            [
+                "clap:org.openstudio.lemon-tape",
+                "clap:com.mlstudio.de-esser",
+                "clap:com.mlstudio.frequencyshift",
+                "clap:com.mlstudio.meter",
+                "clap:com.mlstudio.multibanddelay",
+                "clap:com.mlstudio.phase",
+                "clap:com.mlstudio.pitch-shift",
+                "clap:com.mlstudio.reference",
+                "clap:com.mlstudio.riser",
+                "clap:com.mlstudio.split",
+                "clap:com.mlstudio.tuner",
+                "clap:com.mlstudio.waveshaper",
             ]
         );
         for &(name, _, _, size) in &got[9..] {
