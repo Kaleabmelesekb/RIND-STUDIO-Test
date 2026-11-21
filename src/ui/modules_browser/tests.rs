@@ -24,7 +24,10 @@ const SPEC: &[(&str, &[&str])] = &[
         &[
             "Reverb",
             "Reverb 2",
-            "Lemon Reverb",
+            "Dragonfly Hall Reverb",
+            "Dragonfly Room Reverb",
+            "Dragonfly Plate Reverb",
+            "Dragonfly Early Reflections",
             "Tape Delay",
             "Trance Delay",
         ],
@@ -40,7 +43,6 @@ const SPEC: &[(&str, &[&str])] = &[
             "Gate",
             "Leveller",
             "Limiter",
-            "Lemon Limiter",
             "Multiband Compressor",
             "Waveshaper",
         ],
@@ -94,17 +96,22 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Drum Sampler",
             "Lemon Sampler",
             "Lemon Slicer",
+            "Lemon SoundFont Player",
             "Lemon Trio",
+            "Smith",
             "Lemon Balance",
             "Lemon Chorus",
             "Lemon Delay",
+            "Lemon Drop",
             "Lemon Fast Distortion",
             "Lemon Filter",
             "Lemon Flanger",
             "Lemon Formula Controller",
+            "Lemon Limiter",
             "Lemon Parametric EQ",
             "Lemon Peak Controller",
             "Lemon Phaser",
+            "Lemon Reverb",
             "Lemon Soft Clipper",
             "Lemon Stereo Enhancer",
             "Lemon Stereo Shaper",
@@ -113,6 +120,18 @@ const SPEC: &[(&str, &[&str])] = &[
             "Press",
             "Pulp Filter",
             "Tesla",
+            "ML De-Esser",
+            "ML Frequency Shift",
+            "ML Meter",
+            "ML Multiband Delay",
+            "ML Phase",
+            "ML Pitch Shift",
+            "ML Reference",
+            "ML Riser",
+            "ML Split",
+            "ML Tape",
+            "ML Tuner",
+            "ML Waveshaper",
         ],
     ),
 ];
@@ -178,6 +197,7 @@ fn every_current_effect_is_listed_once_and_legacy_ids_never() {
     let current: Vec<u16> = (params::modules().chain(&params::LEMON_MODULES))
         .chain([&params::DYNAMIC_EQ, &params::MODULATOR])
         .chain([&params::DE_ESSER, &params::DENOISE, &params::HALF_TIME])
+        .chain(params::DRAGONFLY_MODULES)
         .filter(|m| !m.legacy)
         .map(|m| m.id)
         .collect();
@@ -235,6 +255,8 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
             "Citrus",
             "Lemon Drum Sampler",
             "Lemon Slicer",
+            "Lemon SoundFont Player",
+            "Smith",
         ];
         let notes = [
             "NOTE EFFECT",
@@ -275,7 +297,8 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Tape Delay",
             "Trance Delay",
             "LEMON STUDIO",
-            "Lemon Delay"
+            "Lemon Delay",
+            "ML Multiband Delay"
         ]
     );
     // Case is ignored, on both sides.
@@ -916,7 +939,9 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Drum Sampler",
             "Lemon Sampler",
             "Lemon Slicer",
+            "Lemon SoundFont Player",
             "Lemon Trio",
+            "Smith",
             // Effects: 3 … 46, then the note effects 47 … 51.
             "Equalizer",
             "MultiFX",
@@ -954,9 +979,11 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Randomizer",
             "Scale",
             "Arpeggiator",
-            // Honeydew's own: 1002 … 1008, then the built-in plugin.
-            "Lemon Reverb",
-            "Lemon Limiter",
+            // Honeydew's own: 1002 … 1008 and Dragonfly's 1100 …, then the built-in plugin.
+            "Dragonfly Hall Reverb",
+            "Dragonfly Room Reverb",
+            "Dragonfly Plate Reverb",
+            "Dragonfly Early Reflections",
             "Dynamic EQ",
             "Modulator",
             "De-esser",
@@ -965,13 +992,16 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Balance",
             "Lemon Chorus",
             "Lemon Delay",
+            "Lemon Drop",
             "Lemon Fast Distortion",
             "Lemon Filter",
             "Lemon Flanger",
             "Lemon Formula Controller",
+            "Lemon Limiter",
             "Lemon Parametric EQ",
             "Lemon Peak Controller",
             "Lemon Phaser",
+            "Lemon Reverb",
             "Lemon Soft Clipper",
             "Lemon Stereo Enhancer",
             "Lemon Stereo Shaper",
@@ -980,6 +1010,18 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Press",
             "Pulp Filter",
             "Tesla",
+            "ML De-Esser",
+            "ML Frequency Shift",
+            "ML Meter",
+            "ML Multiband Delay",
+            "ML Phase",
+            "ML Pitch Shift",
+            "ML Reference",
+            "ML Riser",
+            "ML Split",
+            "ML Tape",
+            "ML Tuner",
+            "ML Waveshaper",
         ]
     );
     // The search filters it, in the same order.
@@ -989,7 +1031,12 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             ModuleOrdering::TopLevel,
             Takes::Instruments
         )),
-        ["Trance Delay", "Tape Delay", "Lemon Delay"]
+        [
+            "Trance Delay",
+            "Tape Delay",
+            "Lemon Delay",
+            "ML Multiband Delay"
+        ]
     );
 }
 

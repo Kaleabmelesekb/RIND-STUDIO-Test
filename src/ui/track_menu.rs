@@ -262,7 +262,7 @@ mod tests {
         assert_eq!(
             menu(&song, 0, 0),
             [
-                CHANNEL[0], CHANNEL[1], CHANNEL[4], CHANNEL[5], CHANNEL[6], CHANNEL[7]
+                CHANNEL[0], CHANNEL[1], CHANNEL[4], CHANNEL[5], CHANNEL[7], CHANNEL[8]
             ],
             "the master"
         );

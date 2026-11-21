@@ -21,7 +21,7 @@ const SETTINGS: (usize, usize) = (0, 1);
 const CLONE: (usize, usize) = (0, 2);
 const INSERT: (usize, usize) = (0, 3);
 const DELETE_TRACK: (usize, usize) = (0, 4);
-const DELETE_CHANNEL: (usize, usize) = (0, 8);
+const DELETE_CHANNEL: (usize, usize) = (0, 9);
 /// `Add Track` of an instrument, `Add StepSeq Track` and `Add Notes Track` of a drums channel.
 const ADD_TRACK: (usize, usize) = (1, 3);
 const ADD_STEP_SEQ: (usize, usize) = (1, 2);
@@ -2321,7 +2321,7 @@ fn header_rect(rig: &Rig, row: usize) -> egui::Rect {
 /// move up. Its menu then reads `Expand`, which makes the row whole again.
 #[test]
 fn collapse_makes_a_tracks_row_thin_and_expand_makes_it_whole() {
-    const COLLAPSE: (usize, usize) = (0, 6);
+    const COLLAPSE: (usize, usize) = (0, 7);
     let mut rig = Rig::with_drums_and_synth();
     let rect = header_rect;
     let collapsed = |rig: &Rig| rig.app.song.channels[1].lanes[0].collapsed;
@@ -2339,7 +2339,7 @@ fn collapse_makes_a_tracks_row_thin_and_expand_makes_it_whole() {
     let labels: Vec<_> = (crate::ui::track_menu::track_menu(&rig.app.song, 1, 0).into_iter())
         .map(|i| i.label.into_owned())
         .collect();
-    assert_eq!(labels[6], "Expand");
+    assert_eq!(labels[7], "Expand");
     rig.frame(undo());
     assert!(!collapsed(&rig));
     rig.frame(redo());
@@ -2358,13 +2358,13 @@ fn collapse_makes_a_tracks_row_thin_and_expand_makes_it_whole() {
 /// each; each shows while it has a track to change.
 #[test]
 fn collapse_all_and_expand_all_change_every_track_one_undo_step_each() {
-    const ALL: (usize, usize) = (0, 7);
+    const ALL: (usize, usize) = (0, 8);
     let mut rig = Rig::with_drums_and_synth();
     let labels = |rig: &Rig| -> Vec<String> {
         (crate::ui::track_menu::track_menu(&rig.app.song, 1, 0).into_iter())
             .filter(|i| i.col == 0)
             .map(|i| i.label.into_owned())
-            .skip(6)
+            .skip(7)
             .collect()
     };
     let collapsed = |rig: &Rig| -> Vec<bool> {

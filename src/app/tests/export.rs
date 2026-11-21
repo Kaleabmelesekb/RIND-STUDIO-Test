@@ -432,7 +432,7 @@ fn a_render_is_tagged_with_the_songs_metadata_unless_write_tags_is_off() {
     meta.author = "Ivan".into();
     meta.genre = "House".into();
     let tagged = render(&mut rig, "Beat");
-    let encoder = format!("Honeydew {}", env!("CARGO_PKG_VERSION"));
+    let encoder = format!("{} {}", crate::APP_NAME, env!("CARGO_PKG_VERSION"));
     let tags = [
         ("TITLE", "Beat"),
         ("ARTIST", "Ivan"),

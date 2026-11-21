@@ -3032,7 +3032,7 @@ mod component {
     #[test]
     fn every_note_menu_item_is_enabled() {
         let items = crate::ui::piano_roll::more_items();
-        assert_eq!(items.len(), 28);
+        assert_eq!(items.len(), 30);
         assert!(items.iter().all(|i| !i.disabled));
     }
 
