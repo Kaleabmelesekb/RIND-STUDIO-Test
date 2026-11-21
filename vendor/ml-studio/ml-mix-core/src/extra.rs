@@ -96,9 +96,9 @@ impl Extension for Notes {
 // ---- Bitcrusher ----
 
 pub static CRUSHER: Spec = Spec {
-    name: "ML Bitcrusher",
+    name: "Rind Bitcrusher",
     word: "BITCRUSHER",
-    about: "Honeydew's bitcrusher in the ML Studio style.",
+    about: "Honeydew's bitcrusher in the ML Studio look.",
     settings: &[
         setting("bits", "Bits", (1, 16), 8),
         setting("rate", "Downsample", (1, 64), 1),
@@ -185,9 +185,9 @@ impl Unit for Crusher {
 // ---- Exciter ----
 
 pub static EXCITER: Spec = Spec {
-    name: "ML Exciter",
+    name: "Rind Exciter",
     word: "EXCITER",
-    about: "Honeydew's harmonic exciter in the ML Studio style.",
+    about: "Honeydew's harmonic exciter in the ML Studio look.",
     settings: &[
         setting("freq", "Frequency", (500, 16000), 3000),
         setting("drive", "Drive", (0, 360), 120),
@@ -292,9 +292,9 @@ impl Unit for Excite {
 // ---- Spectral compressor ----
 
 pub static SPECTRAL: Spec = Spec {
-    name: "ML Spectral Compressor",
+    name: "Rind Spectral Compressor",
     word: "SPECTRAL COMPRESSOR",
-    about: "Honeydew's spectral compressor in the ML Studio style.",
+    about: "Honeydew's spectral compressor in the ML Studio look.",
     settings: &[
         setting("threshold", "Threshold", (-600, 0), -300),
         setting("ratio", "Ratio", (10, 200), 40),
