@@ -304,7 +304,7 @@ mod tests {
             ]
         );
         // 0.4.9's effects: Lemon Small FX's ten, one plugin each, Lemon Delay, Lemon Vocoder, Press and Pulp Filter, each
-        // with its VST3 copy's class id and its editor's size; only Lemon Vocoder has a sidechain input.
+        // with its VST3 copy's class id and its editor's size; only Lemon Vocoder and Lemon Limiter have a sidechain input.
         let added: Vec<_> = (got[9..23].iter())
             .map(|&(name, uid, class, _)| {
                 (
@@ -407,7 +407,7 @@ mod tests {
             .filter(|b| b.sidechain())
             .map(|b| b.name)
             .collect();
-        assert_eq!(keyed, ["Lemon Vocoder"]);
+        assert_eq!(keyed, ["Lemon Vocoder", "Lemon Limiter"]);
         // Each one starts and plays a block (an instrument a note, an effect a sine), every sample finite.
         for b in super::all() {
             let plugin = b.lib.clone().create(&b.desc.id).unwrap();
