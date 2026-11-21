@@ -273,9 +273,11 @@ impl Unit for Excite {
         for (ch, buf) in [l, r].into_iter().enumerate() {
             for s in buf.iter_mut() {
                 let dry = if s.is_finite() { *s } else { 0. };
-                let high = self.before[ch][1].high(self.before[ch][0].high(dry, a), a);
+                let first = self.before[ch][0].high(dry, a);
+                let high = self.before[ch][1].high(first, a);
                 let sat = (high * drive + bias).tanh() - rest;
-                let sat = self.after[ch][1].high(self.after[ch][0].high(sat, a), a);
+                let first = self.after[ch][0].high(sat, a);
+                let sat = self.after[ch][1].high(first, a);
                 *s = (dry + sat * amount) * gain;
             }
         }
