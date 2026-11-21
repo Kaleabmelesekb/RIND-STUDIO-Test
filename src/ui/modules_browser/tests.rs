@@ -307,7 +307,9 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Equalizer",
             "Lemon Parametric EQ",
             "Graphic EQ",
-            "Tuned EQ"
+            "Tuned EQ",
+            "MISC",
+            "ML Frequency Shift"
         ]
     );
     assert_eq!(
@@ -1011,7 +1013,7 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             ModuleOrdering::TopLevel,
             Takes::Instruments
         )),
-        ["Trance Delay", "Tape Delay", "Lemon Delay"]
+        ["Trance Delay", "Tape Delay", "Lemon Delay", "ML Multiband Delay"]
     );
 }
 
