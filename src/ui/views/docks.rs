@@ -1305,7 +1305,7 @@ mod tests {
         let mut landscape = Docks::default();
         let (browser, rack) = landscape.insets(area(), false, false, &m);
         assert!(browser > m.u(RAIL_W) && browser <= m.u(BROWSER_W));
-        assert!(rack > m.u(HEADER_H) && rack <= 300.0 * MAX_SHARE + 0.01);
+        assert_eq!(rack, 0.0, "no bottom rack");
         let mut portrait = Docks::default();
         let (browser, _) = portrait.insets(area(), true, false, &m);
         assert_eq!(browser, m.u(RAIL_W));
