@@ -27,18 +27,13 @@ const GAIN: AutomationTarget = AutomationTarget {
 };
 
 impl Rig {
-    /// Where the last frame painted `text`: above the keyboard panel if it is there (the dock's device chips repeat the
-    /// modules' titles under it), else wherever it is.
+    /// Where the last frame painted `text`.
     pub(super) fn text_rect(&self, text: &str) -> Rect {
-        let found: Vec<Rect> = (self.out.shapes.iter())
-            .filter_map(|s| match &s.shape {
+        (self.out.shapes.iter())
+            .find_map(|s| match &s.shape {
                 Shape::Text(t) if t.galley.text() == text => Some(t.visual_bounding_rect()),
                 _ => None,
             })
-            .collect();
-        (found.iter().find(|r| r.top() < PANEL_TOP))
-            .or(found.first())
-            .copied()
             .unwrap_or_else(|| panic!("{text:?} not painted"))
     }
 
@@ -895,9 +890,8 @@ fn fine_tuning(rig: &Rig) -> Option<(usize, AutomationTarget)> {
     }
 }
 
-/// The dialog's slider row on the 1170 × 540 screen under the control bar (U = 32): y 259…313 less the bar's half, its
-/// track from x 80 to 1090.
-const TUNE_Y: f32 = 286.0 + TOP_BAR / 2.0;
+/// The dialog's slider row on the 1170 × 540 screen (U = 32): y 259…313, its track from x 80 to 1090.
+const TUNE_Y: f32 = 286.0;
 fn tune_x(v: f32) -> f32 {
     112.0 + v * 946.0
 }

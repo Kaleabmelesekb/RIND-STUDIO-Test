@@ -257,8 +257,8 @@ fn run(
     let mut ui = ui.new_child(builder);
     state.panel.covered = app.covered;
     state.panel.middle_c_is_c4 = app.middle_c_is_c4;
-    let place = app.settings.rack_tab_place;
-    state.panel.tab_y = crate::ui::main_screen::rack_tab_pill(&app.regions, place, app.cx.m)
+    let tab_place = app.settings.rack_tab_place;
+    state.panel.tab_y = crate::ui::main_screen::rack_tab_pill(&app.regions, tab_place, app.cx.m)
         .center()
         .y;
     state.panel.lemon_full = state.full;

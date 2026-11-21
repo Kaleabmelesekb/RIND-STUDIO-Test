@@ -13,7 +13,7 @@ use crate::ui::save_dialog::{DialogLayout, ExportFormat, layout};
 
 /// The Save dialog's places on the rig's screen.
 fn dialog() -> DialogLayout {
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     layout(
         screen,
         &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),

@@ -14,7 +14,7 @@ const REC: Pos2 = pos2(585.0 - 2.0 * 1.75 * U, BAR_Y);
 /// On the playlist's ruler at `beat`: tick 0 is at the grid's left edge (1.5 U + t, t = 2 points), a beat is 1.2 U at
 /// the default zoom.
 fn ruler(beat: f32) -> Pos2 {
-    pos2(1.5 * U + 2.0 + beat * 1.2 * U, TOP_BAR + 0.75 * U)
+    pos2(1.5 * U + 2.0 + beat * 1.2 * U, 0.75 * U)
 }
 
 /// The playhead knob (the play box, its left edge on the playhead) on the ruler's middle line, on the transport at
@@ -27,7 +27,7 @@ impl Rig {
     /// The playhead x the play box on the ruler shows as last drawn (its centre less half its width), to a thousandth
     /// of a point ([`r3`]).
     fn box_x(&self) -> Option<f32> {
-        self.play_box_in(TOP_BAR..TOP_BAR + RULER).map(|b| b.0)
+        self.play_box_in(0.0..RULER).map(|b| b.0)
     }
 
     /// Lets the play box fade out (or in): at alpha 0 it takes no touch.
@@ -204,7 +204,7 @@ fn a_ruler_tap_that_stops_goes_back_to_where_play_started() {
 fn playing_the_playlists_line_moves_on_every_frame_between_the_outputs_steps() {
     let mut rig = song_rig();
     let text = rig.app.theme.colors.text.to_color32();
-    let tracks = egui::Rangef::new(TOP_BAR + RULER, PANEL_TOP);
+    let tracks = egui::Rangef::new(RULER, PANEL_TOP);
     let line = |rig: &Rig| {
         (rig.rects(text).iter())
             .find(|r| r.width() < U && r.y_range() == tracks)
@@ -299,7 +299,7 @@ fn following_the_playlists_line_stands_still_a_quarter_in() {
     rig.app.song.channels[1].lanes[0].add_clip(2048, 48.0);
     rig.app.settings.continuous_scroll = true;
     let text = rig.app.theme.colors.text.to_color32();
-    let tracks = egui::Rangef::new(TOP_BAR + RULER, PANEL_TOP);
+    let tracks = egui::Rangef::new(RULER, PANEL_TOP);
     rig.at(20 * BEAT);
     rig.frame(vec![]);
     rig.click(PLAY);
@@ -377,7 +377,7 @@ fn the_piano_rolls_playhead_knob_drags_and_seeks_where_it_lets_go() {
     rig.take();
     // The roll's ruler: a beat is 64 points from the grid's left edge (1.5 U + t, t = 2 points). The box at beat 0,
     // pressed on the playhead and dragged 3 U right: beat 1.5.
-    let beat = |b: f32| pos2(1.5 * U + 2.0 + b * 64.0, TOP_BAR + 0.75 * U);
+    let beat = |b: f32| pos2(1.5 * U + 2.0 + b * 64.0, 0.75 * U);
     let to = beat(1.5);
     rig.press(beat(0.0));
     rig.drag_to(beat(0.75));

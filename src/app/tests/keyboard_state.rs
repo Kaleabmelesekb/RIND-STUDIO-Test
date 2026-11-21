@@ -23,7 +23,7 @@ fn the_keyboard_starts_with_middle_c_centered_and_keeps_manual_scroll() {
             .add_bare_channel(ChannelKind::Synth(SynthKind::MiniSynth), 0);
         let draw = |rig: &mut Rig| {
             let raw = egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, SCREEN_H))),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(width, 540.0))),
                 ..Default::default()
             };
             rig.out = rig.ctx.run(raw, |ctx| rig.app.frame(ctx, |_, _| None));
@@ -241,7 +241,7 @@ fn a_loaded_song_starts_with_no_keyboard_views_kept() {
 /// The playhead knob on the playlist's ruler at `beat` (`transport.rs`'s `ruler`): tick 0 at the grid's left edge, a
 /// beat 1.2 U at the default zoom.
 fn ruler(beat: f32) -> Pos2 {
-    pos2(1.5 * U + 2.0 + beat * 1.2 * U, TOP_BAR + 0.75 * U)
+    pos2(1.5 * U + 2.0 + beat * 1.2 * U, 0.75 * U)
 }
 
 /// Position jumps through the app: a seek while playing re-syncs the engine.

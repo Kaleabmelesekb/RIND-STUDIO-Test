@@ -16,7 +16,7 @@ impl Rig {
     }
 
     /// Frames for the keyboard panel to slide to its place, where the transport bar's readout is; the centre of the
-    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, in the control bar left of the logo's corner).
+    /// CPU/RAM slot there (one b = 1.75 U slot left of ↘'s, at the bar's right edge).
     fn settle(&mut self) -> Pos2 {
         for _ in 0..40 {
             self.frame(vec![]);
@@ -28,10 +28,7 @@ impl Rig {
             .expect("the readout")
             .rect
             .center();
-        assert!(
-            (at.x - (1170.0 - 3.75 * U - 1.5 * 1.75 * U)).abs() < 0.01,
-            "{at:?}"
-        );
+        assert!((at.x - (1170.0 - 1.5 * 1.75 * U)).abs() < 0.01, "{at:?}");
         at
     }
 
@@ -68,7 +65,7 @@ impl Rig {
 /// The main menu's content area at U = 32.
 fn content() -> egui::Rect {
     crate::ui::main_menu::shell_layout(
-        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H)),
+        egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0)),
         &Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE),
     )
     .content

@@ -75,6 +75,8 @@ mod tests;
 
 // Sizes in U unless noted.
 /// The header at the top, its 2 px border included: in a full-screen rack, and in a side one.
+/// The least a card may shrink to in the strip, as a share of the U.
+const MIN_FIT: f32 = 0.45;
 const HEADER_FULL: f32 = 1.75;
 const HEADER_SIDE: f32 = 1.3;
 /// The header bar's bottom corners: zero for sharp industrial edges.

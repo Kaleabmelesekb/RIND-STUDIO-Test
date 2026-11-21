@@ -24,7 +24,7 @@ fn strip(row: usize, ctl: Ctl) -> egui::Id {
 
 /// The keyboard band at the default panel height, where the drum view has its pads, and the centre of pad `index`
 /// there.
-const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, SCREEN_H));
+const KEYBOARD: egui::Rect = egui::Rect::from_min_max(pos2(0.0, KEYS_TOP), pos2(1170.0, 540.0));
 fn pad(index: usize) -> Pos2 {
     pad_in(crate::ui::keyboard_settings::PANEL_H, index)
 }
@@ -33,7 +33,7 @@ fn pad(index: usize) -> Pos2 {
 /// panel only the first row (pads 0–6) is on the screen: the grid keeps its least size and overflows below.
 pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     let keys = Regions::sized(screen, panel_u * U, 1, &m).keyboard;
     let area = crate::ui::keyboard_settings::pads_rect(keys, &m);
     drums::pad_grid(area, 1170.0, U).centres[index]
@@ -42,7 +42,7 @@ pub(super) fn pad_in(panel_u: f32, index: usize) -> Pos2 {
 /// The bottom editors' one close X (`ui::split::close_button`).
 pub(super) const EDITOR_CLOSE: &str = "editor_close";
 /// The top of a clip editor: the area's top, as it opens fully expanded (`ui::split`).
-pub(super) const EDITOR_TOP: f32 = TOP_BAR;
+pub(super) const EDITOR_TOP: f32 = 0.0;
 
 /// The gap between a drum editor's header column and its grid: t = ceil(U/16) px.
 const T: f32 = 2.0;
@@ -1244,7 +1244,7 @@ fn the_keys_take_no_touch_with_the_master_alone_and_key_lock_snaps_a_major_songs
     let mut rig = Rig::with_synth();
     rig.app.song.key_scale = crate::song::scales::scale_to_stored(0);
     for (x, key) in [(1.8, 48), (2.2, 50), (5.0, 52)] {
-        let at = pos2(x * U, TOP_BAR + 445.5);
+        let at = pos2(x * U, 445.5);
         rig.press(at);
         rig.release(at);
         let on = rig.take().first().cloned().unwrap_or_default();
@@ -1359,7 +1359,7 @@ fn a_new_drums_channels_default_drumset_shows_and_its_pads_play_it() {
         rig.frame(vec![]);
     }
     let pad = |i| pad_in(8.0, i);
-    assert!(pad(kit.slots.len()).y < SCREEN_H);
+    assert!(pad(kit.slots.len()).y < 540.0);
     for i in 0..kit.slots.len() {
         rig.press(pad(i));
         rig.release(pad(i));
@@ -1567,9 +1567,9 @@ fn while_playing_the_playlists_and_the_rolls_play_boxes_fade_out_and_only_their_
 /// line (`text`, narrower than U) runs down the track area.
 fn playlist_playhead(rig: &Rig) -> (Option<(f32, u8)>, bool) {
     let text = rig.app.theme.colors.text.to_color32();
-    let tracks = egui::Rangef::new(TOP_BAR + RULER, PANEL_TOP);
+    let tracks = egui::Rangef::new(RULER, PANEL_TOP);
     let line = (rig.rects(text).iter()).any(|r| r.width() < U && r.y_range() == tracks);
-    (rig.play_box_in(TOP_BAR..TOP_BAR + RULER), line)
+    (rig.play_box_in(0.0..RULER), line)
 }
 
 #[test]
@@ -2277,7 +2277,7 @@ fn a_playlist_region_edit_rebuilds_once_and_is_one_undo_step_that_keeps_the_loop
     rig.frame(vec![]);
     rig.take();
     // Beats 2 to 6 on the ruler (a beat is 38.4 points from x 48): the clip's first two beats go.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.region(beat(2.0), beat(6.0), "Delete space");
     assert_eq!(rig.clip_spans(), [(256, 256.0)]);
     // The region's loop reached the engine; the edit clears it, and the new engine reads none.
@@ -2339,7 +2339,7 @@ fn a_play_loop_is_no_undo_step_even_when_a_final_edit_follows_it() {
     rig.frame(vec![]);
     rig.app.files.saved();
     // A loop on the playlist's ruler: a long press on beat 2 dragged to beat 6 (a beat is 38.4 points from x 48).
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.press(beat(2.0));
     rig.next_frame_at(rig.time + 0.31);
     rig.frame(vec![]);
@@ -2401,7 +2401,7 @@ fn a_tap_on_any_ruler_sets_the_shared_playhead_or_stops_a_playing_transport() {
     let mut rig = Rig::with_synth();
     rig.app.song.channels[1].lanes[0].add_clip(512, 8.0);
     // The playlist's ruler: beat 3 (a beat is 38.4 points from x 48).
-    let ruler = pos2(48.0 + 3.1 * 38.4, TOP_BAR + 24.0);
+    let ruler = pos2(48.0 + 3.1 * 38.4, 24.0);
     rig.click(ruler);
     assert_eq!(rig.take(), ["Seek 384"]);
     rig.rec.0.borrow_mut().tick = 384;
@@ -2437,7 +2437,7 @@ fn the_playhead_knob_takes_its_own_taps_and_the_ruler_beside_it_keeps_its_gestur
     rig.rec.0.borrow_mut().tick = 384;
     rig.frame(vec![]);
     // Stopped at beat 3; 0.6 beat to its right is on the box (a beat is 38.4 points from x 48): a tap plays.
-    let beat = |b: f32| pos2(48.0 + b * 38.4, TOP_BAR + 24.0);
+    let beat = |b: f32| pos2(48.0 + b * 38.4, 24.0);
     rig.click(beat(3.6));
     assert_eq!(rig.take(), ["Play"]);
     rig.click(PLAY);
@@ -3969,7 +3969,7 @@ fn a_keys_area_0_tall_hides_the_pads_and_a_press_there_plays_nothing() {
     rig.frame(vec![]);
     rig.app.settings.preferred_kbd_size = 4.75;
     // Pads: 6-point paths under the bar (the keyboard-settings icon's keys are 6-point paths too).
-    let under_bar = SCREEN_H - (4.75 - 1.75) * U;
+    let under_bar = 540.0 - (4.75 - 1.75) * U;
     let hexes = |rig: &Rig| {
         (rig.out.shapes.iter())
             .filter(|s| match &s.shape {
@@ -4029,7 +4029,7 @@ fn rec_armed_gives_the_step_knob_its_record_icon_and_a_tap_on_the_knob_plays() {
 #[test]
 fn the_keyboard_panel_is_control_fill_under_a_1_px_background_line_behind_the_piano_and_the_pads() {
     let m = Metrics::from_pixels_per_point(1.0, DEFAULT_UI_SCALE);
-    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, SCREEN_H));
+    let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(1170.0, 540.0));
     let regions = Regions::sized(screen, crate::ui::keyboard_settings::PANEL_H * U, 1, &m);
     let panel = Rect::from_min_max(regions.transport.min, regions.keyboard.max);
     let on_top = |rig: &Rig, at: Pos2| {
@@ -4100,7 +4100,7 @@ fn the_keys_outside_the_span_of_the_channels_instrument_ranges_are_disabled() {
     // E4 (52) and D5 (62) are in range, low on their keys; D#4 (51) and D#5 (63), high on theirs, are not.
     assert_eq!(on_top(E4), Some(white));
     assert_eq!(on_top(pos2(17.0 * U, LOW)), Some(white));
-    let high = KEYS_TOP + 0.3 * (SCREEN_H - KEYS_TOP);
+    let high = KEYS_TOP + 0.3 * (540.0 - KEYS_TOP);
     assert_eq!(on_top(pos2(4.0 * U, high)), Some(black_off));
     assert_eq!(on_top(pos2(18.0 * U, high)), Some(black_off));
 }
