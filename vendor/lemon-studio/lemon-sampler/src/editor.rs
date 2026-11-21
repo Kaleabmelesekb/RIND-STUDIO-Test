@@ -1120,7 +1120,7 @@ impl Logic {
             m.add(MenuItem::item(l).enabled(false), Cmd::None);
         }
         m.sep();
-        m.add(MenuItem::item("Create automation clip").enabled(self.hosted), Cmd::Automate);
+        m.add(MenuItem::item("Create automation clip").enabled(self.hosted || cfg!(feature = "embed")), Cmd::Automate);
         m.add(MenuItem::item("Edit automation clip...").enabled(false), Cmd::None);
         m.head("Remote control");
         m.add(MenuItem::item("MIDI learn...").enabled(false), Cmd::None);
