@@ -191,16 +191,9 @@ impl Docks {
         } else {
             m.u(RAIL_W)
         };
-        let header = m.u(HEADER_H).min(area.height() * 0.5);
-        let rack = if racked {
-            0.0
-        } else if self.rack_open {
-            (m.u(HEADER_H + self.rack_body))
-                .min(area.height() * MAX_SHARE)
-                .max(header)
-        } else {
-            header
-        };
+        // The bottom Device Rack is gone: the side rack (the `Channel rack` tab) shows the same devices.
+        let _ = racked;
+        let rack = 0.0;
         (browser, rack)
     }
 
@@ -1312,7 +1305,7 @@ mod tests {
         let mut landscape = Docks::default();
         let (browser, rack) = landscape.insets(area(), false, false, &m);
         assert!(browser > m.u(RAIL_W) && browser <= m.u(BROWSER_W));
-        assert!(rack > m.u(HEADER_H) && rack <= 300.0 * MAX_SHARE + 0.01);
+        assert_eq!(rack, 0.0, "no bottom rack");
         let mut portrait = Docks::default();
         let (browser, _) = portrait.insets(area(), true, false, &m);
         assert_eq!(browser, m.u(RAIL_W));
@@ -1327,11 +1320,7 @@ mod tests {
             rack_open: false,
             ..Docks::default()
         };
-        let header = m.u(HEADER_H).min(area().height() * 0.5);
-        assert_eq!(
-            docks.insets(area(), false, false, &m),
-            (m.u(RAIL_W), header)
-        );
+        assert_eq!(docks.insets(area(), false, false, &m), (m.u(RAIL_W), 0.0));
         docks.rack_open = true;
         assert_eq!(docks.insets(area(), false, true, &m).1, 0.0);
     }
