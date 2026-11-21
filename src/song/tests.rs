@@ -2209,6 +2209,9 @@ fn markers_survive_a_save_and_load_and_a_song_without_any_writes_no_chunk() {
     let back = crate::flm::read(&bytes).unwrap();
     assert_eq!(back.markers, song.markers);
     assert!(back.file.unknown_chunks.is_empty());
+}
+
+#[test]
 fn sections_are_saved_apart_and_a_song_with_none_writes_as_before() {
     // An `HDSe` per section (#80), which FL Studio Mobile skips as an unknown chunk.
     let mut song = Song::default();

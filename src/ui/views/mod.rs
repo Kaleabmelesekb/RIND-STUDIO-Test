@@ -886,6 +886,7 @@ impl Slots {
                 top.then(|| {
                     device_window::show(state, ui, app, (*channel, *module), clipboard, held)
                 })?
+            }
             Overlay::SectionSettings { section, name } => {
                 section_settings::show(ui, app, *section, name)
             }
