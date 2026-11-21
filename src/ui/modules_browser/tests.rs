@@ -1013,7 +1013,12 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             ModuleOrdering::TopLevel,
             Takes::Instruments
         )),
-        ["Trance Delay", "Tape Delay", "Lemon Delay", "ML Multiband Delay"]
+        [
+            "Trance Delay",
+            "Tape Delay",
+            "Lemon Delay",
+            "ML Multiband Delay"
+        ]
     );
 }
 
