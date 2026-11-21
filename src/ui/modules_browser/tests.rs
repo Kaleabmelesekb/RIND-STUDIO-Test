@@ -117,9 +117,6 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Stereo Shaper",
             "Lemon Transient Processor",
             "Lemon Vocoder",
-            "Press",
-            "Pulp Filter",
-            "Tesla",
             "ML De-Esser",
             "ML Frequency Shift",
             "ML Meter",
@@ -132,6 +129,9 @@ const SPEC: &[(&str, &[&str])] = &[
             "ML Tape",
             "ML Tuner",
             "ML Waveshaper",
+            "Press",
+            "Pulp Filter",
+            "Tesla",
         ],
     ),
 ];
@@ -328,7 +328,9 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Graphic EQ",
             "Tuned EQ",
             "LEMON STUDIO",
-            "Lemon Parametric EQ"
+            "Lemon Parametric EQ",
+            "ML Frequency Shift",
+            "ML Frequency Shift"
         ]
     );
     assert_eq!(
@@ -980,15 +982,15 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Scale",
             "Arpeggiator",
             // Honeydew's own: 1002 … 1008 and Dragonfly's 1100 …, then the built-in plugin.
-            "Dragonfly Hall Reverb",
-            "Dragonfly Room Reverb",
-            "Dragonfly Plate Reverb",
-            "Dragonfly Early Reflections",
             "Dynamic EQ",
             "Modulator",
             "De-esser",
             "Denoise",
             "Half Time",
+            "Dragonfly Hall Reverb",
+            "Dragonfly Room Reverb",
+            "Dragonfly Plate Reverb",
+            "Dragonfly Early Reflections",
             "Lemon Balance",
             "Lemon Chorus",
             "Lemon Delay",
@@ -1007,9 +1009,6 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Stereo Shaper",
             "Lemon Transient Processor",
             "Lemon Vocoder",
-            "Press",
-            "Pulp Filter",
-            "Tesla",
             "ML De-Esser",
             "ML Frequency Shift",
             "ML Meter",
@@ -1022,6 +1021,9 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "ML Tape",
             "ML Tuner",
             "ML Waveshaper",
+            "Press",
+            "Pulp Filter",
+            "Tesla",
         ]
     );
     // The search filters it, in the same order.
