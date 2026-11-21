@@ -1,6 +1,6 @@
 use crate::*;
 use ml_mix_core::split::Splitter;
-use os_engine::effects::delay::Ring;
+use crate::ring::Ring;
 use std::sync::atomic::{AtomicU32, Ordering};
 pub type MultibandDelay = Fx<Multidelay>;
 const BEATS: [f64; 8] = [0.25, 1. / 3., 0.5, 0.75, 1., 1.5, 2., 4.];

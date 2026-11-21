@@ -1,6 +1,7 @@
 pub mod frequency;
 pub mod riser;
 pub mod multidelay;
+mod ring;
 mod specs;
 pub mod tuner;
 use os_ui::{Canvas, Color, Font, Rect};
