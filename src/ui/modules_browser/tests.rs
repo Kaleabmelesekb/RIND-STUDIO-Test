@@ -329,7 +329,6 @@ fn search_keeps_matching_entries_and_hides_empty_sections() {
             "Tuned EQ",
             "LEMON STUDIO",
             "Lemon Parametric EQ",
-            "ML Frequency Shift",
             "ML Frequency Shift"
         ]
     );
