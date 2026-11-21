@@ -69,6 +69,11 @@ impl LiveEdits {
         self.norm_at(param_addr(p), host).unwrap_or(host)
     }
 
+    /// A full patch recall supersedes edits awaiting host confirmation. (Honeydew, from ML Studio.)
+    pub fn clear(&self) {
+        self.0.lock().unwrap().clear();
+    }
+
     /// The plain value the sound uses for `p` (its pending editor edit, else the host's value).
     pub fn value<P: Param>(&self, p: &P) -> P::Plain {
         match self.norm_at(p as *const P as usize, p.unmodulated_normalized_value()) {

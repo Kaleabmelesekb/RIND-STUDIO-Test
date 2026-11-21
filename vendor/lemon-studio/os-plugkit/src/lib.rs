@@ -14,6 +14,7 @@ pub mod levels;
 pub mod linked;
 pub mod live;
 pub mod vals;
+pub mod visibility;
 #[cfg(windows)]
 pub mod win;
 #[cfg(target_os = "linux")]

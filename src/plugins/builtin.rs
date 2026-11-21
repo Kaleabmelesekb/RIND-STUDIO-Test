@@ -59,6 +59,19 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     smith,
     lemon_limiter,
     lemon_reverb,
+    // ML Studio (Michael Lane's fork of Lemon Studio).
+    lemon_tape,
+    ml_de_esser,
+    ml_frequency_shift,
+    ml_meter,
+    ml_multiband_delay,
+    ml_phase,
+    ml_pitch_shift,
+    ml_reference,
+    ml_riser,
+    ml_split,
+    ml_tuner,
+    ml_waveshaper,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -92,6 +105,18 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.openstudio.smith", b"LemonStudioSmith"),
     ("org.openstudio.lemon-limiter", b"LemonStudioLimit"),
     ("org.openstudio.lemon-reverb", b"LemonStudioRevrb"),
+    ("com.mlstudio.waveshaper", b"MLWaveshaper0001"),
+    ("com.mlstudio.split", b"MLStudioSplit001"),
+    ("com.mlstudio.pitch-shift", b"MLStudioPitch001"),
+    ("com.mlstudio.meter", b"MLStudioMeter001"),
+    ("com.mlstudio.de-esser", b"MLStudioDeEss001"),
+    ("com.mlstudio.riser", b"MLRiser000000001"),
+    ("com.mlstudio.frequencyshift", b"MLFrequency00001"),
+    ("com.mlstudio.multibanddelay", b"MLMultidelay0001"),
+    ("com.mlstudio.tuner", b"MLStudioTuner001"),
+    ("com.mlstudio.reference", b"MLReference00001"),
+    ("com.mlstudio.phase", b"MLStudioPhase001"),
+    ("org.openstudio.lemon-tape", b"LemonStudioTape1"),
 ];
 
 /// The editor size of a plugin that reports none.
@@ -363,7 +388,7 @@ mod tests {
         assert_eq!(added, want);
         // Lemon Drop, Lemon SoundFont Player, Smith, Lemon Limiter and Lemon Reverb, last.
         assert_eq!(
-            got[23..],
+            got[23..28],
             [
                 (
                     "Lemon Drop",
@@ -395,6 +420,25 @@ mod tests {
                     Some(*b"LemonStudioRevrb"),
                     (lemon_reverb::view::W, lemon_reverb::view::H)
                 ),
+            ]
+        );
+        // ML Studio's (Michael Lane's fork of Lemon Studio) twelve, after them.
+        let ml: Vec<_> = got[28..].iter().map(|b| b.1.as_str()).collect();
+        assert_eq!(
+            ml,
+            [
+                "clap:org.openstudio.lemon-tape",
+                "clap:com.mlstudio.de-esser",
+                "clap:com.mlstudio.frequencyshift",
+                "clap:com.mlstudio.meter",
+                "clap:com.mlstudio.multibanddelay",
+                "clap:com.mlstudio.phase",
+                "clap:com.mlstudio.pitch-shift",
+                "clap:com.mlstudio.reference",
+                "clap:com.mlstudio.riser",
+                "clap:com.mlstudio.split",
+                "clap:com.mlstudio.tuner",
+                "clap:com.mlstudio.waveshaper",
             ]
         );
         for &(name, _, _, size) in &got[9..] {

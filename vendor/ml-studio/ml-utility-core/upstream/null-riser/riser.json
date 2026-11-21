@@ -1,0 +1,9 @@
+[
+  ["Build Start", {"Intensity": 25}],
+  ["Build Middle", {"Intensity": 50}],
+  ["Tension Peak", {"Intensity": 75}],
+  ["Pre-Drop Max", {"Intensity": 100}],
+  ["First Bars", {"Intensity": 10}],
+  ["Pre-Chorus Lift", {"Intensity": 40}],
+  ["Big Sweep Up", {"Intensity": 90}]
+]
