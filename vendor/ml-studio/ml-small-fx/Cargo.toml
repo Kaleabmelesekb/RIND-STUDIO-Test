@@ -23,6 +23,7 @@ os-hostlink = { path = "../../lemon-studio/os-hostlink" }
 os-plugkit = { path = "../../lemon-studio/os-plugkit" }
 os-ui = { path = "../../lemon-studio/os-ui" }
 os-theme = { path = "../../lemon-studio/os-theme" }
+rfd = { package = "host-rfd", path = "../../lemon-studio/host-rfd" }
 serde_json = "1"
 
 [build-dependencies]

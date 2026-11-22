@@ -35,6 +35,8 @@ pub trait Extension: Send + Sync {
     fn editor_closed(&self) {}
     fn accepts_files(&self)->bool { false }
     fn file_dropped(&self,_path:&std::path::Path) {}
+    /// Honeydew (vendored change): the extension asked for a file to open (`file_dropped` gets it).
+    fn take_dialog(&self) -> bool { false }
     /// Optional complete instrument view. Existing effect editors retain their default view.
     fn render(&self, _canvas: &mut os_ui::Canvas, _model: &dyn view::Model,
         _state: &ViewState, _hint: &str) -> Option<Vec<view::Hit>> { None }
@@ -898,6 +900,9 @@ mod gui {
                         let (x, y) = (x / self.scale, y / self.scale);
                         let acts = self.logic.down(x, y, btn(b), self.mods(), dbl && b == Button::Left);
                         self.act(acts);
+                        if self.logic.shared.extension.as_ref().is_some_and(|e| e.take_dialog()) {
+                            self.open_file();
+                        }
                     }
                     Input::Move { x, y } => {
                         let acts = self.logic.moved(x / self.scale, y / self.scale, self.mods());
@@ -929,6 +934,21 @@ mod gui {
                 }
             }
             os_plugkit::park!(self);
+        }
+
+        /// Honeydew (vendored change): the open-file dialog an extension asked for (Honeydew's own picker where it
+        /// answers); the file goes to the extension.
+        fn open_file(&mut self) {
+            if os_plugkit::no_modal() {
+                return;
+            }
+            let path = self.win.dialog(|| {
+                rfd::FileDialog::new().set_title("Open DX7 cartridge").add_filter("DX7 cartridges", &["syx"]).pick_file()
+            });
+            if let (Some(Some(path)), Some(e)) = (path, self.logic.shared.extension.as_ref()) {
+                e.file_dropped(&path);
+            }
+            self.dirty = true;
         }
 
         fn mods(&self) -> Mods {

@@ -22,6 +22,7 @@ nih_plug = { path = "../../nih-plug" }
 ml-mix-core = { path = "../ml-mix-core" }
 os-plugkit = { path = "../../lemon-studio/os-plugkit" }
 os-ui = { path = "../../lemon-studio/os-ui" }
+os-theme = { path = "../../lemon-studio/os-theme" }
 ml-small-fx = { path = "../ml-small-fx" }
 
 [build-dependencies]
