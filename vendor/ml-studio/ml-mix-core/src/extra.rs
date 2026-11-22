@@ -78,7 +78,7 @@ fn percent(v: i32) -> String {
     format!("{:.0}%", v as f64 / 10.)
 }
 /// A panel with a few lines of text under the cards.
-pub struct Notes(pub &'static [&'static str]);
+pub(crate) struct Notes(pub &'static [&'static str]);
 impl Extension for Notes {
     fn paint(&self, c: &mut Canvas, _: &dyn ml_small_fx::view::Model) {
         if !os_plugkit::visibility::stock_dsp_controls() {
