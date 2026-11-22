@@ -16,7 +16,7 @@ use os_ui::kit::State;
 use os_ui::{Canvas, Color, Font, Rect};
 
 use crate::banks::{self, Bank, Voice};
-use crate::gen::{IDS, SETTINGS};
+use crate::settings::{IDS, SETTINGS};
 use crate::*;
 
 const LABEL: Font = Font::new(10).bold();

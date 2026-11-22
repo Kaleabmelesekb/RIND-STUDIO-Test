@@ -14,10 +14,10 @@ use std::{
 
 pub mod algo;
 pub mod banks;
-pub mod gen;
+pub mod settings;
 mod ui;
 
-use gen::{COUNT, SETTINGS};
+use settings::{COUNT, SETTINGS};
 
 pub type Effect = Instrument<Fm>;
 

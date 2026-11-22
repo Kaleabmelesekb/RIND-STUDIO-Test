@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes src/gen.rs: the 152 settings of Rind FM (a DX7 voice's 145 values, six operator switches, the output)."""
+"""Writes src/settings.rs: the 152 settings of Rind FM (a DX7 voice's 145 values, six operator switches, the output)."""
 OP = [  # (id, name, lo, hi, start, magnet)
     ("r1", "EG Rate 1", 0, 99, 99, None), ("r2", "EG Rate 2", 0, 99, 99, None),
     ("r3", "EG Rate 3", 0, 99, 99, None), ("r4", "EG Rate 4", 0, 99, 99, None),
@@ -47,5 +47,5 @@ out.append("")
 out.append(f"pub static IDS: [&str; {len(rows)}] = [")
 out += [f'    "{r[0]}",' for r in rows]
 out.append("];")
-open("src/gen.rs", "w").write("\n".join(out) + "\n")
+open("src/settings.rs", "w").write("\n".join(out) + "\n")
 print(len(rows))
