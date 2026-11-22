@@ -2046,6 +2046,7 @@ dependencies = [
  "pulp-filter",
  "rayon",
  "rfd",
+ "rind-fm",
  "serde",
  "serde_json",
  "sha2",
@@ -4233,6 +4234,18 @@ dependencies = [
  "wayland-protocols",
  "web-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rind-fm"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "ml-mix-core",
+ "ml-small-fx",
+ "nih_plug",
+ "os-plugkit",
+ "os-ui",
 ]
 
 [[package]]

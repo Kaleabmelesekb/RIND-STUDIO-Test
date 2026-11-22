@@ -15,3 +15,9 @@ ML Reference, ML Riser, ML Split, ML Tuner and ML Waveshaper.
   plugins that need C++ (NAM amp, FluidSynth, convolver).
 
 Honeydew's own additions in the same style (not from ML Studio): Rind Bitcrusher, Rind Exciter and Rind Spectral Compressor, in `ml-mix-core/src/extra.rs`.
+
+`rind-fm` (Rind FM, also Honeydew's own) is a six-operator FM synthesizer: the msfa engine (Google's
+music-synthesizer-for-android, Apache-2.0, `rind-fm/cpp`, the engine Dexed grew from) with Honeydew's voice glue
+(`cpp/rdx.cc`), the 33 voice banks Dexed ships (`banks/`, 1056 voices) and the generated editor of the effects. The
+NEON paths of `synth.h` are left out, so the scalar ones play on every target. `ml-mix-core/src/instrument.rs` is the
+instrument wrapper (MIDI in, stereo out).

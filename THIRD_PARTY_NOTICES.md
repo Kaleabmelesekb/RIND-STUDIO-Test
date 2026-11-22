@@ -401,6 +401,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   `tools/sync-lemon-plugins.sh` (`feature = "embed"`, `os_plugkit::park!`), all listed in that folder's `README.md` (the
   editors drawn into Honeydew's window on every platform, the browser build without threads or C++).
 
+## msfa and Dexed's voice banks (Rind FM)
+
+- Source: <https://github.com/google/music-synthesizer-for-android> (the FM engine, `vendor/ml-studio/rind-fm/cpp`, with
+  Honeydew's glue `rdx.cc`) and <https://github.com/asb2m10/dexed> (the voice banks `vendor/ml-studio/rind-fm/banks`,
+  from its `builtin_pgm.zip`).
+- License: the engine is Apache-2.0 (`vendor/ml-studio/rind-fm/LICENSE-msfa-APACHE-2.0`, Copyright 2012 Google Inc.);
+  Dexed is GPL-3.0-or-later, as are the banks it ships.
+- Modified: the NEON code paths of `synth.h` are switched off; the unused files of the engine are left out.
+
 ## nih-plug (the built-in plugins' framework)
 
 - Source: <https://github.com/robbert-vdh/nih-plug>, commit `de421011f41a6d10fc8c7a6084e4f4dee0143683`, the core crate

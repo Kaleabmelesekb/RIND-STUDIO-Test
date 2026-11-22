@@ -2,6 +2,7 @@ pub mod reference;
 pub mod shaper;
 mod specs;
 pub mod extra;
+pub mod instrument;
 pub mod split;
 use os_ui::{Canvas, Color, Font, Rect};
 fn text(c: &mut Canvas, x: f32, y: f32, s: &str) {
