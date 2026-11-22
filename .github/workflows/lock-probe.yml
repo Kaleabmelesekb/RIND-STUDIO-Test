@@ -1,0 +1,14 @@
+name: Lock probe
+on:
+  push:
+    branches: ["rind/lock-probe"]
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo metadata --format-version 1 > /dev/null
+      - run: |
+          git diff Cargo.lock > lock.patch
+          wc -l lock.patch
+          base64 -w0 lock.patch | fold -w 120 | sed 's/^/LK /'
