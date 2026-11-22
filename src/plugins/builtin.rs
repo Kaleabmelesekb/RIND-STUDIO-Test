@@ -76,6 +76,7 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     ml_bitcrusher,
     ml_exciter,
     ml_spectral_compressor,
+    rind_wavetable,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -124,6 +125,7 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.honeydew.ml-bitcrusher", b"MLBitcrusher0001"),
     ("org.honeydew.ml-exciter", b"MLExciter0000001"),
     ("org.honeydew.ml-spectral-compressor", b"MLSpectralComp01"),
+    ("org.honeydew.rind-wavetable", b"RindWavetable001"),
 ];
 
 /// The editor size of a plugin that reports none.
@@ -449,6 +451,7 @@ mod tests {
                 "clap:org.honeydew.ml-bitcrusher",
                 "clap:org.honeydew.ml-exciter",
                 "clap:org.honeydew.ml-spectral-compressor",
+                "clap:org.honeydew.rind-wavetable",
             ]
         );
         for &(name, _, _, size) in &got[9..] {
