@@ -249,15 +249,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arc-swap"
-version = "1.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84a22b5d51209f6de83d37a0b33d320acb8da88823e42a94c075140708f032a5"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2055,7 +2046,7 @@ dependencies = [
  "pulp-filter",
  "rayon",
  "rfd",
- "rind-wavetable",
+ "rind-fm",
  "serde",
  "serde_json",
  "sha2",
@@ -2091,12 +2082,6 @@ dependencies = [
  "os-plugkit",
  "rfd",
 ]
-
-[[package]]
-name = "hound"
-version = "3.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
 
 [[package]]
 name = "icu_collections"
@@ -2240,16 +2225,6 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
-
-[[package]]
-name = "j-syn-dsp"
-version = "0.2.0"
-dependencies = [
- "arc-swap",
- "hound",
- "rustfft",
- "serde",
-]
 
 [[package]]
 name = "java-locator"
@@ -2861,7 +2836,7 @@ dependencies = [
  "parking_lot",
  "wasm-bindgen",
  "web-sys",
- "windows 0.62.2",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -4262,14 +4237,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rind-wavetable"
+name = "rind-fm"
 version = "0.0.1"
 dependencies = [
- "j-syn-dsp",
+ "cc",
  "ml-mix-core",
  "ml-small-fx",
  "nih_plug",
  "os-plugkit",
+ "os-ui",
 ]
 
 [[package]]

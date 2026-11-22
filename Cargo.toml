@@ -81,7 +81,7 @@ ml-waveshaper = { path = "vendor/ml-studio/ml-waveshaper", features = ["linked",
 ml-bitcrusher = { path = "vendor/ml-studio/ml-bitcrusher", features = ["linked", "embed"] }
 ml-exciter = { path = "vendor/ml-studio/ml-exciter", features = ["linked", "embed"] }
 ml-spectral-compressor = { path = "vendor/ml-studio/ml-spectral-compressor", features = ["linked", "embed"] }
-rind-wavetable = { path = "vendor/ml-studio/rind-wavetable", features = ["linked", "embed"] }
+rind-fm = { path = "vendor/ml-studio/rind-fm", features = ["linked", "embed"] }
 os-plugkit = { path = "vendor/lemon-studio/os-plugkit", features = ["embed"] }
 os-ui = { path = "vendor/lemon-studio/os-ui" }
 os-theme = { path = "vendor/lemon-studio/os-theme" }
