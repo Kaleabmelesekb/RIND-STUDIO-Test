@@ -24,7 +24,17 @@ pub fn create_take(
     rate: u32,
     channels: u16,
 ) -> io::Result<(PathBuf, TakeWriter)> {
-    let base = base_name(title);
+    create_named(dir, &base_name(title), rate, channels)
+}
+
+/// [`create_take`] for a file named `base`, then `base 1`, `base 2` … where it is taken: `Bounce in place`'s.
+#[allow(dead_code)] // Bounce in place's, not wired up yet.
+pub fn create_named(
+    dir: &Path,
+    base: &str,
+    rate: u32,
+    channels: u16,
+) -> io::Result<(PathBuf, TakeWriter)> {
     let mut n = 0;
     loop {
         let name = match n {
@@ -39,10 +49,23 @@ pub fn create_take(
     }
 }
 
-/// `<title> Rec`, the title made a file name: `/\:*?"<>|` and control characters become `_`, leading dots and spaces
-/// go (no hidden file), and at most 200 bytes of it stay, as a 255-byte title plus ` Rec 12.wav` would pass the usual
-/// 255-byte name limit. An untitled song's is `Rec`.
+/// `<title> Rec`, the title made a file name ([`clean`]). An untitled song's is `Rec`.
 fn base_name(title: &str) -> String {
+    format!("{} Rec", clean(title)).trim_start().to_owned()
+}
+
+/// `<title> <channel> Bounce`, as [`base_name`] makes a take's: the file `Bounce in place` writes.
+#[allow(dead_code)] // Bounce in place's, not wired up yet.
+pub fn bounce_name(title: &str, channel: &str) -> String {
+    format!("{} Bounce", clean(&format!("{title} {channel}")))
+        .trim_start()
+        .to_owned()
+}
+
+/// `title` made a file name: `/\:*?"<>|` and control characters become `_`, leading dots and spaces go (no hidden
+/// file), and at most 200 bytes of it stay, as a 255-byte title plus ` Rec 12.wav` would pass the usual 255-byte name
+/// limit.
+fn clean(title: &str) -> String {
     let named = |c: char| match FORBIDDEN.contains(c) || c.is_control() {
         true => '_',
         false => c,
@@ -51,7 +74,7 @@ fn base_name(title: &str) -> String {
     let mut named = named.trim_start_matches(['.', ' ']).to_owned();
     let ends = named.char_indices().map(|(at, c)| at + c.len_utf8());
     named.truncate(ends.take_while(|&end| end <= 200).last().unwrap_or(0));
-    format!("{named} Rec").trim_start().to_owned()
+    named
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
