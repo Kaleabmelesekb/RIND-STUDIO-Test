@@ -21,9 +21,9 @@
 #ifndef __ALIGNED_BUF_H
 #define __ALIGNED_BUF_H
 
-// Honeydew: the includes it needs itself.
 #include <stddef.h>
 #include <stdint.h>
+#include<stddef.h>
 
 template<typename T, size_t size, size_t alignment = 16>
 class AlignedBuf {

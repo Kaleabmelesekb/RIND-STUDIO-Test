@@ -401,14 +401,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   `tools/sync-lemon-plugins.sh` (`feature = "embed"`, `os_plugkit::park!`), all listed in that folder's `README.md` (the
   editors drawn into Honeydew's window on every platform, the browser build without threads or C++).
 
-## msfa and Dexed's voice banks (Rind FM)
+## Dexed's engine and voice banks, msfa (Rind FM)
 
-- Source: <https://github.com/google/music-synthesizer-for-android> (the FM engine, `vendor/ml-studio/rind-fm/cpp`, with
-  Honeydew's glue `rdx.cc`) and <https://github.com/asb2m10/dexed> (the voice banks `vendor/ml-studio/rind-fm/banks`,
-  from its `builtin_pgm.zip`).
-- License: the engine is Apache-2.0 (`vendor/ml-studio/rind-fm/LICENSE-msfa-APACHE-2.0`, Copyright 2012 Google Inc.);
-  Dexed is GPL-3.0-or-later, as are the banks it ships.
-- Modified: the NEON code paths of `synth.h` are switched off; the unused files of the engine are left out.
+- Source: <https://github.com/asb2m10/dexed> (the engine `vendor/ml-studio/rind-fm/cpp`: its `msfa` folder, the Mark I
+  and OPL engines, the filter and the voice logic that `rdx.cc` follows from `PluginFx.cpp` and `PluginProcessor.cpp`;
+  and the voice banks `vendor/ml-studio/rind-fm/banks`, from its `builtin_pgm.zip`), which took its `msfa` from
+  <https://github.com/google/music-synthesizer-for-android>.
+- License: Dexed is GPL-3.0-or-later, as are the banks it ships; msfa is Apache-2.0
+  (`vendor/ml-studio/rind-fm/LICENSE-msfa-APACHE-2.0`, Copyright 2012 Google Inc.).
+- Modified: the NEON code paths of `synth.h` are switched off; the JUCE, logging and Surge tuning-library dependencies
+  are replaced by `libMTSClient.h` (no MTS-ESP master) and a standard-tuning-only `tuning.cc`; `rdx.cc` is Honeydew's.
 
 ## nih-plug (the built-in plugins' framework)
 

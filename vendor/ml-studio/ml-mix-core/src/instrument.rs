@@ -12,6 +12,10 @@ pub trait Synth: Default + Send + 'static {
     fn note_off(&mut self, channel: u8, note: u8, voice_id: Option<i32>);
     /// The wheel, `0.0..=1.0` with `0.5` at rest.
     fn pitch_bend(&mut self, value: f32);
+    /// A control change; `value` is `0.0..=1.0`.
+    fn control(&mut self, _cc: u8, _value: f32) {}
+    /// Channel pressure, `0.0..=1.0`.
+    fn pressure(&mut self, _value: f32) {}
     /// Renders (overwrites) `l` and `r`.
     fn render(&mut self, l: &mut [f32], r: &mut [f32], p: &FxParams);
     fn panel(p: Arc<FxParams>) -> Arc<dyn Extension>;
@@ -40,7 +44,7 @@ impl<T: Synth> Plugin for Instrument<T> {
         main_output_channels: NonZeroU32::new(2),
         ..AudioIOLayout::const_default()
     }];
-    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     type SysExMessage = ();
     type BackgroundTask = ();
     fn params(&self) -> Arc<dyn Params> {
@@ -105,6 +109,8 @@ impl<T: Synth> Plugin for Instrument<T> {
                     ..
                 } => self.dsp.note_off(channel, note, voice_id),
                 NoteEvent::MidiPitchBend { value, .. } => self.dsp.pitch_bend(value),
+                NoteEvent::MidiCC { cc, value, .. } => self.dsp.control(cc, value),
+                NoteEvent::MidiChannelPressure { pressure, .. } => self.dsp.pressure(pressure),
                 _ => {}
             }
         }

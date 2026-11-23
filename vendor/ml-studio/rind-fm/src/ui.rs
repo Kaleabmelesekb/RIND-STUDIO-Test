@@ -23,9 +23,10 @@ const LABEL: Font = Font::new(10).bold();
 const CAP: Font = Font::new(10);
 const BIG: Font = Font::new(26).bold();
 const ROW: Font = Font::new(13);
-const TABS: [&str; 8] = ["OP 1", "OP 2", "OP 3", "OP 4", "OP 5", "OP 6", "GLOBAL", "VOICES"];
+const TABS: [&str; 9] = ["OP 1", "OP 2", "OP 3", "OP 4", "OP 5", "OP 6", "GLOBAL", "CONTROL", "VOICES"];
 const GLOBAL_PAGE: usize = 6;
-const VOICES_PAGE: usize = 7;
+const CONTROL_PAGE: usize = 7;
+const VOICES_PAGE: usize = 8;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Act {
@@ -96,7 +97,8 @@ impl Panel {
     fn init(&self, ctx: Option<&Arc<dyn GuiContext>>) {
         let mut vals = Vals::new(&*self.params, self.params.live.clone(), ctx.cloned());
         for (k, s) in SETTINGS.iter().enumerate() {
-            if k != OUTPUT {
+            // A new voice leaves the output, the filter, the tune, the mono mode and the controllers as they are.
+            if k < OUTPUT {
                 vals.edit_plain(IDS[k], s.start as f32);
             }
         }
@@ -135,10 +137,14 @@ impl Extension for Panel {
     fn file_dropped(&self, path: &Path) {
         let Ok(bytes) = std::fs::read(path) else { return };
         let name = path.file_stem().map_or_else(|| "Cartridge".to_string(), |s| s.to_string_lossy().into_owned());
-        let Some(bank) = banks::parse_syx(&bytes, &name) else { return };
+        let banks = banks::parse_syx(&bytes, &name);
+        if banks.is_empty() {
+            return;
+        }
         if let Ok(mut st) = self.st.lock() {
-            st.user.push(bank);
-            st.bank = banks::builtin() + st.user.len() - 1;
+            let first = banks::builtin() + st.user.len();
+            st.user.extend(banks);
+            st.bank = first;
             st.page = VOICES_PAGE;
         }
     }
@@ -177,13 +183,15 @@ impl Extension for Panel {
         ui.c.begin_frame(None);
         ui.c.clear(plug::BG);
         for (i, name) in TABS.iter().enumerate() {
-            ui.button(Rect::new(8.0 + 93.0 * i as f32, 8.0, 87.0, 28.0), name, Act::Page(i), page == i);
+            ui.button(Rect::new(8.0 + 83.0 * i as f32, 8.0, 79.0, 28.0), name, Act::Page(i), page == i);
         }
         let algorithm = m.plain(IDS[ALGORITHM]).round() as i32 + 1;
         ui.lcd(&loaded, algorithm, m.plain(IDS[FEEDBACK]).round() as i32);
+        ui.master();
         match page {
             0..=5 => ui.operator(page + 1),
             GLOBAL_PAGE => ui.global(),
+            CONTROL_PAGE => ui.control(),
             _ => {
                 let st = self.st.lock().ok()?;
                 ui.voices(&st, bank, &loaded);
@@ -269,7 +277,7 @@ impl Ui<'_> {
     }
 
     fn lcd(&mut self, loaded: &(usize, usize, String), algorithm: i32, feedback: i32) {
-        let r = Rect::new(8.0, 44.0, 744.0, 58.0);
+        let r = Rect::new(8.0, 44.0, 372.0, 60.0);
         lemon::plug_well(self.c, r, 6.0);
         let glow = Color::rgb(0xb7e36a);
         let dim = Color::rgb(0x7f9a54);
@@ -285,7 +293,37 @@ impl Ui<'_> {
         };
         self.c.text(CAP, r.x + 18.0, r.y + 38.0, dim, &sub);
         let alg = format!("ALG {algorithm:02}   FB {feedback}");
-        self.c.text_right(Font::new(18).bold(), r.right() - 16.0, r.y + 18.0, glow, &alg);
+        self.c.text_right(Font::new(14).bold(), r.right() - 14.0, r.y + 8.0, glow, &alg);
+    }
+
+    /// Dexed's top bar, on every page: the filter, the output, the tune and the mono mode.
+    fn master(&mut self) {
+        lemon::plug_panel(self.c, Rect::new(388.0, 44.0, 364.0, 60.0));
+        for (i, (k, cap)) in [(CUTOFF, "CUTOFF"), (RESO, "RESO"), (OUTPUT, "OUTPUT"), (TUNE, "TUNE")].iter().enumerate() {
+            self.knob(*k, 424.0 + 62.0 * i as f32, 74.0, 11.0, cap);
+        }
+        self.switch(MONO, 672.0, 74.0, "MONO");
+    }
+
+    fn control(&mut self) {
+        self.card(Rect::new(8.0, 110.0, 364.0, 126.0), "PITCH WHEEL");
+        self.knob(BEND_UP, 70.0, 178.0, 22.0, "RANGE UP");
+        self.knob(BEND_DOWN, 190.0, 178.0, 22.0, "RANGE DOWN");
+        self.knob(BEND_STEP, 310.0, 178.0, 22.0, "STEP");
+        self.card(Rect::new(380.0, 110.0, 372.0, 126.0), "PORTAMENTO");
+        self.knob(PORTA, 450.0, 178.0, 22.0, "TIME");
+        self.switch(GLISS, 540.0, 160.0, "GLISSANDO");
+        self.c.text(CAP, 540.0, 186.0, plug::DIM, "Time 0 is off. In MONO mode");
+        self.c.text(CAP, 540.0, 200.0, plug::DIM, "the notes glide into one another.");
+        let heads = ["MOD WHEEL (CC 1)", "FOOT (CC 4)", "BREATH (CC 2)", "AFTERTOUCH"];
+        for (c, head) in heads.iter().enumerate() {
+            let (x, y) = (8.0 + 372.0 * (c % 2) as f32, 244.0 + 158.0 * (c / 2) as f32);
+            self.card(Rect::new(x, y, if c % 2 == 0 { 364.0 } else { 372.0 }, 150.0), head);
+            self.knob(ctrl_k(c, 0), x + 70.0, y + 92.0, 22.0, "RANGE");
+            for (j, label) in ["PITCH", "AMP", "EG BIAS"].iter().enumerate() {
+                self.switch(ctrl_k(c, 1 + j), x + 180.0, y + 52.0 + 34.0 * j as f32, label);
+            }
+        }
     }
 
     fn operator(&mut self, n: usize) {
@@ -333,9 +371,11 @@ impl Ui<'_> {
         self.knob(ALGORITHM, 316.0, 196.0, 22.0, "ALGORITHM");
         self.knob(FEEDBACK, 316.0, 316.0, 22.0, "FEEDBACK");
         self.card(Rect::new(380.0, 110.0, 372.0, 126.0), "VOICE");
-        self.knob(TRANSPOSE, 440.0, 178.0, 22.0, "TRANSPOSE");
-        self.knob(OUTPUT, 530.0, 178.0, 22.0, "OUTPUT");
-        self.switch(OSC_SYNC, 592.0, 150.0, "OSC KEY SYNC");
+        self.knob(TRANSPOSE, 438.0, 178.0, 22.0, "MIDDLE C");
+        self.option(ENGINE, 0, 486.0, 144.0, "MODERN");
+        self.option(ENGINE, 1, 486.0, 166.0, "MARK I");
+        self.option(ENGINE, 2, 486.0, 188.0, "OPL");
+        self.switch(OSC_SYNC, 592.0, 144.0, "OSC KEY SYNC");
         for n in 0..6 {
             self.switch(OP_ON + n, 600.0 + 24.0 * n as f32 + if n > 2 { 6.0 } else { 0.0 }, 196.0, &(n + 1).to_string());
         }
