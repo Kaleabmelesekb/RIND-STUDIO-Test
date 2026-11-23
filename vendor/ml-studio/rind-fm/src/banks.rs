@@ -49,20 +49,49 @@ pub struct Bank {
     pub voices: Vec<Voice>,
 }
 
-/// The voices of a sysex file: a 32-voice bank (with or without its frame) or one voice.
-pub fn parse_syx(bytes: &[u8], name: &str) -> Option<Bank> {
-    let framed = |head: &[u8], len: usize| bytes.len() >= len && bytes[0] == 0xF0 && bytes[1] == 0x43 && bytes[3..6] == *head;
-    let voices: Vec<Voice> = if framed(&[0x09, 0x20, 0x00], 6 + 4096) {
-        (0..32).map(|i| unpack(&bytes[6 + i * 128..])).collect()
-    } else if bytes.len() == 4096 {
-        (0..32).map(|i| unpack(&bytes[i * 128..])).collect()
-    } else if framed(&[0x00, 0x01, 0x1B], 6 + 155) {
-        let mut v: Voice = [0; 156];
-        v[..155].copy_from_slice(&bytes[6..6 + 155]);
-        v[155] = 0x3f;
-        vec![v]
-    } else {
-        return None;
-    };
-    Some(Bank { name: name.to_string(), voices })
+/// The voices of a sysex file, as banks of 32 at most. Real files are untidy, so this is forgiving: it looks for
+/// DX7 messages anywhere in the file (a 32-voice dump `F0 43 0n 09 ..` or a single voice `F0 43 0n 00 ..`, whatever
+/// their byte counts and checksums say), takes every one of them, and reads a file without any framing as raw
+/// 128-byte voices.
+pub fn parse_syx(bytes: &[u8], name: &str) -> Vec<Bank> {
+    let mut voices: Vec<Voice> = Vec::new();
+    let mut at = 0;
+    let mut framed = false;
+    while at + 6 <= bytes.len() {
+        if bytes[at] == 0xF0 && bytes[at + 1] == 0x43 && bytes[at + 2] & 0xF0 == 0x00 {
+            match bytes[at + 3] {
+                // A bank of 32 packed voices.
+                0x09 if at + 6 + 4096 <= bytes.len() => {
+                    framed = true;
+                    voices.extend((0..32).map(|i| unpack(&bytes[at + 6 + i * 128..])));
+                    at += 6 + 4096;
+                    continue;
+                }
+                // One voice, 155 bytes.
+                0x00 if at + 6 + 155 <= bytes.len() => {
+                    framed = true;
+                    let mut v: Voice = [0; 156];
+                    v[..155].copy_from_slice(&bytes[at + 6..at + 6 + 155]);
+                    for b in &mut v[..145] {
+                        *b &= 0x7f;
+                    }
+                    v[155] = 0x3f;
+                    voices.push(v);
+                    at += 6 + 155;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    if !framed && !bytes.is_empty() && bytes.len() % 128 == 0 && bytes.len() <= 4096 * 8 {
+        voices.extend(bytes.chunks_exact(128).map(unpack));
+    }
+    let chunks = voices.chunks(32).count();
+    voices
+        .chunks(32)
+        .enumerate()
+        .map(|(i, v)| Bank { name: if chunks > 1 { format!("{name} {}", i + 1) } else { name.to_string() }, voices: v.to_vec() })
+        .collect()
 }

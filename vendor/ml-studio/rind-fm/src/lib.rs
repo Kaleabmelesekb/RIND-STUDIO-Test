@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Rind FM: a six-operator FM synthesizer with the whole DX7 voice to edit. The sound engine is msfa's (Google's
-// music-synthesizer-for-android, the engine Dexed grew from; Apache-2.0, `cpp/`), with the voice banks Dexed ships
-// (`banks/`). The editor and these settings are Honeydew's.
+// Rind FM: a six-operator FM synthesizer with the whole DX7 voice to edit, and Dexed's engine: its three engines
+// (modern, Mark I, OPL), filter, mono mode, portamento and glissando, pitch wheel and the four controllers (`cpp/`:
+// Dexed's msfa sources, GPL-3.0-or-later, and Honeydew's glue; msfa itself is Google's, Apache-2.0), with the voice
+// banks Dexed ships (`banks/`). The editor and these settings are Honeydew's.
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 use ml_mix_core::instrument::{Instrument, Synth};
 use ml_small_fx::{Mark, Spec, editor::Extension, params::FxParams};
@@ -27,6 +28,9 @@ unsafe extern "C" {
     fn rdx_free(r: *mut c_void);
     pub(crate) fn rdx_unpack(packed: *const c_char, unpacked: *mut c_char);
     fn rdx_set_patch(r: *mut c_void, unpacked: *const c_char);
+    fn rdx_set_globals(r: *mut c_void, globals: *const i32);
+    fn rdx_cc(r: *mut c_void, cc: c_int, value: c_int);
+    fn rdx_pressure(r: *mut c_void, value: c_int);
     fn rdx_note_on(r: *mut c_void, note: c_int, velocity: c_int);
     fn rdx_note_off(r: *mut c_void, note: c_int);
     fn rdx_pitch_bend(r: *mut c_void, value: c_int);
@@ -67,6 +71,24 @@ pub const PITCH_MOD_SENS: usize = 143;
 pub const TRANSPOSE: usize = 144;
 pub const OP_ON: usize = 145;
 pub const OUTPUT: usize = 151;
+/// Dexed's settings that are not part of a voice.
+pub const MONO: usize = 152;
+pub const ENGINE: usize = 153;
+pub const CUTOFF: usize = 154;
+pub const RESO: usize = 155;
+pub const TUNE: usize = 156;
+pub const BEND_UP: usize = 157;
+pub const BEND_DOWN: usize = 158;
+pub const BEND_STEP: usize = 159;
+pub const PORTA: usize = 160;
+pub const GLISS: usize = 161;
+/// The four controllers (mod wheel, foot, breath, aftertouch) have four settings each: range, pitch, amp, EG bias.
+pub const CONTROLLERS: usize = 162;
+
+/// Setting `i` (0 range, 1 pitch, 2 amp, 3 EG bias) of controller `c` (0 wheel, 1 foot, 2 breath, 3 aftertouch).
+pub const fn ctrl_k(c: usize, i: usize) -> usize {
+    CONTROLLERS + 4 * c + i
+}
 
 /// Setting `i` of operator `n` (1..=6, as a DX7 numbers them).
 pub const fn op_k(n: usize, i: usize) -> usize {
@@ -101,6 +123,7 @@ pub static SPEC: Spec = Spec {
 
 const NOTES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const CURVES: [&str; 4] = ["-LIN", "-EXP", "+EXP", "+LIN"];
+const ENGINES: [&str; 3] = ["Modern", "Mark I", "OPL"];
 const WAVES: [&str; 6] = ["Triangle", "Saw down", "Saw up", "Square", "Sine", "Sample+hold"];
 
 fn text(k: usize, v: i32) -> String {
@@ -125,6 +148,11 @@ fn text(k: usize, v: i32) -> String {
         TRANSPOSE => format!("{}{}", NOTES[(v % 12) as usize], v / 12 + 1),
         OP_ON..=150 => on_off(v),
         OUTPUT => format!("{:+.1} dB", f64::from(v) / 10.),
+        MONO | GLISS => on_off(v),
+        ENGINE => ENGINES[v.clamp(0, 2) as usize].to_string(),
+        CUTOFF | RESO => format!("{}%", v / 10),
+        TUNE => format!("{:+.1} ct", f64::from(v) / 10.),
+        k if k >= CONTROLLERS && (k - CONTROLLERS) % 4 != 0 => on_off(v),
         _ => format!("{v}"),
     }
 }
@@ -137,13 +165,16 @@ fn parse(k: usize, t: &str) -> Option<i32> {
         if k < PEG_R { find(&CURVES) } else { None }
     } else if k == LFO_WAVE {
         find(&WAVES)
+    } else if k == ENGINE {
+        find(&ENGINES)
     } else {
         None
     };
     if let Some(v) = v {
         return Some(v);
     }
-    if k >= OP_ON && k < OUTPUT || matches!(k, OSC_SYNC | LFO_SYNC) {
+    let flag = k >= CONTROLLERS && (k - CONTROLLERS) % 4 != 0;
+    if k >= OP_ON && k < OUTPUT || matches!(k, OSC_SYNC | LFO_SYNC | MONO | GLISS) || flag {
         return match word.to_ascii_lowercase().as_str() {
             "on" | "1" => Some(1),
             "off" | "0" => Some(0),
@@ -153,7 +184,8 @@ fn parse(k: usize, t: &str) -> Option<i32> {
     let n = word.parse::<f64>().ok().filter(|n| n.is_finite())?;
     let raw = match k {
         ALGORITHM => n - 1.,
-        OUTPUT => n * 10.,
+        OUTPUT | TUNE => n * 10.,
+        CUTOFF | RESO => n * 10.,
         TRANSPOSE => n + 24.,
         _ if k < PEG_R && k % 21 == OP_DET => n + 7.,
         _ => n,
@@ -181,27 +213,57 @@ pub struct Fm {
     engine: Engine,
     /// The settings the voice was last made from (the output does not change it).
     made: Option<[i32; COUNT]>,
-    /// The note each key sounds, transposed, plus one (0: the key is up).
-    held: [u8; 128],
-    transpose: i32,
+    /// The settings that are not part of the voice, as `rdx_set_globals` takes them, as last sent.
+    sent: Option<[i32; 19]>,
     gain: f32,
 }
 impl Default for Fm {
     fn default() -> Self {
-        Self { engine: Engine::new(), made: None, held: [0; 128], transpose: 0, gain: 1. }
+        Self { engine: Engine::new(), made: None, sent: None, gain: 1. }
     }
 }
 impl Fm {
-    /// The settings into the engine: a changed setting makes the patch the next notes play.
+    /// The settings into the engine: a changed setting makes the patch the notes play, sounding ones included.
     fn apply(&mut self, p: &FxParams) {
         if self.engine.0.is_null() {
             return;
         }
         let now: [i32; COUNT] = std::array::from_fn(|k| p.v(k));
-        self.transpose = now[TRANSPOSE] - 24;
         self.gain = 10f32.powf(now[OUTPUT] as f32 / 200.);
+        let globals = [
+            now[MONO],
+            now[ENGINE],
+            now[CUTOFF],
+            now[RESO],
+            1000,
+            now[TUNE],
+            now[BEND_UP],
+            now[BEND_DOWN],
+            now[BEND_STEP],
+            now[PORTA],
+            now[GLISS],
+            now[ctrl_k(0, 0)],
+            now[ctrl_k(1, 0)],
+            now[ctrl_k(2, 0)],
+            now[ctrl_k(3, 0)],
+            0,
+            0,
+            0,
+            0,
+        ];
+        let mut globals = globals;
+        for c in 0..4 {
+            globals[15 + c] = now[ctrl_k(c, 1)] | now[ctrl_k(c, 2)] << 1 | now[ctrl_k(c, 3)] << 2;
+        }
+        if self.sent != Some(globals) {
+            self.sent = Some(globals);
+            unsafe { rdx_set_globals(self.engine.0, globals.as_ptr()) };
+        }
         let mut key = now;
         key[OUTPUT] = 0;
+        for k in MONO..COUNT {
+            key[k] = 0;
+        }
         if self.made == Some(key) {
             return;
         }
@@ -210,13 +272,14 @@ impl Fm {
         for k in 0..VOICE_BYTES {
             patch[k] = now[k].clamp(0, 127) as c_char;
         }
-        // An operator that is switched off has no level.
+        // The operator switches, bit 5 for operator 1.
+        let mut on = 0;
         for n in 1..=6 {
-            if now[OP_ON + n - 1] == 0 {
-                patch[op_k(n, OP_LVL)] = 0;
+            if now[OP_ON + n - 1] != 0 {
+                on |= 1 << (6 - n);
             }
         }
-        patch[155] = 0x3f;
+        patch[155] = on;
         unsafe { rdx_set_patch(self.engine.0, patch.as_ptr()) };
     }
 }
@@ -226,46 +289,49 @@ impl Synth for Fm {
     const CLASS: [u8; 16] = *b"RindFM0000000001";
     fn prepare(&mut self, rate: f32, p: &FxParams) {
         unsafe { rdx_init(f64::from(rate)) };
-        self.held = [0; 128];
         self.made = None;
+        self.sent = None;
         if !self.engine.0.is_null() {
             unsafe { rdx_all_off(self.engine.0) };
         }
         self.apply(p);
     }
     fn reset(&mut self, _: &FxParams) {
-        self.held = [0; 128];
         if !self.engine.0.is_null() {
             unsafe { rdx_all_off(self.engine.0) };
         }
     }
+    /// The engine shifts the keys by the voice's transpose itself, as Dexed does, and stands the notes down by the
+    /// key that was played.
     fn note_on(&mut self, _: u8, note: u8, velocity: f32, _: Option<i32>) {
         if self.engine.0.is_null() || note > 127 {
             return;
         }
-        let at = note as usize;
-        if self.held[at] > 0 {
-            unsafe { rdx_note_off(self.engine.0, c_int::from(self.held[at] - 1)) };
-        }
-        let played = (i32::from(note) + self.transpose).clamp(0, 127);
-        self.held[at] = played as u8 + 1;
-        let velocity = (velocity.clamp(0., 1.) * 127.).round() as c_int;
-        unsafe { rdx_note_on(self.engine.0, played, velocity) };
+        let velocity = (velocity.clamp(0., 1.) * 127.).round().max(1.) as c_int;
+        unsafe { rdx_note_on(self.engine.0, c_int::from(note), velocity) };
     }
     fn note_off(&mut self, _: u8, note: u8, _: Option<i32>) {
         if self.engine.0.is_null() || note > 127 {
             return;
         }
-        let at = note as usize;
-        if self.held[at] > 0 {
-            unsafe { rdx_note_off(self.engine.0, c_int::from(self.held[at] - 1)) };
-            self.held[at] = 0;
-        }
+        unsafe { rdx_note_off(self.engine.0, c_int::from(note)) };
     }
     fn pitch_bend(&mut self, value: f32) {
         if !self.engine.0.is_null() {
             let v = (value.clamp(0., 1.) * 16383.).round() as c_int;
             unsafe { rdx_pitch_bend(self.engine.0, v) };
+        }
+    }
+    fn control(&mut self, cc: u8, value: f32) {
+        if !self.engine.0.is_null() {
+            let v = (value.clamp(0., 1.) * 127.).round() as c_int;
+            unsafe { rdx_cc(self.engine.0, c_int::from(cc), v) };
+        }
+    }
+    fn pressure(&mut self, value: f32) {
+        if !self.engine.0.is_null() {
+            let v = (value.clamp(0., 1.) * 127.).round() as c_int;
+            unsafe { rdx_pressure(self.engine.0, v) };
         }
     }
     fn render(&mut self, l: &mut [f32], r: &mut [f32], p: &FxParams) {
