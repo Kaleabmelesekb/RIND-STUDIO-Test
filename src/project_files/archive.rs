@@ -643,7 +643,12 @@ impl ProjectFiles {
         let (name, source) = (name.into_owned(), path.to_string_lossy().into_owned());
         if matches!(
             self.pick.take(),
-            Some(super::Pick::Sample | super::Pick::Midi | super::Pick::Program)
+            Some(
+                super::Pick::Sample
+                    | super::Pick::Midi
+                    | super::Pick::Program
+                    | super::Pick::Cartridge
+            )
         ) {
             let Some(dir) = self.import_dir.take() else {
                 return self.fail(IMPORT_FAILED, path.display().to_string());
