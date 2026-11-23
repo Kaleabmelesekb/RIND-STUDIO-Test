@@ -412,6 +412,22 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - Modified: the NEON code paths of `synth.h` are switched off; the JUCE, logging and Surge tuning-library dependencies
   are replaced by `libMTSClient.h` (no MTS-ESP master) and a standard-tuning-only `tuning.cc`; `rdx.cc` is Honeydew's.
 
+## OB-Xf's engine and factory patches (Rind OB)
+
+- Source: <https://github.com/surge-synthesizer/OB-Xf> (the engine `vendor/ml-studio/rind-ob/cpp/engine` and its
+  constants and parameter names; and the 493 factory patches, converted by `vendor/ml-studio/rind-ob/gen.py` into
+  `banks/presets.bin`), the Surge Synth Team's successor to OB-Xd 2.11 (Vadim Filatov, the GPL3 release at
+  <https://github.com/reales/OB-Xd>, and DiscoDSP). Also vendored in `cpp/`: parts of sst-basic-blocks
+  (<https://github.com/surge-synthesizer/sst-basic-blocks>, GPL-3.0-or-later, `cpp/LICENSE.md`) and SIMD Everywhere
+  (<https://github.com/simd-everywhere/simde>, MIT, `cpp/LICENSE-simde`).
+- License: OB-Xf is GPL-3.0-or-later (`vendor/ml-studio/rind-ob/LICENSE-obxf`); the factory patches are CC0 / public
+  domain (authors: Aleksey Zhehanov, Saif Sameer, Black Sided Sun, Ocean Swift, Jacky Ligon and others, named in each
+  patch and shown in the editor).
+- Modified: the JUCE dependencies (`juce_core`, `juce_dsp`, `juce_audio_basics`, fmt, MTS-ESP) are replaced by small
+  shims in `cpp/shim`; OB-Xf's editor, MIDI map, program and state code are left out, as is the XML of the voice
+  matrix (the modulation matrix of five patches is not played); `cpp/obx.cc` (the C interface and OB-Xf's parameter
+  table) is Honeydew's.
+
 ## nih-plug (the built-in plugins' framework)
 
 - Source: <https://github.com/robbert-vdh/nih-plug>, commit `de421011f41a6d10fc8c7a6084e4f4dee0143683`, the core crate
