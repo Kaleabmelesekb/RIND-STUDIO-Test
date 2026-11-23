@@ -56,7 +56,7 @@ mod themes;
 pub use soundfonts::{SF2_EXT, SFZ_EXT, SOUNDFONT_EXTS, SOUNDFONTS_FOLDER};
 pub(crate) use soundfonts::{in_library, in_user_folder, is_sfz, is_soundfont};
 mod samples;
-pub use samples::{RECORDINGS_FOLDER, SAMPLE_EXTS, SAMPLES_FOLDER};
+pub use samples::{CARTRIDGE_EXT, RECORDINGS_FOLDER, SAMPLE_EXTS, SAMPLES_FOLDER};
 pub(crate) mod content;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use content::real_folder;
@@ -188,6 +188,8 @@ pub enum Pick {
     Theme,
     /// An audio file or a DW program for the DW Sampler picker's `Import` ([`ProjectFiles::import_program`]).
     Program,
+    /// A DX7 cartridge (`.syx`) for Rind FM's picker's `Import` ([`ProjectFiles::import_cartridge`]).
+    Cartridge,
 }
 
 impl Pick {
@@ -220,6 +222,7 @@ impl Pick {
             Pick::Midi => FileKind::Midi.extensions(),
             Pick::Theme => &["json"],
             Pick::Program => &["wav", "flac", "mp3", "ogg", DWP_EXT, SFZ_EXT],
+            Pick::Cartridge => &[CARTRIDGE_EXT],
         }
     }
 }
@@ -1093,7 +1096,7 @@ impl ProjectFiles {
                 event if self.is_theme_export(&event) => self.theme_exported(event),
                 FileEvent::Opened(path, bytes) => {
                     opened = match self.pick.take() {
-                        Some(Pick::Sample | Pick::Midi | Pick::Program) => {
+                        Some(Pick::Sample | Pick::Midi | Pick::Program | Pick::Cartridge) => {
                             self.audio_imported(&path, bytes);
                             None
                         }
@@ -1147,7 +1150,10 @@ impl ProjectFiles {
                     self.save_failed(err);
                 }
                 FileEvent::Failed(title, err)
-                    if matches!(self.pick, Some(Pick::Sample | Pick::Midi | Pick::Program)) =>
+                    if matches!(
+                        self.pick,
+                        Some(Pick::Sample | Pick::Midi | Pick::Program | Pick::Cartridge)
+                    ) =>
                 {
                     self.import_failed(title, err);
                 }

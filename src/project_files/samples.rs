@@ -23,6 +23,10 @@ pub const SAMPLES_FOLDER: &str = "My Samples";
 pub const RECORDINGS_FOLDER: &str = "My Recordings";
 /// The audio files a drum pad takes, without the dot, matched without case.
 pub const SAMPLE_EXTS: [&str; 4] = ["wav", "flac", "mp3", "ogg"];
+/// The extension of a DX7 cartridge (a sysex file), which Rind FM loads.
+pub const CARTRIDGE_EXT: &str = "syx";
+/// What the sample library lists: the audio files, and the cartridges for the pickers that ask for them.
+const LISTED_EXTS: [&str; 5] = ["wav", "flac", "mp3", "ogg", CARTRIDGE_EXT];
 /// The user folder MIDI files go to.
 pub const MIDI_FOLDER: &str = "My MIDI";
 /// The user folders instruments (DirectWave programs, `.dwp`) and audio renders go to.
@@ -76,6 +80,12 @@ impl ProjectFiles {
     pub fn import_program(&mut self, dir: PathBuf) {
         self.import_dir = Some(dir);
         self.open_pick(Pick::Program);
+    }
+
+    /// Rind FM's picker's `Import`: [`Self::import_audio`] of a DX7 cartridge (`.syx`), kept in `dir` as a sample is.
+    pub fn import_cartridge(&mut self, dir: PathBuf) {
+        self.import_dir = Some(dir);
+        self.open_pick(Pick::Cartridge);
     }
 
     /// The MIDI picker's `Import` (issue #113): [`Self::import_audio`] of a MIDI file, into [`MIDI_FOLDER`].
@@ -319,7 +329,7 @@ impl SongLibrary for Samples<'_> {
             };
             return Ok(vec![folder(SAMPLES_FOLDER), folder(RECORDINGS_FOLDER)]);
         }
-        let mut entries = self.0.preset_library(&SAMPLE_EXTS).list(Some(dir))?;
+        let mut entries = self.0.preset_library(&LISTED_EXTS).list(Some(dir))?;
         entries.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(entries)
     }

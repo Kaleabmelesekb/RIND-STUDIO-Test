@@ -62,7 +62,9 @@ use crate::audio_link::AudioLink;
 use crate::content::{LOOPS, ROOT, SAMPLES, SHAPES, content_path, web};
 use crate::flm::chunk::{ContentPath, ContentRoot};
 use crate::panels::inst::{slicer, three_osc};
-use crate::project_files::{DRUM_SAMPLES, ProjectFiles, SAMPLE_EXTS, SAMPLES_FOLDER, load_pick};
+use crate::project_files::{
+    CARTRIDGE_EXT, DRUM_SAMPLES, ProjectFiles, SAMPLE_EXTS, SAMPLES_FOLDER, load_pick,
+};
 use crate::sample_cache::{self, SampleCache, SampleKey, Waveform, disk_reader};
 use crate::song::{Clip, DrumKit, Lane, LaneKind, ModuleInstance, PPQ, SamplerSlot, Song};
 use crate::ui::clips::ClipRef;
@@ -101,6 +103,8 @@ pub struct State {
     pub(crate) replace: Option<Replace>,
     /// A module's last pick that landed, which its picker's close loads ([`show_module`]).
     last: Option<(PathBuf, Box<Decoded>)>,
+    /// The picker is Rind FM's, for DX7 cartridges: its `Import` takes `.syx` files.
+    cartridge: bool,
 }
 
 /// `Replace sample...`'s pick ([`show_replace`]): the clip whose sample it replaces, the file and its tempo.
@@ -385,7 +389,10 @@ fn pick(
     match action {
         Some(PickerAction::Import) => {
             if let Some(user) = files.user_dir() {
-                files.import_audio(user.join(SAMPLES_FOLDER));
+                match state.cartridge {
+                    true => files.import_cartridge(user.join(SAMPLES_FOLDER)),
+                    false => files.import_audio(user.join(SAMPLES_FOLDER)),
+                }
             }
         }
         Some(PickerAction::Close) => {
@@ -830,14 +837,24 @@ pub fn show_module(
         close(state, app.audio);
         return Some(Nav::Close);
     };
-    let make = |files: &ProjectFiles| module_picker(files, type_id);
+    // Rind FM asks for DX7 cartridges, not samples: it lists and imports `.syx` files, and closes on a pick.
+    let cartridge = (app.song.find_module(channel, module))
+        .and_then(|m| m.file.plugin.as_deref())
+        .and_then(crate::plugins::builtin::of)
+        .is_some_and(|b| b.clap_id() == RIND_FM);
+    state.cartridge = cartridge;
+    let make = |files: &ProjectFiles| match cartridge {
+        true => cartridge_picker(files),
+        false => module_picker(files, type_id),
+    };
     // A 3x Osc's closes on a pick, so no sample strip: hidden, it waits for the pick to land. Any other previews its
     // picks in the strip and loads the last one on its close.
     let shape = type_id == three_osc::TYPE_ID;
     let into = |song: &Song, path: &Path, files: &ProjectFiles| {
         slicer_pick(song.find_module(channel, module)?, path, files)
     };
-    let (path, decoded) = match pick(state, ui, app, make, (!shape, shape, Some(type_id)), into) {
+    let strip = !shape && !cartridge;
+    let (path, decoded) = match pick(state, ui, app, make, (strip, shape, Some(type_id)), into) {
         Shown::Open => return None,
         Shown::Picked(path, decoded) if !state.closing => {
             state.last = Some((path, decoded));
@@ -994,6 +1011,19 @@ pub fn module_picker(files: &ProjectFiles, type_id: u16) -> PresetPicker {
     PresetPicker::new(TITLE, user, SAMPLE_EXTS[0], false)
         .of_exts(&SAMPLE_EXTS)
         .with_factory(factory)
+        .with_import(files.imports_audio())
+}
+
+/// Rind FM's clap id.
+const RIND_FM: &str = "org.honeydew.rind-fm";
+
+/// A fresh picker for Rind FM's DX7 cartridges: the `.syx` files of `My Samples` and `My Recordings`, with `Import`
+/// into `My Samples` where `files` takes one.
+fn cartridge_picker(files: &ProjectFiles) -> PresetPicker {
+    let user = files.user_dir().map(Path::to_owned);
+    PresetPicker::new("DX7 Cartridges", user, CARTRIDGE_EXT, false)
+        .of_exts(&[CARTRIDGE_EXT])
+        .with_factory(std::iter::empty::<PathBuf>())
         .with_import(files.imports_audio())
 }
 
