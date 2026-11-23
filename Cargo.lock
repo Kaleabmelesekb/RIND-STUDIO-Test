@@ -2047,6 +2047,7 @@ dependencies = [
  "rayon",
  "rfd",
  "rind-fm",
+ "rind-ob",
  "serde",
  "serde_json",
  "sha2",
@@ -4239,6 +4240,19 @@ dependencies = [
 
 [[package]]
 name = "rind-fm"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "ml-mix-core",
+ "ml-small-fx",
+ "nih_plug",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+]
+
+[[package]]
+name = "rind-ob"
 version = "0.0.1"
 dependencies = [
  "cc",
