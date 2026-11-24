@@ -1428,11 +1428,18 @@ fn built_in_folder(target: PresetTarget, module_type: Option<u16>) -> Option<Pat
 
 /// Honeydew change (#149, 0.5.5): plugin module `module`'s picker, titled by its plugin: its plugin's presets, in
 /// `My Presets/<plugin name>` ([`ProjectFiles::module_presets_dir`]), with no `Default` (its plugin's init state is not
-/// known) and no factory bank. `None` for any other module.
+/// known). A built-in plugin that has factory presets ([`content::plugin_presets`], from Mango Studio) lists them under
+/// the factory folders. `None` for any other module.
 fn plugin_picker(files: &ProjectFiles, module: &ModuleInstance) -> Option<PresetPicker> {
     let dir = files.module_presets_dir(module);
-    is_plugin(module.type_id)
-        .then(|| PresetPicker::new(module.title(), dir, PRESET_EXT, false).of_type(module.type_id))
+    let ours = (module.file.plugin.as_deref())
+        .and_then(|p| content::plugin_presets::folder(&p.id).filter(|_| p.format == "clap"))
+        .map(|folder| Path::new(content::ROOT).join(content::PRESETS).join(folder));
+    is_plugin(module.type_id).then(|| {
+        PresetPicker::new(module.title(), dir, PRESET_EXT, false)
+            .of_type(module.type_id)
+            .with_factory(ours)
+    })
 }
 
 /// A fresh picker for `target` (a module of type `module_type`, a drum kit or a rack), over the user's folder, our own

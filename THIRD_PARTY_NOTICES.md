@@ -401,6 +401,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   `tools/sync-lemon-plugins.sh` (`feature = "embed"`, `os_plugkit::park!`), all listed in that folder's `README.md` (the
   editors drawn into Honeydew's window on every platform, the browser build without threads or C++).
 
+## Mango Studio's factory presets (the built-in Lemon plugins' presets)
+
+The 330 factory presets of Lemon Chorus, Fast Distortion, Filter, Flanger, Limiter, Parametric EQ, Phaser, Reverb,
+Sampler, Soft Clipper, Stereo Enhancer, Stereo Shaper, Transient Processor, Trio, Press and Pulp Filter
+(`src/content/plugin_presets.txt`, made by `tools/gen-plugin-presets.py`) come from Mango Studio
+(<https://github.com/apikun/Mango-Studio>, a fork of Lemon Studio), GPL-3.0-or-later like this app. They are parameter
+values and saved plugin states, no code.
+
 ## Dexed's engine and voice banks, msfa (Rind FM)
 
 - Source: <https://github.com/asb2m10/dexed> (the engine `vendor/ml-studio/rind-fm/cpp`: its `msfa` folder, the Mark I

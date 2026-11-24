@@ -25,6 +25,10 @@ pub fn is_own(type_id: u16) -> bool {
     type_id >= PLUGIN_INSTRUMENT
 }
 
+/// The id a factory preset's param has when it names the param instead of holding the plugin's id (the value, in the
+/// plugin's own range, in `default`): `plugins::load_preset_state` resolves it against the running plugin.
+pub const NAMED_PARAM: u32 = u32::MAX;
+
 /// `s` as a `&'static str`, for the registry types a plugin's names fill ([`crate::params::ParamSpec`]).
 // ponytail: interned for good, bounded by the distinct plugin and parameter names a session meets.
 pub(crate) fn intern(s: &str) -> &'static str {

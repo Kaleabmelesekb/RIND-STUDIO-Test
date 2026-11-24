@@ -21,7 +21,9 @@ use super::engine::{ParamShared, PluginEffect, PluginInstrument};
 use super::scan::{self, Cache, Status};
 use super::window::{self, EditorWindow};
 use super::{Available, Info, PluginKind, PluginMove, State};
-use crate::song::plugin::{PLUGIN_EFFECT, PLUGIN_INSTRUMENT, PluginParam, PluginRef, is_plugin};
+use crate::song::plugin::{
+    NAMED_PARAM, PLUGIN_EFFECT, PLUGIN_INSTRUMENT, PluginParam, PluginRef, is_plugin,
+};
 use crate::song::{Channel, ModuleInstance, Rack, Song};
 
 /// A rate to start an instance at before the audio output says its own; the audio thread asks for the stream's, and
@@ -879,18 +881,66 @@ pub fn store_copy_states(channel_id: i32, modules: &mut [ModuleInstance]) {
 /// Honeydew change (#149, 0.5.5): plugin module `module` on the channel with id `channel_id` took a preset: its running
 /// instance loads the preset's state (its plugin's own, which its params alone may not hold), and the params it then
 /// has are what the next [`sync`] compares the module's with. Nothing for a module that is not a running plugin's.
-pub fn load_preset_state(channel_id: i32, module: &ModuleInstance) {
-    let Some(plugin_ref) = (module.file.plugin.as_deref()).filter(|_| is_plugin(module.type_id))
-    else {
+///
+/// A factory preset of named values (params with the id [`NAMED_PARAM`], their values in the plugin's own range: see
+/// `content::plugin_presets`) first puts every parameter the user can set back to its default, then sets the named
+/// ones; a name the plugin lacks is skipped. The module then takes the plugin's whole param list and values, as any
+/// plugin module has them.
+pub fn load_preset_state(channel_id: i32, module: &mut ModuleInstance) {
+    if !is_plugin(module.type_id) {
+        return;
+    }
+    let instance_id = module.instance_id;
+    let Some(plugin_ref) = module.file.plugin.as_deref_mut() else {
         return;
     };
-    with(|host| {
-        let Some(hosted) = host.live.get_mut(&(channel_id, module.instance_id)) else {
-            return;
-        };
-        if let Ok(mut p) = hosted.plugin.lock() {
-            if !plugin_ref.state.is_empty() && !p.load_state(&plugin_ref.state) {
+    let named: Vec<(String, f64)> = (plugin_ref.params.iter())
+        .filter(|p| p.id == NAMED_PARAM)
+        .map(|p| (p.name.clone(), f64::from(p.default)))
+        .collect();
+    if !named.is_empty() {
+        plugin_ref.params.retain(|p| p.id != NAMED_PARAM);
+    }
+    let state = plugin_ref.state.clone();
+    let listed = with(|host| {
+        let hosted = host.live.get_mut(&(channel_id, instance_id))?;
+        let shared = hosted.plugin.clone();
+        if let Ok(mut p) = shared.lock() {
+            if !state.is_empty() && !p.load_state(&state) {
                 eprintln!("plugins: {} did not take the preset's state", hosted.name);
+            }
+            if !named.is_empty() {
+                let infos: Vec<_> = (0..p.param_count())
+                    .filter_map(|i| p.param_info(i))
+                    .collect();
+                for info in infos
+                    .iter()
+                    .filter(|i| !i.read_only && !i.hidden && !i.bypass)
+                {
+                    p.set_param(info.id, info.default);
+                }
+                let mut missing = 0;
+                for (name, value) in &named {
+                    let Some(info) = (infos.iter()).find(|i| i.name.eq_ignore_ascii_case(name))
+                    else {
+                        // `=0` stands for a preset that sets nothing (all defaults).
+                        missing += usize::from(!name.is_empty());
+                        continue;
+                    };
+                    let span = info.max - info.min;
+                    let at = if span > 0.0 {
+                        (value - info.min) / span
+                    } else {
+                        0.0
+                    };
+                    p.set_param(info.id, at.clamp(0.0, 1.0));
+                }
+                if missing > 0 {
+                    eprintln!(
+                        "plugins: {} has no param for {missing} of the preset's values",
+                        hosted.name
+                    );
+                }
             }
             for (i, &id) in hosted.ids.iter().enumerate() {
                 let (Some(v), Some(old)) = (p.param_value(id), hosted.song_values.get_mut(i))
@@ -901,8 +951,23 @@ pub fn load_preset_state(channel_id: i32, module: &ModuleInstance) {
                 hosted.params.known(i, v as f32);
             }
         }
-        hosted.origin = plugin_ref.state.clone();
+        hosted.origin = state.clone();
+        // A preset of named values: the module holds the plugin's list and values now.
+        (!named.is_empty()).then(|| param_list(&shared))
     });
+    if let Some((ids, infos, values)) = listed
+        && ids.len() == values.len()
+        && let Some(plugin_ref) = module.file.plugin.as_deref_mut()
+    {
+        plugin_ref.params = infos;
+        module.params.truncate(1);
+        module.params.extend(values.iter().copied());
+        with(|host| {
+            if let Some(hosted) = host.live.get_mut(&(channel_id, instance_id)) {
+                hosted.song_values = values;
+            }
+        });
+    }
 }
 
 /// The instance's state now, edits waiting for a block (none plays while stopped) applied first.
