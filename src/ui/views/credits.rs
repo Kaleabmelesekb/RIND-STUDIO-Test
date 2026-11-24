@@ -24,10 +24,26 @@ const PLUGIN_HOSTS: &str = "VST3, VST2 and CLAP plugin hosting: Lemon Studio by 
 /// built-in Lemon plugins (`crate::plugins::builtin`).
 fn effects() -> String {
     let mut names = vec!["Lemon Reverb", "Lemon Limiter"];
-    names.extend(crate::plugins::builtin::all().iter().map(|b| b.name));
+    names.extend(
+        (crate::plugins::builtin::all().iter())
+            .filter(|b| !b.mango())
+            .map(|b| b.name),
+    );
     let last = names.pop().unwrap_or_default();
     format!(
         "{} and {last}: Lemon Studio by ItsAlphaNeon (GPL-3.0-or-later), https://github.com/ItsAlphaNeon/Lemon-Studio",
+        names.join(", ")
+    )
+}
+/// The credit of the built-in plugins from Mango Studio (`vendor/mango-studio`).
+fn mango() -> String {
+    let mut names: Vec<_> = (crate::plugins::builtin::all().iter())
+        .filter(|b| b.mango())
+        .map(|b| b.name)
+        .collect();
+    let last = names.pop().unwrap_or_default();
+    format!(
+        "{} and {last}: Mango Studio by apikun (GPL-3.0-or-later), https://github.com/apikun/Mango-Studio",
         names.join(", ")
     )
 }
@@ -83,6 +99,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         &format!("{APP_NAME}:"),
         LOGO,
         &effects(),
+        &mango(),
         DRAGONFLY,
         THIRD_PARTY,
         "",
