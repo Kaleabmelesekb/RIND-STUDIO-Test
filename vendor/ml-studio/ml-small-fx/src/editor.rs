@@ -948,7 +948,7 @@ mod gui {
             }
             let (title, filter, exts) = (self.logic.shared.extension.as_ref())
                 .map_or(("Open", "Files", &[][..]), |e| e.dialog_filter());
-            let path = self.win.dialog(|| rfd::FileDialog::new().set_title(title).add_filter(filter, exts).pick_file());
+            let path = self.win.dialog(move || rfd::FileDialog::new().set_title(title).add_filter(filter, exts).pick_file());
             if let (Some(Some(path)), Some(e)) = (path, self.logic.shared.extension.as_ref()) {
                 e.file_dropped(&path);
             }
