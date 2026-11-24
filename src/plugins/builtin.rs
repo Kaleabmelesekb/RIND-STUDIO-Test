@@ -78,6 +78,23 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     ml_spectral_compressor,
     rind_fm,
     rind_ob,
+    // Mango Studio's small generators (apikun's fork of Lemon Studio), `vendor/mango-studio`.
+    lemon_acid,
+    lemon_autogun,
+    lemon_bass,
+    lemon_boom,
+    mango_dashboard,
+    lemon_drums,
+    lemon_dx,
+    mango_flex,
+    lemon_keys,
+    lemon_kick,
+    lemon_mini,
+    mango_monk,
+    lemon_module_drum,
+    lemon_pluck,
+    mango_slayer,
+    mango_surface,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -130,6 +147,26 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.honeydew.rind-ob", b"RindOB0000000001"),
 ];
 
+/// The CLAP ids of the plugins that come from Mango Studio (`vendor/mango-studio`), for the credits.
+const MANGO: &[&str] = &[
+    "org.openstudio.lemon-acid",
+    "org.openstudio.mango-autogun",
+    "org.openstudio.lemon-bass",
+    "org.openstudio.lemon-boom",
+    "org.openstudio.mango-dashboard",
+    "org.openstudio.mango-drums",
+    "org.openstudio.mango-dx",
+    "org.openstudio.mango-flex",
+    "org.openstudio.mango-keys",
+    "org.openstudio.lemon-kick",
+    "org.openstudio.mango-mini",
+    "org.openstudio.mango-monk",
+    "org.openstudio.lemon-module-drum",
+    "org.openstudio.mango-pluck",
+    "org.openstudio.mango-slayer",
+    "org.openstudio.mango-surface",
+];
+
 /// The editor size of a plugin that reports none.
 const FALLBACK_SIZE: (u32, u32) = (640, 480);
 
@@ -156,6 +193,11 @@ impl Builtin {
     /// Its CLAP plugin id.
     pub fn clap_id(&self) -> &'static str {
         &self.uid[CLAP.len()..]
+    }
+
+    /// Whether it comes from Mango Studio (`vendor/mango-studio`).
+    pub fn mango(&self) -> bool {
+        MANGO.contains(&self.clap_id())
     }
 
     pub fn instrument(&self) -> bool {
@@ -434,7 +476,7 @@ mod tests {
             ]
         );
         // ML Studio's (Michael Lane's fork of Lemon Studio) twelve, after them.
-        let ml: Vec<_> = got[28..].iter().map(|b| b.1).collect();
+        let ml: Vec<_> = got[28..45].iter().map(|b| b.1).collect();
         assert_eq!(
             ml,
             [
@@ -455,6 +497,29 @@ mod tests {
                 "clap:org.honeydew.ml-spectral-compressor",
                 "clap:org.honeydew.rind-fm",
                 "clap:org.honeydew.rind-ob",
+            ]
+        );
+        // Mango Studio's small generators, last.
+        let mango: Vec<_> = got[45..].iter().map(|b| b.1).collect();
+        assert_eq!(
+            mango,
+            [
+                "clap:org.openstudio.lemon-acid",
+                "clap:org.openstudio.mango-autogun",
+                "clap:org.openstudio.lemon-bass",
+                "clap:org.openstudio.lemon-boom",
+                "clap:org.openstudio.mango-dashboard",
+                "clap:org.openstudio.mango-drums",
+                "clap:org.openstudio.mango-dx",
+                "clap:org.openstudio.mango-flex",
+                "clap:org.openstudio.mango-keys",
+                "clap:org.openstudio.lemon-kick",
+                "clap:org.openstudio.mango-mini",
+                "clap:org.openstudio.mango-monk",
+                "clap:org.openstudio.lemon-module-drum",
+                "clap:org.openstudio.mango-pluck",
+                "clap:org.openstudio.mango-slayer",
+                "clap:org.openstudio.mango-surface",
             ]
         );
         for &(name, _, _, size) in &got[9..] {
