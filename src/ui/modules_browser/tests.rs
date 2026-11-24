@@ -98,6 +98,22 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Slicer",
             "Lemon SoundFont Player",
             "Lemon Trio",
+            "Mango Acid",
+            "Mango Autogun",
+            "Mango Bass",
+            "Mango Boom",
+            "Mango Dashboard",
+            "Mango Drums",
+            "Mango DX",
+            "Mango Flex",
+            "Mango Keys",
+            "Mango Kick",
+            "Mango Mini",
+            "Mango ModuleDrum",
+            "Mango Monk",
+            "Mango Pluck",
+            "Mango Slayer",
+            "Mango Surface",
             "Rind FM",
             "Rind OB",
             "Smith",
@@ -261,6 +277,22 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
             "Lemon Drum Sampler",
             "Lemon Slicer",
             "Lemon SoundFont Player",
+            "Mango Acid",
+            "Mango Autogun",
+            "Mango Bass",
+            "Mango Boom",
+            "Mango Dashboard",
+            "Mango Drums",
+            "Mango DX",
+            "Mango Flex",
+            "Mango Keys",
+            "Mango Kick",
+            "Mango Mini",
+            "Mango ModuleDrum",
+            "Mango Monk",
+            "Mango Pluck",
+            "Mango Slayer",
+            "Mango Surface",
             "Rind FM",
             "Rind OB",
             "Smith",
@@ -950,6 +982,22 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Slicer",
             "Lemon SoundFont Player",
             "Lemon Trio",
+            "Mango Acid",
+            "Mango Autogun",
+            "Mango Bass",
+            "Mango Boom",
+            "Mango Dashboard",
+            "Mango Drums",
+            "Mango DX",
+            "Mango Flex",
+            "Mango Keys",
+            "Mango Kick",
+            "Mango Mini",
+            "Mango ModuleDrum",
+            "Mango Monk",
+            "Mango Pluck",
+            "Mango Slayer",
+            "Mango Surface",
             "Rind FM",
             "Rind OB",
             "Smith",
@@ -1124,7 +1172,7 @@ fn sort_offers_a_z_and_category_whose_pick_reorders_the_list() {
 fn dragging_scrolls_to_the_end_of_the_list_and_no_further() {
     let mut rig = Rig::new();
     let list = rig.layout().list;
-    for _ in 0..12 {
+    for _ in 0..20 {
         rig.drag(pos2(200.0, 480.0), pos2(200.0, 80.0));
     }
     // The drags pick nothing, and the last row now sits at the bottom of the list.
@@ -1154,7 +1202,7 @@ fn the_wheel_scrolls_the_list_only_over_it() {
     rig.wheel(pos2(200.0, 400.0), 1000.0);
     assert_eq!(rig.text_at("3x Osc").y, first);
     // And at the end.
-    rig.wheel(pos2(200.0, 400.0), -5000.0);
+    rig.wheel(pos2(200.0, 400.0), -9000.0);
     assert_eq!(rig.text_at("Tesla").y, list.bottom() - 24.0);
 }
 
