@@ -425,8 +425,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   patch and shown in the editor).
 - Modified: the JUCE dependencies (`juce_core`, `juce_dsp`, `juce_audio_basics`, fmt, MTS-ESP) are replaced by small
   shims in `cpp/shim`; OB-Xf's editor, MIDI map, program and state code are left out, as is the XML of the voice
-  matrix (the modulation matrix of five patches is not played); `cpp/obx.cc` (the C interface and OB-Xf's parameter
-  table) is Honeydew's.
+  matrix (its MPE modulation matrix, empty in every factory patch); `cpp/obx.cc` (the C interface and OB-Xf's
+  parameter table) is Honeydew's. `vendor/ml-studio/rind-ob/src/import.rs` follows OB-Xf's `state/ObxdImporter.cpp` (the
+  OB-Xd to OB-Xf conversion tables) in Rust.
 
 ## nih-plug (the built-in plugins' framework)
 

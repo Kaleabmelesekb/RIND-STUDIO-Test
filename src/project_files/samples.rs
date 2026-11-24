@@ -25,8 +25,20 @@ pub const RECORDINGS_FOLDER: &str = "My Recordings";
 pub const SAMPLE_EXTS: [&str; 4] = ["wav", "flac", "mp3", "ogg"];
 /// The extension of a DX7 cartridge (a sysex file), which Rind FM loads.
 pub const CARTRIDGE_EXT: &str = "syx";
-/// What the sample library lists: the audio files, and the cartridges for the pickers that ask for them.
-const LISTED_EXTS: [&str; 5] = ["wav", "flac", "mp3", "ogg", CARTRIDGE_EXT];
+/// The extensions of the OB-Xd and OB-Xf patches (`.fxp`) and banks (`.fxb`), which Rind OB loads.
+pub const OB_PATCH_EXTS: [&str; 2] = ["fxp", "fxb"];
+/// Everything a synth's file picker imports: the DX7 cartridges and the OB-Xd and OB-Xf patches.
+pub const CARTRIDGE_EXTS: [&str; 3] = [CARTRIDGE_EXT, OB_PATCH_EXTS[0], OB_PATCH_EXTS[1]];
+/// What the sample library lists: the audio files, and the cartridges and patches for the pickers that ask for them.
+const LISTED_EXTS: [&str; 7] = [
+    "wav",
+    "flac",
+    "mp3",
+    "ogg",
+    CARTRIDGE_EXT,
+    OB_PATCH_EXTS[0],
+    OB_PATCH_EXTS[1],
+];
 /// The user folder MIDI files go to.
 pub const MIDI_FOLDER: &str = "My MIDI";
 /// The user folders instruments (DirectWave programs, `.dwp`) and audio renders go to.

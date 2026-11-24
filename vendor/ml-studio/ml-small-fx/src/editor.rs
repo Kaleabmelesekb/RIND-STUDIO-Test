@@ -37,6 +37,10 @@ pub trait Extension: Send + Sync {
     fn file_dropped(&self,_path:&std::path::Path) {}
     /// Honeydew (vendored change): the extension asked for a file to open (`file_dropped` gets it).
     fn take_dialog(&self) -> bool { false }
+    /// Honeydew (vendored change): the title, the filter's name and the extensions of the dialog `take_dialog` asks for.
+    fn dialog_filter(&self) -> (&'static str, &'static str, &'static [&'static str]) {
+        ("Open DX7 cartridge", "DX7 cartridges", &["syx"])
+    }
     /// Optional complete instrument view. Existing effect editors retain their default view.
     fn render(&self, _canvas: &mut os_ui::Canvas, _model: &dyn view::Model,
         _state: &ViewState, _hint: &str) -> Option<Vec<view::Hit>> { None }
@@ -942,9 +946,9 @@ mod gui {
             if os_plugkit::no_modal() {
                 return;
             }
-            let path = self.win.dialog(|| {
-                rfd::FileDialog::new().set_title("Open DX7 cartridge").add_filter("DX7 cartridges", &["syx"]).pick_file()
-            });
+            let (title, filter, exts) = (self.logic.shared.extension.as_ref())
+                .map_or(("Open", "Files", &[][..]), |e| e.dialog_filter());
+            let path = self.win.dialog(move || rfd::FileDialog::new().set_title(title).add_filter(filter, exts).pick_file());
             if let (Some(Some(path)), Some(e)) = (path, self.logic.shared.extension.as_ref()) {
                 e.file_dropped(&path);
             }

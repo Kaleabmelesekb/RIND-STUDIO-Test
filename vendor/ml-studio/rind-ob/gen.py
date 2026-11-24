@@ -5,7 +5,7 @@ usage: gen.py <OB-Xf>/assets/installer/"Surge Synth Team"/OB-Xf/Patches
 
 A setting is an OB-Xf parameter, stored as its normalised value x 1000 (what OB-Xf's own patches hold, so a patch loads
 1:1); the discrete parameters are snapped to the value the engine reads them as."""
-import glob, os, re, struct, sys
+import glob, html, os, re, struct, sys
 
 # (xml id, name, kind, default normalised) kinds: f float, b bool, t tri-state, v voices, l legato, p priority,
 # x xpander mode, n noise colour
@@ -58,25 +58,30 @@ def snake(s):
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", s).lower().replace("l_f_o", "lfo")
 
 
+def rnd(x):
+    """Round half up, as the engine (and Rust) do."""
+    return int(x + 0.5)
+
+
 def snap(kind, v):
     """The stored value (0..1000) of a patch's normalised value, as the engine reads it."""
     v = min(1.0, max(0.0, v))
     if kind == "b":
         return 1000 if v >= 0.5 else 0
     if kind == "t":
-        return round(v * 2) * 500
+        return rnd(v * 2) * 500
     if kind == "v":
-        n = 1 + int(v * 32)
-        return round((n - 0.5) / 32 * 1000)
+        n = min(32, 1 + int(v * 32))
+        return rnd((n - 0.5) / 32 * 1000)
     if kind == "l":
         return [100, 400, 700, 1000][min(3, int(v * 3))]
     if kind == "p":
         return [100, 500, 1000][int(v * 2)]
     if kind == "x":
-        return round(round(v * 14) / 14 * 1000)
+        return rnd(rnd(v * 14) / 14 * 1000)
     if kind == "n":
         return 100 if v < 1 / 3 else 500 if v < 2 / 3 else 900
-    return round(v * 1000)
+    return rnd(v * 1000)
 
 
 def main(src):
@@ -87,7 +92,7 @@ def main(src):
         b = open(f, "rb").read()
         x = b[b.find(b"<?xml"):].decode("utf8", "replace")
         head = x[: x.find("/>")]
-        a = dict(re.findall(r'([\w-]+)="([^"]*)"', head))
+        a = {k: html.unescape(v) for k, v in re.findall(r'([\w-]+)="([^"]*)"', head)}
         cat = a.get("category") or os.path.basename(os.path.dirname(f))
         au = a.get("author") or "OB-Xf"
         name = a.get("programName") or os.path.splitext(os.path.basename(f))[0]
@@ -96,8 +101,12 @@ def main(src):
         if au not in authors:
             authors.append(au)
         vals = []
+        old_voices = a.get("ob-xf_version", "") < "2025-12-13"  # unison voices were stored on a scale of 0..7 then
         for (i, _, kind, d) in P:
-            vals.append(snap(kind, float(a[i])) if i in a else snap(kind, d))
+            v = float(a[i]) if i in a else d
+            if i == "UnisonVoices" and i in a and old_voices:
+                v = min(7, max(0, round(v * 7))) / 31
+            vals.append(snap(kind, v))
         presets.append((cats.index(cat), authors.index(au), name[:60], vals))
     presets.sort(key=lambda p: (p[0], p[2].lower()))
     out = bytearray(struct.pack("<HHHH", len(P), len(cats), len(authors), len(presets)))
