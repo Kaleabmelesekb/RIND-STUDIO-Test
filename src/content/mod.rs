@@ -28,6 +28,7 @@ mod demo;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod install;
 pub mod kits;
+pub mod plugin_presets;
 mod presets;
 mod samples;
 mod templates;
@@ -108,6 +109,7 @@ pub fn factory() -> &'static Factory {
     static FACTORY: OnceLock<Factory> = OnceLock::new();
     FACTORY.get_or_init(|| {
         let entries = (presets::entries().into_iter())
+            .chain(plugin_presets::entries())
             .chain(kits::entries())
             .chain(samples::entries())
             .chain(chord_sets::entries())
