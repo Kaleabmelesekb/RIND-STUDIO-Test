@@ -63,7 +63,8 @@ use crate::content::{LOOPS, ROOT, SAMPLES, SHAPES, content_path, web};
 use crate::flm::chunk::{ContentPath, ContentRoot};
 use crate::panels::inst::{slicer, three_osc};
 use crate::project_files::{
-    CARTRIDGE_EXT, DRUM_SAMPLES, ProjectFiles, SAMPLE_EXTS, SAMPLES_FOLDER, load_pick,
+    CARTRIDGE_EXT, DRUM_SAMPLES, OB_PATCH_EXTS, ProjectFiles, SAMPLE_EXTS, SAMPLES_FOLDER,
+    load_pick,
 };
 use crate::sample_cache::{self, SampleCache, SampleKey, Waveform, disk_reader};
 use crate::song::{Clip, DrumKit, Lane, LaneKind, ModuleInstance, PPQ, SamplerSlot, Song};
@@ -837,14 +838,17 @@ pub fn show_module(
         close(state, app.audio);
         return Some(Nav::Close);
     };
-    // Rind FM asks for DX7 cartridges, not samples: it lists and imports `.syx` files, and closes on a pick.
+    // Rind FM asks for DX7 cartridges and Rind OB for OB-Xd and OB-Xf patches, not samples: each lists and imports its
+    // files, and closes on a pick.
     let cartridge = (app.song.find_module(channel, module))
         .and_then(|m| m.file.plugin.as_deref())
         .and_then(crate::plugins::builtin::of)
-        .is_some_and(|b| b.clap_id() == RIND_FM);
+        .map(|b| b.clap_id());
+    let patches = cartridge == Some(RIND_OB);
+    let cartridge = patches || cartridge == Some(RIND_FM);
     state.cartridge = cartridge;
     let make = |files: &ProjectFiles| match cartridge {
-        true => cartridge_picker(files),
+        true => cartridge_picker(files, patches),
         false => module_picker(files, type_id),
     };
     // A 3x Osc's closes on a pick, so no sample strip: hidden, it waits for the pick to land. Any other previews its
@@ -1017,12 +1021,21 @@ pub fn module_picker(files: &ProjectFiles, type_id: u16) -> PresetPicker {
 /// Rind FM's clap id.
 const RIND_FM: &str = "org.honeydew.rind-fm";
 
-/// A fresh picker for Rind FM's DX7 cartridges: the `.syx` files of `My Samples` and `My Recordings`, with `Import`
-/// into `My Samples` where `files` takes one.
-fn cartridge_picker(files: &ProjectFiles) -> PresetPicker {
+/// Rind OB's clap id.
+const RIND_OB: &str = "org.honeydew.rind-ob";
+
+/// A fresh picker for Rind FM's DX7 cartridges (the `.syx` files of `My Samples` and `My Recordings`) or, with
+/// `patches`, for Rind OB's OB-Xd and OB-Xf patches (`.fxp`, `.fxb`), with `Import` into `My Samples` where `files`
+/// takes one.
+fn cartridge_picker(files: &ProjectFiles, patches: bool) -> PresetPicker {
     let user = files.user_dir().map(Path::to_owned);
-    PresetPicker::new("DX7 Cartridges", user, CARTRIDGE_EXT, false)
-        .of_exts(&[CARTRIDGE_EXT])
+    const CARTRIDGES: [&str; 1] = [CARTRIDGE_EXT];
+    let (title, exts) = match patches {
+        true => ("OB-Xd and OB-Xf Patches", &OB_PATCH_EXTS as &[&str]),
+        false => ("DX7 Cartridges", &CARTRIDGES as &[&str]),
+    };
+    PresetPicker::new(title, user, exts[0], false)
+        .of_exts(exts)
         .with_factory(std::iter::empty::<PathBuf>())
         .with_import(files.imports_audio())
 }

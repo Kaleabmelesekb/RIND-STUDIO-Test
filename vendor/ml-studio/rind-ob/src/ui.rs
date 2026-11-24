@@ -2,7 +2,9 @@
 //! Rind OB's editor: the synth on four pages (the sound, the modulation, the voice, the patches), drawn in the ML
 //! Studio look. Knobs and switches are the host's parameters (the editor drags them); the tabs and the patch list are
 //! this extension's.
+use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use ml_small_fx::editor::Extension;
 use ml_small_fx::params::{self, FxParams};
@@ -14,6 +16,7 @@ use os_ui::kit::lemon::{self, plug};
 use os_ui::kit::State;
 use os_ui::{Canvas, Color, Font, Rect};
 
+use crate::import::{self, Imported};
 use crate::presets;
 use crate::settings::*;
 use crate::{LEGATO, PRIORITY};
@@ -26,6 +29,8 @@ const PATCHES_PAGE: usize = 3;
 const PER_PAGE: usize = 32;
 /// The place a patch has in the saved state when no patch is loaded.
 const NONE: u16 = 0xFFFF;
+/// How long the display shows what a file did.
+const NOTE_FOR: Duration = Duration::from_secs(4);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Act {
@@ -33,9 +38,20 @@ enum Act {
     /// The category list: 0 is all, then the categories.
     Category(usize),
     Patch(usize),
+    /// A patch opened from a file.
+    User(usize),
     Step(i32),
     List(i32),
     Init,
+    Open,
+}
+
+/// The patch the editor says is loaded.
+#[derive(Clone, Copy, PartialEq)]
+enum Loaded {
+    None,
+    Factory(usize),
+    User(usize),
 }
 
 struct St {
@@ -43,7 +59,21 @@ struct St {
     category: usize,
     list: usize,
     acts: Vec<(Rect, Act)>,
+    /// The patches of the files opened.
+    user: Vec<Imported>,
+    loaded_user: Option<usize>,
+    /// The editor asked for a file to open.
+    dialog: bool,
+    /// What the last file did, for the display.
+    note: Option<(String, Instant)>,
+    /// The host's context, from the last click: a patch opened from a file loads with it.
+    ctx: Option<Arc<dyn GuiContext>>,
 }
+
+/// The category list's last row: the patches opened from files.
+const IMPORTED: usize = 19;
+/// The most patches kept from files.
+const MAX_USER: usize = 1024;
 
 pub struct Panel {
     params: Arc<FxParams>,
@@ -59,11 +89,9 @@ fn info(params: &FxParams) -> Option<usize> {
     (i != NONE && usize::from(i) < presets::bank().presets.len()).then_some(usize::from(i))
 }
 
-/// Whether a setting is not what the loaded patch has.
-fn edited(m: &dyn Model, index: usize) -> bool {
-    presets::bank().presets.get(index).is_some_and(|p| {
-        p.values.iter().enumerate().take(COUNT).any(|(k, &v)| m.plain(IDS[k]).round() as i32 != i32::from(v))
-    })
+/// Whether a setting is not what the patch's `values` have.
+fn differs(m: &dyn Model, values: &[u16]) -> bool {
+    values.iter().enumerate().take(COUNT).any(|(k, &v)| m.plain(IDS[k]).round() as i32 != i32::from(v))
 }
 
 fn trim(s: &str, n: usize) -> String {
@@ -73,7 +101,18 @@ fn trim(s: &str, n: usize) -> String {
 impl Panel {
     pub fn new(params: Arc<FxParams>) -> Arc<dyn Extension> {
         let category = info(&params).map_or(0, |i| presets::bank().presets[i].category + 1);
-        Arc::new(Panel { params, st: Mutex::new(St { page: 0, category, list: 0, acts: Vec::new() }) })
+        let st = St {
+            page: 0,
+            category,
+            list: 0,
+            acts: Vec::new(),
+            user: Vec::new(),
+            loaded_user: None,
+            dialog: false,
+            note: None,
+            ctx: None,
+        };
+        Arc::new(Panel { params, st: Mutex::new(st) })
     }
 
     fn set_info(&self, index: Option<usize>) {
@@ -86,13 +125,34 @@ impl Panel {
     }
 
     /// Every setting to the patch's value: the sound hears it at once and the host is told.
-    fn load(&self, index: usize, ctx: Option<&Arc<dyn GuiContext>>) {
-        let Some(p) = presets::bank().presets.get(index) else { return };
+    fn load_values(&self, values: &[u16], ctx: Option<&Arc<dyn GuiContext>>) {
         let mut vals = Vals::new(&*self.params, self.params.live.clone(), ctx.cloned());
-        for (k, &v) in p.values.iter().enumerate().take(COUNT) {
+        for (k, &v) in values.iter().enumerate().take(COUNT) {
             vals.edit_plain(IDS[k], f32::from(v));
         }
+    }
+
+    fn load(&self, index: usize, ctx: Option<&Arc<dyn GuiContext>>) {
+        let Some(p) = presets::bank().presets.get(index) else { return };
+        self.load_values(&p.values, ctx);
         self.set_info(Some(index));
+        if let Ok(mut st) = self.st.lock() {
+            st.loaded_user = None;
+        }
+    }
+
+    /// A patch from a file, which the saved state does not know by place.
+    fn load_user(&self, index: usize, ctx: Option<&Arc<dyn GuiContext>>) {
+        let values = match self.st.lock() {
+            Ok(st) => st.user.get(index).map(|p| p.values.clone()),
+            Err(_) => None,
+        };
+        let Some(values) = values else { return };
+        self.load_values(&values, ctx);
+        self.set_info(None);
+        if let Ok(mut st) = self.st.lock() {
+            st.loaded_user = Some(index);
+        }
     }
 
     fn init(&self, ctx: Option<&Arc<dyn GuiContext>>) {
@@ -101,10 +161,22 @@ impl Panel {
             vals.edit_plain(IDS[k], s.start as f32);
         }
         self.set_info(None);
+        if let Ok(mut st) = self.st.lock() {
+            st.loaded_user = None;
+        }
     }
 
-    /// The patches the category list shows, as places in the bank.
-    fn shown(category: usize) -> Vec<usize> {
+    fn with(&self, f: impl FnOnce(&mut St)) {
+        if let Ok(mut st) = self.st.lock() {
+            f(&mut st);
+        }
+    }
+
+    /// The patches the category list shows, as places in the bank (or in the opened ones, for `IMPORTED`).
+    fn shown(category: usize, user: usize) -> Vec<usize> {
+        if category == IMPORTED {
+            return (0..user).collect();
+        }
         let b = presets::bank();
         (0..b.presets.len()).filter(|&i| category == 0 || b.presets[i].category + 1 == category).collect()
     }
@@ -113,53 +185,136 @@ impl Panel {
 impl Extension for Panel {
     fn paint(&self, _: &mut Canvas, _: &dyn Model) {}
 
+    fn accepts_files(&self) -> bool {
+        true
+    }
+
+    /// An OB-Xd or OB-Xf patch or bank: its patches join the `IMPORTED` list, and a single one loads.
+    fn file_dropped(&self, path: &Path) {
+        let result = std::fs::read(path).map_err(|_| "CAN'T READ THE FILE").and_then(|b| import::parse(&b));
+        let load = {
+            let Ok(mut st) = self.st.lock() else { return };
+            match result {
+                Ok(list) => {
+                    let n = list.len();
+                    st.user.extend(list);
+                    if st.user.len() > MAX_USER {
+                        let extra = st.user.len() - MAX_USER;
+                        st.user = st.user.split_off(extra);
+                        st.loaded_user = None;
+                    }
+                    let first = st.user.len() - n.min(st.user.len());
+                    st.page = PATCHES_PAGE;
+                    st.category = IMPORTED;
+                    st.list = first / PER_PAGE;
+                    let s = if n == 1 { "" } else { "ES" };
+                    st.note = Some((format!("{n} PATCH{s} OPENED"), Instant::now()));
+                    (n == 1).then_some(first).zip(st.ctx.clone())
+                }
+                Err(e) => {
+                    st.note = Some((e.to_string(), Instant::now()));
+                    return;
+                }
+            }
+        };
+        if let Some((first, ctx)) = load {
+            self.load_user(first, Some(&ctx));
+        }
+    }
+
+    fn take_dialog(&self) -> bool {
+        self.st.lock().map(|mut st| std::mem::take(&mut st.dialog)).unwrap_or(false)
+    }
+
+    fn dialog_filter(&self) -> (&'static str, &'static str, &'static [&'static str]) {
+        ("Open an OB-Xd or OB-Xf patch", "OB-Xd and OB-Xf patches and banks", &["fxp", "fxb"])
+    }
+
     fn click(&self, x: f32, y: f32, ctx: Option<&Arc<dyn GuiContext>>) -> bool {
-        let Ok(mut st) = self.st.lock() else { return false };
-        let Some(&(_, act)) = st.acts.iter().rev().find(|(r, _)| r.contains(x, y)) else { return false };
+        let act = {
+            let Ok(mut st) = self.st.lock() else { return false };
+            if ctx.is_some() {
+                st.ctx = ctx.cloned();
+            }
+            let Some(&(_, act)) = st.acts.iter().rev().find(|(r, _)| r.contains(x, y)) else { return false };
+            act
+        };
         match act {
-            Act::Page(p) => st.page = p,
-            Act::Category(c) => {
+            Act::Page(p) => self.with(|st| st.page = p),
+            Act::Category(c) => self.with(|st| {
                 st.category = c;
                 st.list = 0;
-            }
+            }),
             Act::Patch(i) => self.load(i, ctx),
+            Act::User(i) => self.load_user(i, ctx),
             Act::Step(d) => {
                 let n = presets::bank().presets.len() as i32;
                 if n > 0 {
-                    let next = (info(&self.params).map_or(if d > 0 { -1 } else { 0 }, |i| i as i32) + d).rem_euclid(n) as usize;
+                    let now = info(&self.params).map_or(if d > 0 { -1 } else { 0 }, |i| i as i32);
+                    let next = (now + d).rem_euclid(n) as usize;
                     self.load(next, ctx);
-                    st.category = presets::bank().presets[next].category + 1;
+                    self.with(|st| st.category = presets::bank().presets[next].category + 1);
                 }
             }
-            Act::List(d) => {
-                let pages = Self::shown(st.category).len().div_ceil(PER_PAGE).max(1) as i32;
+            Act::List(d) => self.with(|st| {
+                let pages = Self::shown(st.category, st.user.len()).len().div_ceil(PER_PAGE).max(1) as i32;
                 st.list = (st.list as i32 + d).rem_euclid(pages) as usize;
-            }
+            }),
             Act::Init => self.init(ctx),
+            Act::Open => self.with(|st| st.dialog = true),
         }
         true
     }
 
     fn render(&self, c: &mut Canvas, m: &dyn Model, state: &ViewState, _hint: &str) -> Option<Vec<Hit>> {
-        let (page, category, list) = {
+        let bank = presets::bank();
+        let (page, category, list, user_count, names, current, note) = {
             let st = self.st.lock().ok()?;
-            (st.page, st.category, st.list)
+            let names = if st.page == PATCHES_PAGE && st.category == IMPORTED {
+                st.user.iter().map(|p| p.name.clone()).collect()
+            } else {
+                Vec::new()
+            };
+            let current = st.loaded_user.and_then(|i| st.user.get(i).cloned().map(|p| (i, p)));
+            let note = st.note.as_ref().filter(|(_, t)| t.elapsed() < NOTE_FOR).map(|(s, _)| s.clone());
+            (st.page, st.category, st.list, st.user.len(), names, current, note)
         };
-        let loaded = info(&self.params);
-        let changed = loaded.is_some_and(|i| edited(m, i));
+        let factory = info(&self.params);
+        let loaded = match (factory, &current) {
+            (Some(i), _) => Loaded::Factory(i),
+            (None, Some((i, _))) => Loaded::User(*i),
+            (None, None) => Loaded::None,
+        };
+        // The display: the patch, and what it is or that it was changed.
+        let (head, mut sub) = match (factory.and_then(|i| bank.presets.get(i)), &current) {
+            (Some(p), _) => {
+                let author = bank.authors.get(p.author).map_or("", |s| s.as_str());
+                let cat = bank.categories.get(p.category).map_or("", |s| s.as_str());
+                let edited = differs(m, &p.values);
+                (p.name.clone(), format!("{}  {}{}", cat.to_uppercase(), author.to_uppercase(), if edited { "  EDITED" } else { "" }))
+            }
+            (None, Some((_, p))) => {
+                let edited = differs(m, &p.values);
+                (p.name.clone(), format!("FILE  {}{}", p.author.to_uppercase(), if edited { "  EDITED" } else { "" }))
+            }
+            (None, None) => ("INIT".to_string(), "EDITED PATCH".to_string()),
+        };
+        if let Some(note) = note {
+            sub = note;
+        }
         let mut ui = Ui { c, m, st: state, hits: Vec::new(), acts: Vec::new() };
         ui.c.begin_frame(None);
         ui.c.clear(plug::BG);
         for (i, name) in TABS.iter().enumerate() {
             ui.button(Rect::new(8.0 + 106.0 * i as f32, 8.0, 100.0, 28.0), name, Act::Page(i), page == i);
         }
-        ui.lcd(loaded, changed);
+        ui.lcd(&trim(&head, 22), &trim(&sub, 40));
         ui.master();
         match page {
             0 => ui.sound(),
             1 => ui.modulation(),
             2 => ui.voice(),
-            _ => ui.patches(category, list, loaded),
+            _ => ui.patches(category, list, loaded, &names, user_count),
         }
         let (hits, acts) = (ui.hits, ui.acts);
         if let Ok(mut st) = self.st.lock() {
@@ -243,23 +398,13 @@ impl Ui<'_> {
         self.m.plain(IDS[k]).round() as i32
     }
 
-    fn lcd(&mut self, loaded: Option<usize>, changed: bool) {
+    fn lcd(&mut self, head: &str, sub: &str) {
         let r = Rect::new(8.0, 44.0, 300.0, 60.0);
         lemon::plug_well(self.c, r, 6.0);
         let glow = Color::rgb(0xb7e36a);
         let dim = Color::rgb(0x7f9a54);
-        let bank = presets::bank();
-        let (head, sub) = match loaded.and_then(|i| bank.presets.get(i)) {
-            Some(p) => {
-                let author = bank.authors.get(p.author).map_or("", |s| s.as_str());
-                let cat = bank.categories.get(p.category).map_or("", |s| s.as_str());
-                let tag = if changed { "  EDITED" } else { "" };
-                (trim(&p.name, 22), trim(&format!("{}  {}{}", cat.to_uppercase(), author.to_uppercase(), tag), 40))
-            }
-            None => ("INIT".to_string(), "EDITED PATCH".to_string()),
-        };
-        self.c.text(Font::new(20).bold(), r.x + 14.0, r.y + 8.0, glow, &head);
-        self.c.text(CAP, r.x + 16.0, r.y + 38.0, dim, &sub);
+        self.c.text(Font::new(20).bold(), r.x + 14.0, r.y + 8.0, glow, head);
+        self.c.text(CAP, r.x + 16.0, r.y + 38.0, dim, sub);
         self.button(Rect::new(314.0, 44.0, 32.0, 60.0), "<", Act::Step(-1), false);
         self.button(Rect::new(350.0, 44.0, 32.0, 60.0), ">", Act::Step(1), false);
     }
@@ -409,36 +554,46 @@ impl Ui<'_> {
         }
     }
 
-    fn patches(&mut self, category: usize, list: usize, loaded: Option<usize>) {
+    fn patches(&mut self, category: usize, list: usize, loaded: Loaded, names: &[String], user: usize) {
         let bank = presets::bank();
-        let names = std::iter::once("ALL".to_string()).chain(bank.categories.iter().map(|c| c.to_uppercase())).collect::<Vec<_>>();
-        for (i, name) in names.iter().enumerate() {
-            let r = Rect::new(8.0, 112.0 + 22.5 * i as f32, 170.0, 21.0);
+        let rows = std::iter::once("ALL".to_string())
+            .chain(bank.categories.iter().map(|c| c.to_uppercase()))
+            .chain(std::iter::once(format!("FROM FILES ({user})")))
+            .collect::<Vec<_>>();
+        for (i, name) in rows.iter().enumerate() {
+            let r = Rect::new(8.0, 112.0 + 21.5 * i as f32, 170.0, 20.0);
             let st = State { hover: self.hover(r), on: category == i, ..State::NORMAL };
             lemon::field(self.c, r, st);
-            self.c.text(LABEL, r.x + 10.0, r.y + 5.0, if category == i { brand::MAIN } else { brand::TEXT }, name);
+            self.c.text(LABEL, r.x + 10.0, r.y + 4.0, if category == i { brand::MAIN } else { brand::TEXT }, name);
             self.acts.push((r, Act::Category(i)));
         }
-        let shown = Panel::shown(category);
+        let shown = Panel::shown(category, user);
         let pages = shown.len().div_ceil(PER_PAGE).max(1);
         let list = list.min(pages - 1);
+        if shown.is_empty() {
+            self.c.text(ROW, 196.0, 120.0, plug::DIM, "OPEN FILE reads OB-Xd and OB-Xf .fxp and .fxb files.");
+        }
         for (n, &i) in shown.iter().skip(list * PER_PAGE).take(PER_PAGE).enumerate() {
             let (col, row) = (n / 16, n % 16);
             let r = Rect::new(186.0 + 285.0 * col as f32, 112.0 + 24.5 * row as f32, 277.0, 23.0);
-            let here = loaded == Some(i);
+            let (here, name, act) = if category == IMPORTED {
+                (loaded == Loaded::User(i), names.get(i).cloned().unwrap_or_default(), Act::User(i))
+            } else {
+                (loaded == Loaded::Factory(i), bank.presets[i].name.clone(), Act::Patch(i))
+            };
             let st = State { hover: self.hover(r), on: here, ..State::NORMAL };
             lemon::field(self.c, r, st);
-            let ink = if here { brand::MAIN } else { brand::TEXT };
-            self.c.text(ROW, r.x + 10.0, r.y + 3.0, ink, &trim(&bank.presets[i].name, 30));
-            self.acts.push((r, Act::Patch(i)));
+            self.c.text(ROW, r.x + 10.0, r.y + 3.0, if here { brand::MAIN } else { brand::TEXT }, &trim(&name, 30));
+            self.acts.push((r, act));
         }
-        self.button(Rect::new(186.0, 512.0, 44.0, 34.0), "<", Act::List(-1), false);
-        let well = Rect::new(236.0, 512.0, 300.0, 34.0);
+        self.button(Rect::new(186.0, 512.0, 40.0, 34.0), "<", Act::List(-1), false);
+        let well = Rect::new(230.0, 512.0, 250.0, 34.0);
         lemon::plug_well(self.c, well, 6.0);
         let title = format!("PAGE {}/{}   {} PATCHES", list + 1, pages, shown.len());
-        self.c.text_center(Font::new(13).bold(), well, brand::MAIN, &title);
-        self.button(Rect::new(542.0, 512.0, 44.0, 34.0), ">", Act::List(1), false);
-        self.button(Rect::new(640.0, 512.0, 112.0, 34.0), "INIT", Act::Init, false);
+        self.c.text_center(Font::new(12).bold(), well, brand::MAIN, &title);
+        self.button(Rect::new(484.0, 512.0, 40.0, 34.0), ">", Act::List(1), false);
+        self.button(Rect::new(540.0, 512.0, 116.0, 34.0), "OPEN FILE", Act::Open, false);
+        self.button(Rect::new(664.0, 512.0, 88.0, 34.0), "INIT", Act::Init, false);
     }
 }
 

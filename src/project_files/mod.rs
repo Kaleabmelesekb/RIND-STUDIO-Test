@@ -56,7 +56,7 @@ mod themes;
 pub use soundfonts::{SF2_EXT, SFZ_EXT, SOUNDFONT_EXTS, SOUNDFONTS_FOLDER};
 pub(crate) use soundfonts::{in_library, in_user_folder, is_sfz, is_soundfont};
 mod samples;
-pub use samples::{CARTRIDGE_EXT, RECORDINGS_FOLDER, SAMPLE_EXTS, SAMPLES_FOLDER};
+pub use samples::{CARTRIDGE_EXT, OB_PATCH_EXTS, RECORDINGS_FOLDER, SAMPLE_EXTS, SAMPLES_FOLDER};
 pub(crate) mod content;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use content::real_folder;
@@ -188,7 +188,7 @@ pub enum Pick {
     Theme,
     /// An audio file or a DW program for the DW Sampler picker's `Import` ([`ProjectFiles::import_program`]).
     Program,
-    /// A DX7 cartridge (`.syx`) for Rind FM's picker's `Import` ([`ProjectFiles::import_cartridge`]).
+    /// A DX7 cartridge (`.syx`) for Rind FM's picker's `Import`, or an OB-Xd or OB-Xf patch or bank (`.fxp`, `.fxb`) for Rind OB's ([`ProjectFiles::import_cartridge`]).
     Cartridge,
 }
 
@@ -222,7 +222,7 @@ impl Pick {
             Pick::Midi => FileKind::Midi.extensions(),
             Pick::Theme => &["json"],
             Pick::Program => &["wav", "flac", "mp3", "ogg", DWP_EXT, SFZ_EXT],
-            Pick::Cartridge => &[CARTRIDGE_EXT],
+            Pick::Cartridge => &samples::CARTRIDGE_EXTS,
         }
     }
 }
