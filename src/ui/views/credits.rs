@@ -51,6 +51,9 @@ fn mango() -> String {
 const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Dragonfly Reverb by Michael Willis and Rob van den Berg \
                          (GPL-3.0-or-later, their DSP unchanged), https://github.com/michaelwillis/dragonfly-reverb, on Freeverb3 by Teru \
                          Kamogashira and zita-rev1 by Fons Adriaensen";
+/// The credit of the Airwindows effect (`vendor/ml-studio/rind-airwindows`).
+const AIRWINDOWS: &str = "Airwindows: effects by Chris Johnson (MIT), https://www.airwindows.com, as collected in Airwindows Consolidated by Paul Walker \
+                          (MIT), https://github.com/baconpaul/airwin2rack";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -101,6 +104,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         &effects(),
         &mango(),
         DRAGONFLY,
+        AIRWINDOWS,
         THIRD_PARTY,
         "",
         SOUNDS,

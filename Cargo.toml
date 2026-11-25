@@ -83,6 +83,7 @@ ml-exciter = { path = "vendor/ml-studio/ml-exciter", features = ["linked", "embe
 ml-spectral-compressor = { path = "vendor/ml-studio/ml-spectral-compressor", features = ["linked", "embed"] }
 rind-fm = { path = "vendor/ml-studio/rind-fm", features = ["linked", "embed"] }
 rind-ob = { path = "vendor/ml-studio/rind-ob", features = ["linked", "embed"] }
+rind-airwindows = { path = "vendor/ml-studio/rind-airwindows", features = ["linked", "embed"] }
 # Mango Studio (apikun's fork of Lemon Studio), `vendor/mango-studio`.
 lemon-acid = { path = "vendor/mango-studio/lemon-acid", features = ["linked", "embed"] }
 lemon-autogun = { path = "vendor/mango-studio/lemon-autogun", features = ["linked", "embed"] }
