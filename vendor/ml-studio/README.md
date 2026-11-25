@@ -34,3 +34,8 @@ table), its 493 factory patches (`banks/presets.bin`, made by `gen.py` from the 
 patches and OB-Xd's `.fxp` and `.fxb` (the original OB-Xd and DiscoDSP's), converting them by the rules of OB-Xf's own
 OB-Xd importer. OB-Xf's modulation matrix (its MPE sources; empty in every factory patch), tuning files and editor are
 left out.
+
+`rind-airwindows` (the Airwindows effect, also Honeydew's own) is one effect in the ML Studio look that runs 139 of Chris
+Johnson's Airwindows effects (the Recommended and Basic collections of Airwindows Consolidated, MIT, in
+`rind-airwindows/cpp`), chosen from a list by category, with ten knobs for the effect's own parameters. `gen.py` builds the
+list (`src/list.rs`) and `cpp/registry.inc` from an `airwin2rack` checkout.

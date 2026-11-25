@@ -78,6 +78,7 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     ml_spectral_compressor,
     rind_fm,
     rind_ob,
+    rind_airwindows,
     // Mango Studio's small generators (apikun's fork of Lemon Studio), `vendor/mango-studio`.
     lemon_acid,
     lemon_autogun,
@@ -145,6 +146,7 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.honeydew.ml-spectral-compressor", b"MLSpectralComp01"),
     ("org.honeydew.rind-fm", b"RindFM0000000001"),
     ("org.honeydew.rind-ob", b"RindOB0000000001"),
+    ("org.honeydew.rind-airwindows", b"RindAirwindows01"),
 ];
 
 /// The CLAP ids of the plugins that come from Mango Studio (`vendor/mango-studio`), for the credits.
@@ -476,7 +478,7 @@ mod tests {
             ]
         );
         // ML Studio's (Michael Lane's fork of Lemon Studio) twelve, after them.
-        let ml: Vec<_> = got[28..45].iter().map(|b| b.1).collect();
+        let ml: Vec<_> = got[28..46].iter().map(|b| b.1).collect();
         assert_eq!(
             ml,
             [
@@ -497,10 +499,11 @@ mod tests {
                 "clap:org.honeydew.ml-spectral-compressor",
                 "clap:org.honeydew.rind-fm",
                 "clap:org.honeydew.rind-ob",
+                "clap:org.honeydew.rind-airwindows",
             ]
         );
         // Mango Studio's small generators, last.
-        let mango: Vec<_> = got[45..].iter().map(|b| b.1).collect();
+        let mango: Vec<_> = got[46..].iter().map(|b| b.1).collect();
         assert_eq!(
             mango,
             [
