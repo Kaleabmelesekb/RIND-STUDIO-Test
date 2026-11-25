@@ -84,23 +84,6 @@ ml-spectral-compressor = { path = "vendor/ml-studio/ml-spectral-compressor", fea
 rind-fm = { path = "vendor/ml-studio/rind-fm", features = ["linked", "embed"] }
 rind-ob = { path = "vendor/ml-studio/rind-ob", features = ["linked", "embed"] }
 rind-airwindows = { path = "vendor/ml-studio/rind-airwindows", features = ["linked", "embed"] }
-# Mango Studio (apikun's fork of Lemon Studio), `vendor/mango-studio`.
-lemon-acid = { path = "vendor/mango-studio/lemon-acid", features = ["linked", "embed"] }
-lemon-autogun = { path = "vendor/mango-studio/lemon-autogun", features = ["linked", "embed"] }
-lemon-bass = { path = "vendor/mango-studio/lemon-bass", features = ["linked", "embed"] }
-lemon-boom = { path = "vendor/mango-studio/lemon-boom", features = ["linked", "embed"] }
-mango-dashboard = { path = "vendor/mango-studio/mango-dashboard", features = ["linked", "embed"] }
-lemon-drums = { path = "vendor/mango-studio/lemon-drums", features = ["linked", "embed"] }
-lemon-dx = { path = "vendor/mango-studio/lemon-dx", features = ["linked", "embed"] }
-mango-flex = { path = "vendor/mango-studio/mango-flex", features = ["linked", "embed"] }
-lemon-keys = { path = "vendor/mango-studio/lemon-keys", features = ["linked", "embed"] }
-lemon-kick = { path = "vendor/mango-studio/lemon-kick", features = ["linked", "embed"] }
-lemon-mini = { path = "vendor/mango-studio/lemon-mini", features = ["linked", "embed"] }
-mango-monk = { path = "vendor/mango-studio/mango-monk", features = ["linked", "embed"] }
-lemon-module-drum = { path = "vendor/mango-studio/lemon-module-drum", features = ["linked", "embed"] }
-lemon-pluck = { path = "vendor/mango-studio/lemon-pluck", features = ["linked", "embed"] }
-mango-slayer = { path = "vendor/mango-studio/mango-slayer", features = ["linked", "embed"] }
-mango-surface = { path = "vendor/mango-studio/mango-surface", features = ["linked", "embed"] }
 os-plugkit = { path = "vendor/lemon-studio/os-plugkit", features = ["embed"] }
 os-ui = { path = "vendor/lemon-studio/os-ui" }
 os-theme = { path = "vendor/lemon-studio/os-theme" }

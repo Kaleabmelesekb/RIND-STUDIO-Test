@@ -409,11 +409,6 @@ Sampler, Soft Clipper, Stereo Enhancer, Stereo Shaper, Transient Processor, Trio
 (<https://github.com/apikun/Mango-Studio>, a fork of Lemon Studio), GPL-3.0-or-later like this app. They are parameter
 values and saved plugin states, no code.
 
-## Mango Studio's small generators (Lemon Kick, Boom, Bass, Acid, Module Drum and Mango Pluck, Mini, DX, Autogun, Drums, Keys, Dashboard, Flex, Monk, Slayer, Surface)
-
-`vendor/mango-studio` is code from Mango Studio (<https://github.com/apikun/Mango-Studio>, apikun's fork of Lemon Studio),
-GPL-3.0-or-later like this app (`vendor/mango-studio/LICENSE`); the files keep their copyright and SPDX headers.
-
 ## Dexed's engine and voice banks, msfa (Rind FM)
 
 - Source: <https://github.com/asb2m10/dexed> (the engine `vendor/ml-studio/rind-fm/cpp`: its `msfa` folder, the Mark I
