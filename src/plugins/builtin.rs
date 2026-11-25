@@ -79,6 +79,7 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     rind_fm,
     rind_ob,
     rind_airwindows,
+    rind_tape,
 ];
 
 /// Each one's VST3 copy's class id, by CLAP id: upstream's `Vst3Plugin::VST3_CLASS_ID` (`plugins/*/src/lib.rs`), which
@@ -130,6 +131,7 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.honeydew.rind-fm", b"RindFM0000000001"),
     ("org.honeydew.rind-ob", b"RindOB0000000001"),
     ("org.honeydew.rind-airwindows", b"RindAirwindows01"),
+    ("org.honeydew.rind-tape", b"RindTape00000001"),
 ];
 
 /// The editor size of a plugin that reports none.
@@ -458,6 +460,7 @@ mod tests {
                 "clap:org.honeydew.rind-fm",
                 "clap:org.honeydew.rind-ob",
                 "clap:org.honeydew.rind-airwindows",
+                "clap:org.honeydew.rind-tape",
             ]
         );
         for &(name, _, _, size) in &got[9..] {
