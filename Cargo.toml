@@ -84,6 +84,7 @@ ml-spectral-compressor = { path = "vendor/ml-studio/ml-spectral-compressor", fea
 rind-fm = { path = "vendor/ml-studio/rind-fm", features = ["linked", "embed"] }
 rind-ob = { path = "vendor/ml-studio/rind-ob", features = ["linked", "embed"] }
 rind-airwindows = { path = "vendor/ml-studio/rind-airwindows", features = ["linked", "embed"] }
+rind-tape = { path = "vendor/ml-studio/rind-tape", features = ["linked", "embed"] }
 os-plugkit = { path = "vendor/lemon-studio/os-plugkit", features = ["embed"] }
 os-ui = { path = "vendor/lemon-studio/os-ui" }
 os-theme = { path = "vendor/lemon-studio/os-theme" }

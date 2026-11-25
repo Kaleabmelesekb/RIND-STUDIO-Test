@@ -2049,6 +2049,7 @@ dependencies = [
  "rind-airwindows",
  "rind-fm",
  "rind-ob",
+ "rind-tape",
  "serde",
  "serde_json",
  "sha2",
@@ -4276,6 +4277,16 @@ dependencies = [
  "os-plugkit",
  "os-theme",
  "os-ui",
+]
+
+[[package]]
+name = "rind-tape"
+version = "0.0.1"
+dependencies = [
+ "ml-mix-core",
+ "ml-small-fx",
+ "nih_plug",
+ "os-plugkit",
 ]
 
 [[package]]

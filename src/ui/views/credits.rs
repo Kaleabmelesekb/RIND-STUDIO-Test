@@ -38,6 +38,9 @@ const DRAGONFLY: &str = "Dragonfly Hall, Room, Plate and Early Reflections: Drag
 /// The credit of the Airwindows effect (`vendor/ml-studio/rind-airwindows`).
 const AIRWINDOWS: &str = "Airwindows: effects by Chris Johnson (MIT), https://www.airwindows.com, as collected in Airwindows Consolidated by Paul Walker \
                           (MIT), https://github.com/baconpaul/airwin2rack";
+/// The credit of the tape effect (`vendor/ml-studio/rind-tape`).
+const CHOWTAPE: &str = "Rind Tape: hysteresis and head loss after ChowTape by Jatin Chowdhury (GPL-3.0-or-later), \
+                        https://github.com/jatinchowdhury18/AnalogTapeModel";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -88,6 +91,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         &effects(),
         DRAGONFLY,
         AIRWINDOWS,
+        CHOWTAPE,
         THIRD_PARTY,
         "",
         SOUNDS,

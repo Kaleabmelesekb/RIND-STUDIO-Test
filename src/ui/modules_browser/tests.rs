@@ -137,6 +137,7 @@ const SPEC: &[(&str, &[&str])] = &[
             "Rind Bitcrusher",
             "Rind Exciter",
             "Rind Spectral Compressor",
+            "Rind Tape",
             "Tesla",
         ],
     ),
@@ -1037,6 +1038,7 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Rind Bitcrusher",
             "Rind Exciter",
             "Rind Spectral Compressor",
+            "Rind Tape",
             "Tesla",
         ]
     );

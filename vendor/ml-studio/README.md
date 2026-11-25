@@ -39,3 +39,7 @@ left out.
 Johnson's Airwindows effects (the Recommended and Basic collections of Airwindows Consolidated, MIT, in
 `rind-airwindows/cpp`), chosen from a list by category, with ten knobs for the effect's own parameters. `gen.py` builds the
 list (`src/list.rs`) and `cpp/registry.inc` from an `airwin2rack` checkout.
+
+`rind-tape` (Rind Tape, also Honeydew's own) is a tape machine in the ML Studio look: the hysteresis of the tape and the loss of
+the playback head after Jatin Chowdhury's ChowTape (GPL-3.0-or-later, ported to Rust in `rind-tape/src/dsp.rs`), with wow and
+flutter. Its sound is plain Rust with its own tests (`cargo test` in a checkout of the app runs them through the plugin list).
