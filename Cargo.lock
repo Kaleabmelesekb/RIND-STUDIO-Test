@@ -1986,30 +1986,19 @@ dependencies = [
  "honeydew-audio",
  "jni 0.21.1",
  "lemon-3x-osc",
- "lemon-acid",
- "lemon-autogun",
  "lemon-balance",
- "lemon-bass",
- "lemon-boom",
  "lemon-chorus",
  "lemon-delay",
  "lemon-drop",
  "lemon-drum-sampler",
- "lemon-drums",
- "lemon-dx",
  "lemon-fast-distortion",
  "lemon-filter",
  "lemon-flanger",
  "lemon-formula-controller",
- "lemon-keys",
- "lemon-kick",
  "lemon-limiter",
- "lemon-mini",
- "lemon-module-drum",
  "lemon-parametric-eq-2",
  "lemon-peak-controller",
  "lemon-phaser",
- "lemon-pluck",
  "lemon-reverb",
  "lemon-sampler",
  "lemon-slicer",
@@ -2021,11 +2010,6 @@ dependencies = [
  "lemon-transient-processor",
  "lemon-vocoder",
  "libc",
- "mango-dashboard",
- "mango-flex",
- "mango-monk",
- "mango-slayer",
- "mango-surface",
  "midir",
  "miniz_oxide 0.9.1",
  "ml-bitcrusher",
@@ -2405,46 +2389,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "lemon-acid"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-autogun"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
 name = "lemon-balance"
 version = "0.0.1"
 dependencies = [
  "lemon-small-fx",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-bass"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-boom"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
  "nih_plug",
  "os-plugkit",
 ]
@@ -2504,24 +2452,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lemon-drums"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-dx"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
 name = "lemon-fast-distortion"
 version = "0.0.1"
 dependencies = [
@@ -2559,24 +2489,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lemon-keys"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-kick"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
 name = "lemon-limiter"
 version = "0.0.1"
 dependencies = [
@@ -2588,24 +2500,6 @@ dependencies = [
  "os-ui",
  "serde_json",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "lemon-mini"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-module-drum"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
 ]
 
 [[package]]
@@ -2637,15 +2531,6 @@ name = "lemon-phaser"
 version = "0.0.1"
 dependencies = [
  "lemon-small-fx",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "lemon-pluck"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
  "nih_plug",
  "os-plugkit",
 ]
@@ -2705,19 +2590,6 @@ dependencies = [
  "nih_plug",
  "os-dsp",
  "os-engine",
- "os-hostlink",
- "os-plugkit",
- "os-theme",
- "os-ui",
- "serde_json",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "lemon-small-gen"
-version = "0.0.1"
-dependencies = [
- "nih_plug",
  "os-hostlink",
  "os-plugkit",
  "os-theme",
@@ -2901,51 +2773,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "mango-dashboard"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "mango-flex"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "mango-monk"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "mango-slayer"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
-]
-
-[[package]]
-name = "mango-surface"
-version = "0.0.1"
-dependencies = [
- "lemon-small-gen",
- "nih_plug",
- "os-plugkit",
 ]
 
 [[package]]
