@@ -1,0 +1,29 @@
+name: odin-debug
+on:
+  push:
+    branches: ["rind-odin"]
+env:
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+jobs:
+  dbg:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android || true
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: odin-debug
+      - run: sudo apt-get update && sudo apt-get install -y gdb libasound2-dev libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libclang-dev
+      - run: cargo test -p honeydew --lib --no-run 2>&1 | tail -3
+      - name: builtin tests alone
+        continue-on-error: true
+        run: |
+          bin=$(ls -t target/debug/deps/honeydew-* | grep -v '\.d$' | head -1)
+          $bin plugins::builtin --test-threads=1 --nocapture 2>&1 | tail -30
+      - name: under gdb
+        continue-on-error: true
+        run: |
+          bin=$(ls -t target/debug/deps/honeydew-* | grep -v '\.d$' | head -1)
+          gdb -batch -ex "handle SIGUSR1 SIGUSR2 nostop noprint pass" -ex run -ex bt -ex "thread apply all bt 12" --args $bin --test-threads=4 2>&1 | grep -v " ok$" | tail -80
