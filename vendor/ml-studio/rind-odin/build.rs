@@ -36,6 +36,10 @@ fn main() {
         .debug(false)
         .warnings(false)
         .define("NDEBUG", None)
+        // Rind OB's engine (OB-Xd) has classes of the same names: one program, one definition each, or the linker picks
+        // one at random and a synth runs the other's code.
+        .define("Voice", "OdinVoice")
+        .define("ADSREnvelope", "OdinADSREnvelope")
         .include("cpp/Source")
         .include("cpp/shim")
         .include("cpp")
