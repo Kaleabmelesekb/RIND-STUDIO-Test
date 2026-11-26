@@ -35,6 +35,16 @@ patches and OB-Xd's `.fxp` and `.fxb` (the original OB-Xd and DiscoDSP's), conve
 OB-Xd importer. OB-Xf's modulation matrix (its MPE sources; empty in every factory patch), tuning files and editor are
 left out.
 
+`rind-odin` (Rind Odin, also Honeydew's own) is a three-oscillator hybrid polysynth on the Odin 2 engine (`rind-odin/cpp`:
+Thomas Hezel's Odin 2, GPL-3.0-or-later, with JUCE replaced by a small stand-in in `cpp/shim`) with Honeydew's C interface
+(`cpp/Source/odin_c.cc`), its 260 factory patches (`banks/patches.bin`, made by `gen.py`, the files as Odin saves them) and
+its own editor (`src/ui.rs`: the oscillators, the filters, the envelopes and LFOs, the effects, the nine-row modulation
+matrix, the arpeggiator and the patches). The 360 settings (`gen.py` writes `src/settings.rs`) are Odin's 258 parameters
+and the properties of a patch that decide the sound (oscillator and filter types, waveforms, the matrix); the saved state's
+tail holds the factory patch's place or the `.odin` file that was loaded, which `src/patch.rs` reads and the engine builds on
+a thread of its own, so the sound keeps playing meanwhile. Any `.odin` patch other people made opens from the editor's file
+dialog, a drop, or Honeydew's sample picker.
+
 `rind-airwindows` (the Airwindows effect, also Honeydew's own) is one effect in the ML Studio look that runs 139 of Chris
 Johnson's Airwindows effects (the Recommended and Basic collections of Airwindows Consolidated, MIT, in
 `rind-airwindows/cpp`), chosen from a list by category, with ten knobs for the effect's own parameters. `gen.py` builds the

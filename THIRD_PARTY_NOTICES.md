@@ -437,6 +437,19 @@ values and saved plugin states, no code.
   parameter table) is Honeydew's. `vendor/ml-studio/rind-ob/src/import.rs` follows OB-Xf's `state/ObxdImporter.cpp` (the
   OB-Xd to OB-Xf conversion tables) in Rust.
 
+## Odin 2's engine and factory patches (Rind Odin)
+
+- Source: <https://github.com/TheWaveWarden/odin2> (Thomas Hezel's Odin 2: the engine `vendor/ml-studio/rind-odin/cpp/Source/audio`
+  with its wavetables, the processor's parameter, patch and MIDI code, the modulation matrix and the arpeggiator; and the 260
+  factory patches, bundled unchanged by `vendor/ml-studio/rind-odin/gen.py` into `banks/patches.bin`). Also vendored in
+  `cpp/Source/audio/include`: the Surge tuning library (<https://github.com/surge-synthesizer/tuning-library>, MIT,
+  `LICENSE-tuning-library.md`).
+- License: Odin 2 is GPL-3.0-or-later (`vendor/ml-studio/rind-odin/LICENSE-odin2`); the factory patches come with it.
+- Modified: Odin's editor, plug-in wrapper and presets browser are left out, and the parts of JUCE the engine uses
+  (strings, `ValueTree`, parameters, MIDI buffers) are replaced by a small stand-in in `cpp/shim`; the processor's file
+  headers are trimmed, `ImpulseResponseCreator.cpp` is left out and `PluginProcessor.h` makes `setBPM` public;
+  `cpp/Source/odin_c.cc` (the C interface) is Honeydew's.
+
 ## Airwindows, in Airwindows Consolidated (Airwindows effect)
 
 - Source: <https://github.com/baconpaul/airwin2rack> (Airwindows Consolidated, by Paul Walker), which collects Chris

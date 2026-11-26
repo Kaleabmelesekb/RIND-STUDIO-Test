@@ -41,6 +41,9 @@ const AIRWINDOWS: &str = "Airwindows: effects by Chris Johnson (MIT), https://ww
 /// The credit of the tape effect (`vendor/ml-studio/rind-tape`).
 const CHOWTAPE: &str = "Rind Tape: hysteresis and head loss after ChowTape by Jatin Chowdhury (GPL-3.0-or-later), \
                         https://github.com/jatinchowdhury18/AnalogTapeModel";
+/// The credit of the Rind Odin synth (`vendor/ml-studio/rind-odin`).
+const ODIN: &str = "Rind Odin: the Odin 2 synthesizer by Thomas Hezel (GPL-3.0-or-later), https://github.com/TheWaveWarden/odin2, with its factory \
+                    patches by Odin's sound designers, on the Surge tuning library (MIT)";
 /// The repo's notices for the third-party code the app includes.
 const THIRD_PARTY: &str = "Third-party software notices: THIRD_PARTY_NOTICES.md";
 /// The bundled sounds' section, and its only line without a bundle.
@@ -92,6 +95,7 @@ fn lines(bundle: Option<&Bundle>, loading: &mut bool) -> Vec<String> {
         DRAGONFLY,
         AIRWINDOWS,
         CHOWTAPE,
+        ODIN,
         THIRD_PARTY,
         "",
         SOUNDS,

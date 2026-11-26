@@ -16,6 +16,8 @@ pub trait Synth: Default + Send + 'static {
     fn control(&mut self, _cc: u8, _value: f32) {}
     /// Channel pressure, `0.0..=1.0`.
     fn pressure(&mut self, _value: f32) {}
+    /// The host tempo in beats per minute, before each block.
+    fn tempo(&mut self, _bpm: f64) {}
     /// Renders (overwrites) `l` and `r`.
     fn render(&mut self, l: &mut [f32], r: &mut [f32], p: &FxParams);
     fn panel(p: Arc<FxParams>) -> Arc<dyn Extension>;
@@ -87,6 +89,9 @@ impl<T: Synth> Plugin for Instrument<T> {
         let (l, r) = c.split_at_mut(1);
         let (l, r) = (&mut *l[0], &mut *r[0]);
         let n = l.len();
+        if let Some(bpm) = ctx.transport().tempo {
+            self.dsp.tempo(bpm);
+        }
         let mut at = 0;
         while let Some(event) = ctx.next_event() {
             let t = (event.timing() as usize).min(n);

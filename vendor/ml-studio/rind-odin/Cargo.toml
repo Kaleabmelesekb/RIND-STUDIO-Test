@@ -1,0 +1,33 @@
+[package]
+name = "rind-odin"
+description = "Rind Odin: a three-oscillator hybrid polysynth (the Odin 2 engine and its 260 factory patches) in the ML Studio look"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "rind_odin"
+doctest = false
+
+[features]
+# Compiled into Honeydew: no exported plugin entry points.
+linked = []
+# Honeydew (vendored addition): the editor draws into Honeydew's own window (`os-plugkit`'s `embed`).
+embed = ["ml-mix-core/embed", "os-plugkit/embed"]
+
+[dependencies]
+nih_plug = { path = "../../nih-plug" }
+ml-mix-core = { path = "../ml-mix-core" }
+os-plugkit = { path = "../../lemon-studio/os-plugkit" }
+os-ui = { path = "../../lemon-studio/os-ui" }
+os-theme = { path = "../../lemon-studio/os-theme" }
+ml-small-fx = { path = "../ml-small-fx" }
+
+[build-dependencies]
+cc = "1"
+
+[lints.rust]
+unknown_lints = "allow"
+dead_code = "allow"

@@ -63,8 +63,8 @@ use crate::content::{LOOPS, ROOT, SAMPLES, SHAPES, content_path, web};
 use crate::flm::chunk::{ContentPath, ContentRoot};
 use crate::panels::inst::{slicer, three_osc};
 use crate::project_files::{
-    CARTRIDGE_EXT, DRUM_SAMPLES, OB_PATCH_EXTS, ProjectFiles, SAMPLE_EXTS, SAMPLES_FOLDER,
-    load_pick,
+    CARTRIDGE_EXT, DRUM_SAMPLES, OB_PATCH_EXTS, ODIN_PATCH_EXT, ProjectFiles, SAMPLE_EXTS,
+    SAMPLES_FOLDER, load_pick,
 };
 use crate::sample_cache::{self, SampleCache, SampleKey, Waveform, disk_reader};
 use crate::song::{Clip, DrumKit, Lane, LaneKind, ModuleInstance, PPQ, SamplerSlot, Song};
@@ -838,18 +838,23 @@ pub fn show_module(
         close(state, app.audio);
         return Some(Nav::Close);
     };
-    // Rind FM asks for DX7 cartridges and Rind OB for OB-Xd and OB-Xf patches, not samples: each lists and imports its
-    // files, and closes on a pick.
+    // Rind FM asks for DX7 cartridges, Rind OB for OB-Xd and OB-Xf patches and Rind Odin for Odin 2 patches, not
+    // samples: each lists and imports its files, and closes on a pick.
     let cartridge = (app.song.find_module(channel, module))
         .and_then(|m| m.file.plugin.as_deref())
         .and_then(crate::plugins::builtin::of)
         .map(|b| b.clap_id());
-    let patches = cartridge == Some(RIND_OB);
-    let cartridge = patches || cartridge == Some(RIND_FM);
+    let patches = match cartridge {
+        Some(RIND_OB) => Some(Patches::Ob),
+        Some(RIND_ODIN) => Some(Patches::Odin),
+        Some(RIND_FM) => Some(Patches::Dx7),
+        _ => None,
+    };
+    let cartridge = patches.is_some();
     state.cartridge = cartridge;
-    let make = |files: &ProjectFiles| match cartridge {
-        true => cartridge_picker(files, patches),
-        false => module_picker(files, type_id),
+    let make = |files: &ProjectFiles| match patches {
+        Some(kind) => cartridge_picker(files, kind),
+        None => module_picker(files, type_id),
     };
     // A 3x Osc's closes on a pick, so no sample strip: hidden, it waits for the pick to land. Any other previews its
     // picks in the strip and loads the last one on its close.
@@ -1024,15 +1029,31 @@ const RIND_FM: &str = "org.honeydew.rind-fm";
 /// Rind OB's clap id.
 const RIND_OB: &str = "org.honeydew.rind-ob";
 
-/// A fresh picker for Rind FM's DX7 cartridges (the `.syx` files of `My Samples` and `My Recordings`) or, with
-/// `patches`, for Rind OB's OB-Xd and OB-Xf patches (`.fxp`, `.fxb`), with `Import` into `My Samples` where `files`
+/// Rind Odin's clap id.
+const RIND_ODIN: &str = "org.honeydew.rind-odin";
+
+/// What a synth's patch picker lists.
+#[derive(Clone, Copy)]
+enum Patches {
+    /// Rind FM's DX7 cartridges (`.syx`).
+    Dx7,
+    /// Rind OB's OB-Xd and OB-Xf patches (`.fxp`, `.fxb`).
+    Ob,
+    /// Rind Odin's Odin 2 patches (`.odin`).
+    Odin,
+}
+
+/// A fresh picker for a synth's patch files (the files of `My Samples` and `My Recordings`: Rind FM's DX7 cartridges,
+/// Rind OB's OB-Xd and OB-Xf patches or Rind Odin's Odin 2 patches), with `Import` into `My Samples` where `files`
 /// takes one.
-fn cartridge_picker(files: &ProjectFiles, patches: bool) -> PresetPicker {
+fn cartridge_picker(files: &ProjectFiles, kind: Patches) -> PresetPicker {
     let user = files.user_dir().map(Path::to_owned);
     const CARTRIDGES: [&str; 1] = [CARTRIDGE_EXT];
-    let (title, exts) = match patches {
-        true => ("OB-Xd and OB-Xf Patches", &OB_PATCH_EXTS as &[&str]),
-        false => ("DX7 Cartridges", &CARTRIDGES as &[&str]),
+    const ODIN: [&str; 1] = [ODIN_PATCH_EXT];
+    let (title, exts) = match kind {
+        Patches::Ob => ("OB-Xd and OB-Xf Patches", &OB_PATCH_EXTS as &[&str]),
+        Patches::Odin => ("Odin 2 Patches", &ODIN as &[&str]),
+        Patches::Dx7 => ("DX7 Cartridges", &CARTRIDGES as &[&str]),
     };
     PresetPicker::new(title, user, exts[0], false)
         .of_exts(exts)
