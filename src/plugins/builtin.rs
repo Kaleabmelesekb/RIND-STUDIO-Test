@@ -78,6 +78,7 @@ const ENTRIES: &[*const c_void] = &lemon_plugins![
     ml_spectral_compressor,
     rind_fm,
     rind_ob,
+    rind_odin,
     rind_airwindows,
     rind_tape,
 ];
@@ -130,6 +131,7 @@ const VST3_CLASSES: &[(&str, &[u8; 16])] = &[
     ("org.honeydew.ml-spectral-compressor", b"MLSpectralComp01"),
     ("org.honeydew.rind-fm", b"RindFM0000000001"),
     ("org.honeydew.rind-ob", b"RindOB0000000001"),
+    ("org.honeydew.rind-odin", b"RindOdin00000001"),
     ("org.honeydew.rind-airwindows", b"RindAirwindows01"),
     ("org.honeydew.rind-tape", b"RindTape00000001"),
 ];
@@ -459,6 +461,7 @@ mod tests {
                 "clap:org.honeydew.ml-spectral-compressor",
                 "clap:org.honeydew.rind-fm",
                 "clap:org.honeydew.rind-ob",
+                "clap:org.honeydew.rind-odin",
                 "clap:org.honeydew.rind-airwindows",
                 "clap:org.honeydew.rind-tape",
             ]

@@ -27,10 +27,17 @@ pub const SAMPLE_EXTS: [&str; 4] = ["wav", "flac", "mp3", "ogg"];
 pub const CARTRIDGE_EXT: &str = "syx";
 /// The extensions of the OB-Xd and OB-Xf patches (`.fxp`) and banks (`.fxb`), which Rind OB loads.
 pub const OB_PATCH_EXTS: [&str; 2] = ["fxp", "fxb"];
-/// Everything a synth's file picker imports: the DX7 cartridges and the OB-Xd and OB-Xf patches.
-pub const CARTRIDGE_EXTS: [&str; 3] = [CARTRIDGE_EXT, OB_PATCH_EXTS[0], OB_PATCH_EXTS[1]];
+/// The extension of an Odin 2 patch, which Rind Odin loads.
+pub const ODIN_PATCH_EXT: &str = "odin";
+/// Everything a synth's file picker imports: the DX7 cartridges, the OB-Xd and OB-Xf patches and the Odin 2 patches.
+pub const CARTRIDGE_EXTS: [&str; 4] = [
+    CARTRIDGE_EXT,
+    OB_PATCH_EXTS[0],
+    OB_PATCH_EXTS[1],
+    ODIN_PATCH_EXT,
+];
 /// What the sample library lists: the audio files, and the cartridges and patches for the pickers that ask for them.
-const LISTED_EXTS: [&str; 7] = [
+const LISTED_EXTS: [&str; 8] = [
     "wav",
     "flac",
     "mp3",
@@ -38,6 +45,7 @@ const LISTED_EXTS: [&str; 7] = [
     CARTRIDGE_EXT,
     OB_PATCH_EXTS[0],
     OB_PATCH_EXTS[1],
+    ODIN_PATCH_EXT,
 ];
 /// The user folder MIDI files go to.
 pub const MIDI_FOLDER: &str = "My MIDI";

@@ -1,0 +1,258 @@
+amp_gain	Amplifier Gain	f	-30	12	1	0	0	
+amp_pan	Amplifier Panorama	f	-1	1	1	0	0	
+amp_velocity	Amplifier Velocity	f	0	1	1	0	0	
+arp_mod_transpose	Arp Mod Transpose	f	0	1	1	0	0	
+arp_on	Arpeggiator On	i	0	1	1	1	0	
+arp_one_shot	Arpeggiator OneShot	i	0	1	1	1	0	
+chorus_amount	Chorus Amount	f	0	1	1	0	0.400000006	
+chorus_drywet	Chorus DryWet	f	0	1	1	0	1	
+chorus_feedback	Chorus Feedback	f	-1	1	1	0	0	
+chorus_on	Chorus On	i	0	1	1	1	0	
+chorus_rate	Chorus Rate	f	0.0500000007	20	0.211266994	0	0.150000006	
+chorus_reset	Chorus Reset	i	0	1	1	1	0	
+delay_dry	Delay Dry	f	0	1	0.575716972	0	1	
+delay_ducking	Delay Ducking	f	0	1	1	0	0	
+delay_feedback	Delay Feedback	f	0	1	0.575716972	0	0.449999988	
+delay_hp	Delay Highpass Frequency	f	80	18000	0.25	0	80	
+delay_on	Delay On	i	0	1	1	1	0	
+delay_pingpong	Delay PingPong	i	0	1	1	1	0	
+delay_time	Delay Time	f	0.00999999978	3	0.627098978	0	1	
+delay_wet	Delay Wet	f	0	1	0.575716972	0	0.699999988	
+dist_boost	Distortion Boost	f	0	1	1	0	0.300000012	
+dist_drywet	Distortion DryWet	f	0	1	1	0	1	
+env1_attack	AmpEnv Attack	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env1_decay	AmpEnv Decay	f	0.00100000005	10	0.300911993	0	1	
+env1_loop	AmpEnv Loop	i	0	1	1	1	0	
+env1_release	AmpEnv Release	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env1_sustain	AmpEnv Sustain	f	0	1	0.575716972	0	0.5	
+env2_attack	FilterEnv Attack	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env2_decay	FilterEnv Decay	f	0.00100000005	10	0.300911993	0	0.800000012	
+env2_loop	FilterEnv Loop	i	0	1	1	1	0	
+env2_release	FilterEnv Release	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env2_sustain	FilterEnv Sustain	f	0	1	0.575716972	0	0	
+env3_attack	ModEnv Attack	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env3_decay	ModEnv Decay	f	0.00100000005	10	0.300911993	0	0.800000012	
+env3_loop	ModEnv Loop	i	0	1	1	1	0	
+env3_release	ModEnv Release	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env3_sustain	ModEnv Sustain	f	0	1	0.575716972	0	0	
+env4_attack	GlobalEnv Attack	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env4_decay	GlobalEnv Decay	f	0.00100000005	10	0.300911993	0	1	
+env4_loop	GlobalEnv Loop	i	0	1	1	1	0	
+env4_release	GlobalEnv Release	f	0.00100000005	10	0.300911993	0	0.00999999978	
+env4_sustain	GlobalEnv Sustain	f	0	1	0.575716972	0	0.5	
+fil1_env	Filter1 Envelope Amount	f	-1	1	1	0	0	
+fil1_formant_transition	Filter1 Formant Transition	f	0	1	1	0	0	
+fil1_freq	Filter1 Frequency	f	20	20000	0.25	0	20000	
+fil1_gain	Filter1 Gain	f	-60	12	1	0	0	
+fil1_kbd	Filter1 Keyboard Follow	f	0	1	1	0	0	
+fil1_osc1	Filter1 Osc1 Input	i	0	1	1	1	1	
+fil1_osc2	Filter1 Osc2 Input	i	0	1	1	1	1	
+fil1_osc3	Filter1 Osc3 Input	i	0	1	1	1	1	
+fil1_res	Filter1 Resonance	f	0	1	1	0	0	
+fil1_ring_mod_amount	Filter1 RingMod Amount	f	0	1	1	0	1	
+fil1_saturation	Filter1 Saturation	f	0	1	1	0	0	
+fil1_sem_transition	Filter1 SEM Transition	f	-1	1	1	0	-1	
+fil1_to_amp	Filter1 To Amplifier	i	0	1	1	1	0	
+fil1_vel	Filter1 Velocity Amount	f	0	1	1	0	0	
+fil2_env	Filter2 Envelope Amount	f	-1	1	1	0	0	
+fil2_fil1	Filter2 Filter1 Input	i	0	1	1	1	1	
+fil2_formant_transition	Filter2 Formant Transition	f	0	1	1	0	0	
+fil2_freq	Filter2 Frequency	f	20	20000	0.25	0	2000	
+fil2_gain	Filter2 Gain	f	-60	12	1	0	0	
+fil2_kbd	Filter2 Keyboard Follow	f	0	1	1	0	0	
+fil2_osc1	Filter2 Osc1 Input	i	0	1	1	1	0	
+fil2_osc2	Filter2 Osc2 Input	i	0	1	1	1	0	
+fil2_osc3	Filter2 Osc3 Input	i	0	1	1	1	0	
+fil2_res	Filter2 Resonance	f	0	1	1	0	0	
+fil2_ring_mod_amount	Filter2 RingMod Amount	f	0	1	1	0	1	
+fil2_saturation	Filter2 Saturation	f	0	1	1	0	0	
+fil2_sem_transition	Filter2 SEM Transition	f	-1	1	1	0	-1	
+fil2_to_amp	Filter2 To Amplifier	i	0	1	1	1	1	
+fil2_vel	Filter2 Velocity Amount	f	0	1	1	0	0	
+fil3_env	Filter3 Envelope Amount	f	-1	1	1	0	0	
+fil3_formant_transition	Filter3 Formant Transition	f	0	1	1	0	0	
+fil3_freq	Filter3 Frequency	f	20	20000	0.25	0	2000	
+fil3_gain	Filter3 Gain	f	-60	12	1	0	0	
+fil3_kbd	Filter3 Keyboard Follow	f	0	1	1	0	0	
+fil3_res	Filter3 Resonance	f	0	1	1	0	0	
+fil3_ring_mod_amount	Filter3 RingMod Amount	f	0	1	1	0	1	
+fil3_saturation	Filter3 Saturation	f	0	1	1	0	0	
+fil3_sem_transition	Filter3 SEM Transition	f	-1	1	1	0	-1	
+fil3_vel	Filter3 Velocity Amount	f	0	1	1	0	0	
+flanger_amount	Flanger Amount	f	0	1	1	0	0.300000012	
+flanger_drywet	Flanger DryWet	f	0	1	1	0	1	
+flanger_feedback	Flanger Feedback	f	-1	1	1	0	0.600000024	
+flanger_on	Flanger On	i	0	1	1	1	0	
+flanger_rate	Flanger Rate	f	0.0500000007	20	0.211266994	0	0.150000006	
+flanger_reset	Flanger Reset	i	0	1	1	1	0	
+glide	Glide	f	0	1	1	0	0	
+lfo1_freq	LFO1 Frequency	f	0.0500000007	100	0.196757004	0	1	
+lfo1_reset	LFO1 Reset	i	0	1	1	1	0	
+lfo2_freq	LFO2 Frequency	f	0.0500000007	100	0.196757004	0	1	
+lfo2_reset	LFO2 Reset	i	0	1	1	1	0	
+lfo3_freq	LFO3 Frequency	f	0.0500000007	100	0.196757004	0	1	
+lfo3_reset	LFO3 Reset	i	0	1	1	1	0	
+lfo4_freq	LFO4 Frequency	f	0.0500000007	100	0.196757004	0	1	
+lfo4_reset	LFO4 Reset	i	0	1	1	1	0	
+master	Master	f	-50	12	1	0	-7	
+modwheel	Modwheel	f	0	1	1	0	0	
+osc1_arp_on	Osc1 Arpeggiator On	i	0	1	1	1	0	
+osc1_arp_speed	Osc1 Arpeggiator Speed	f	1	100	0.354357988	0	20	
+osc1_chipnoise	Osc1 Chipnoise	i	0	1	1	1	0	
+osc1_detune	Osc1 Detune	f	0	1	1	0	0.200000003	
+osc1_drift	Osc1 Drift	f	0	1	1	0	0	
+osc1_exp_fm	Osc1 Exponential FM	i	0	1	1	1	0	
+osc1_fine	Osc1 Finetune	f	-50	50	1	0	0	
+osc1_fm	Osc1 FM/PM amount	f	0	1	1	0	0	
+osc1_hp	Osc1 Noise Highpass	f	80	18000	0.25	0	80	
+osc1_lp	Osc1 Noise Lowpass	f	80	18000	0.25	0	18000	
+osc1_multi_position	Osc1 Multi Position	f	0	1	1	0	0	
+osc1_oct	Osc1 Octave	i	-4	4	1	1	0	
+osc1_pos_mod	Osc1 Position Modulation	f	-1	1	1	0	0	
+osc1_position	Osc1 Wavetble Position	f	0	1	1	0	0	
+osc1_pulsewidth	Osc1 PulseWidth	f	0	1	1	0	0.5	
+osc1_reset	Osc1 Reset	i	0	1	1	1	0	
+osc1_semi	Osc1 Semitones	i	-12	12	1	1	0	
+osc1_spread	Osc1 Wavetable Spread	f	0	1	1	0	0	
+osc1_step_1	Osc1 Step1	i	-12	12	1	1	0	
+osc1_step_2	Osc1 Step2	i	-12	12	1	1	12	
+osc1_step_3	Osc1 Step3	i	-12	12	1	1	7	
+osc1_step_3_on	Osc1 Step3 On	i	0	1	1	1	0	
+osc1_vec_x	Osc1 Vector X	f	0	1	1	0	0	
+osc1_vec_y	Osc1 Vector Y	f	0	1	1	0	0	
+osc1_vol	Osc1 Volume	f	-60	12	1	0	0	
+osc2_arp_on	Osc2 Arpeggiator On	i	0	1	1	1	0	
+osc2_arp_speed	Osc2 Arpeggiator Speed	f	1	100	0.354357988	0	20	
+osc2_chipnoise	Osc2 Chipnoise	i	0	1	1	1	0	
+osc2_detune	Osc2 Detune	f	0	1	1	0	0.200000003	
+osc2_drift	Osc2 Drift	f	0	1	1	0	0	
+osc2_exp_fm	Osc2 Exponential FM	i	0	1	1	1	0	
+osc2_fine	Osc2 Finetune	f	-50	50	1	0	0	
+osc2_fm	Osc2 FM/PM amount	f	0	1	1	0	0	
+osc2_hp	Osc2 Noise Highpass	f	80	18000	0.25	0	80	
+osc2_lp	Osc2 Noise Lowpass	f	80	18000	0.25	0	18000	
+osc2_multi_position	Osc2 Multi Position	f	0	1	1	0	0	
+osc2_oct	Osc2 Octave	i	-4	4	1	1	0	
+osc2_pos_mod	Osc2 Position Modulation	f	-1	1	1	0	0	
+osc2_position	Osc2 Wavetable Position	f	0	1	1	0	0	
+osc2_pulsewidth	Osc2 PulseWidth	f	0	1	1	0	0.5	
+osc2_reset	Osc2 Reset	i	0	1	1	1	0	
+osc2_semi	Osc2 Semitones	i	-12	12	1	1	0	
+osc2_spread	Osc2 Wavetable Spread	f	0	1	1	0	0	
+osc2_step_1	Osc2 Step1	i	-12	12	1	1	0	
+osc2_step_2	Osc2 Step2	i	-12	12	1	1	12	
+osc2_step_3	Osc2 Step3	i	-12	12	1	1	7	
+osc2_step_3_on	Osc2 Step3 On	i	0	1	1	1	0	
+osc2_sync	Osc2 Sync	i	0	1	1	1	0	
+osc2_vec_x	Osc2 Vector X	f	0	1	1	0	0	
+osc2_vec_y	Osc2 Vector Y	f	0	1	1	0	0	
+osc2_vol	Osc2 Volume	f	-60	12	1	0	0	
+osc3_arp_on	Osc3 Arpeggiator On	i	0	1	1	1	0	
+osc3_arp_speed	Osc3 Arpeggiator Speed	f	1	100	0.354357988	0	20	
+osc3_chipnoise	Osc3 Chipnoise	i	0	1	1	1	0	
+osc3_detune	Osc3 Detune	f	0	1	1	0	0.200000003	
+osc3_drift	Osc3 Drift	f	0	1	1	0	0	
+osc3_exp_fm	Osc3 Exponential FM	i	0	1	1	1	0	
+osc3_fine	Osc3 Finetune	f	-50	50	1	0	0	
+osc3_fm	Osc3 FM/PM amount	f	0	1	1	0	0	
+osc3_hp	Osc3 Noise Highpass	f	80	18000	0.25	0	80	
+osc3_lp	Osc3 Noise Lowpass	f	80	18000	0.25	0	18000	
+osc3_multi_position	Osc3 Multi Position	f	0	1	1	0	0	
+osc3_oct	Osc3 Octave	i	-4	4	1	1	0	
+osc3_pos_mod	Osc3 Position Modulation	f	-1	1	1	0	0	
+osc3_position	Osc3 Wavetable Position	f	0	1	1	0	0	
+osc3_pulsewidth	Osc3 PulseWidth	f	0	1	1	0	0.5	
+osc3_reset	Osc3 Reset	i	0	1	1	1	0	
+osc3_semi	Osc3 Semitones	i	-12	12	1	1	0	
+osc3_spread	Osc3 Wavetable Spread	f	0	1	1	0	0	
+osc3_step_1	Osc3 Step1	i	-12	12	1	1	0	
+osc3_step_2	Osc3 Step2	i	-12	12	1	1	12	
+osc3_step_3	Osc3 Step3	i	-12	12	1	1	7	
+osc3_step_3_on	Osc3 Step3 On	i	0	1	1	1	0	
+osc3_sync	Osc3 Sync	i	0	1	1	1	0	
+osc3_vec_x	Osc3 Vector X	f	0	1	1	0	0	
+osc3_vec_y	Osc3 Vector Y	f	0	1	1	0	0	
+osc3_vol	Osc3 Volume	f	-60	12	1	0	0	
+phaser_drywet	Phaser DryWet	f	0	1	1	0	1	
+phaser_feedback	Phaser Feedback	f	0	1	1	0	0.25	
+phaser_freq	Phaser Frequency	f	40	8000	0.444853991	0	4000	
+phaser_mod	Phaser Amount	f	0	1	1	0	0.300000012	
+phaser_on	Phaser On	i	0	1	1	1	0	
+phaser_rate	Phaser Rate	f	0.0500000007	20	0.211266994	0	0.25	
+phaser_reset	Phaser Reset	i	0	1	1	1	0	
+pitchbend	Pitchbend	f	-1	1	1	0	0	
+rev_delay	Reverb PreDelay	f	20	80	1	0	40	
+rev_drywet	Reverb DryWet	f	0	1	0.699999988	0	0.25	
+rev_eqfreq	Reverb EQ Freq	f	100	10000	0.25	0	1000	
+rev_eqgain	Reverb EQ Gain	f	-12	12	1	0	0	
+rev_hf_damp	Reverb High Freq Damp	f	1500	24000	0.25	0	6000	
+rev_mid_hall	Reverb Mid Hall	f	1	8	1	0	2	
+reverb_on	Reverb On	i	0	1	1	1	0	
+step_0_mod_1	Arp Step 1 Mod 1	f	-1	1	1	0	0	
+step_0_mod_2	Arp Step 1 Mod 2	f	-1	1	1	0	0	
+step_0_on	Arp Step 1 On	i	0	1	1	1	1	
+step_0_transpose	Arp Step 1 Transpose	i	-24	24	1	1	0	
+step_10_mod_1	Arp Step 11 Mod 1	f	-1	1	1	0	0	
+step_10_mod_2	Arp Step 11 Mod 2	f	-1	1	1	0	0	
+step_10_on	Arp Step 11 On	i	0	1	1	1	1	
+step_10_transpose	Arp Step 11 Transpose	i	-24	24	1	1	0	
+step_11_mod_1	Arp Step 12 Mod 1	f	-1	1	1	0	0	
+step_11_mod_2	Arp Step 12 Mod 2	f	-1	1	1	0	0	
+step_11_on	Arp Step 12 On	i	0	1	1	1	1	
+step_11_transpose	Arp Step 12 Transpose	i	-24	24	1	1	0	
+step_12_mod_1	Arp Step 13 Mod 1	f	-1	1	1	0	0	
+step_12_mod_2	Arp Step 13 Mod 2	f	-1	1	1	0	0	
+step_12_on	Arp Step 13 On	i	0	1	1	1	1	
+step_12_transpose	Arp Step 13 Transpose	i	-24	24	1	1	0	
+step_13_mod_1	Arp Step 14 Mod 1	f	-1	1	1	0	0	
+step_13_mod_2	Arp Step 14 Mod 2	f	-1	1	1	0	0	
+step_13_on	Arp Step 14 On	i	0	1	1	1	1	
+step_13_transpose	Arp Step 14 Transpose	i	-24	24	1	1	0	
+step_14_mod_1	Arp Step 15 Mod 1	f	-1	1	1	0	0	
+step_14_mod_2	Arp Step 15 Mod 2	f	-1	1	1	0	0	
+step_14_on	Arp Step 15 On	i	0	1	1	1	1	
+step_14_transpose	Arp Step 15 Transpose	i	-24	24	1	1	0	
+step_15_mod_1	Arp Step 16 Mod 1	f	-1	1	1	0	0	
+step_15_mod_2	Arp Step 16 Mod 2	f	-1	1	1	0	0	
+step_15_on	Arp Step 16 On	i	0	1	1	1	1	
+step_15_transpose	Arp Step 16 Transpose	i	-24	24	1	1	0	
+step_1_mod_1	Arp Step 2 Mod 1	f	-1	1	1	0	0	
+step_1_mod_2	Arp Step 2 Mod 2	f	-1	1	1	0	0	
+step_1_on	Arp Step 2 On	i	0	1	1	1	1	
+step_1_transpose	Arp Step 2 Transpose	i	-24	24	1	1	0	
+step_2_mod_1	Arp Step 3 Mod 1	f	-1	1	1	0	0	
+step_2_mod_2	Arp Step 3 Mod 2	f	-1	1	1	0	0	
+step_2_on	Arp Step 3 On	i	0	1	1	1	1	
+step_2_transpose	Arp Step 3 Transpose	i	-24	24	1	1	0	
+step_3_mod_1	Arp Step 4 Mod 1	f	-1	1	1	0	0	
+step_3_mod_2	Arp Step 4 Mod 2	f	-1	1	1	0	0	
+step_3_on	Arp Step 4 On	i	0	1	1	1	1	
+step_3_transpose	Arp Step 4 Transpose	i	-24	24	1	1	0	
+step_4_mod_1	Arp Step 5 Mod 1	f	-1	1	1	0	0	
+step_4_mod_2	Arp Step 5 Mod 2	f	-1	1	1	0	0	
+step_4_on	Arp Step 5 On	i	0	1	1	1	1	
+step_4_transpose	Arp Step 5 Transpose	i	-24	24	1	1	0	
+step_5_mod_1	Arp Step 6 Mod 1	f	-1	1	1	0	0	
+step_5_mod_2	Arp Step 6 Mod 2	f	-1	1	1	0	0	
+step_5_on	Arp Step 6 On	i	0	1	1	1	1	
+step_5_transpose	Arp Step 6 Transpose	i	-24	24	1	1	0	
+step_6_mod_1	Arp Step 7 Mod 1	f	-1	1	1	0	0	
+step_6_mod_2	Arp Step 7 Mod 2	f	-1	1	1	0	0	
+step_6_on	Arp Step 7 On	i	0	1	1	1	1	
+step_6_transpose	Arp Step 7 Transpose	i	-24	24	1	1	0	
+step_7_mod_1	Arp Step 8 Mod 1	f	-1	1	1	0	0	
+step_7_mod_2	Arp Step 8 Mod 2	f	-1	1	1	0	0	
+step_7_on	Arp Step 8 On	i	0	1	1	1	1	
+step_7_transpose	Arp Step 8 Transpose	i	-24	24	1	1	0	
+step_8_mod_1	Arp Step 9 Mod 1	f	-1	1	1	0	0	
+step_8_mod_2	Arp Step 9 Mod 2	f	-1	1	1	0	0	
+step_8_on	Arp Step 9 On	i	0	1	1	1	1	
+step_8_transpose	Arp Step 9 Transpose	i	-24	24	1	1	0	
+step_9_mod_1	Arp Step 10 Mod 1	f	-1	1	1	0	0	
+step_9_mod_2	Arp Step 10 Mod 2	f	-1	1	1	0	0	
+step_9_on	Arp Step 10 On	i	0	1	1	1	1	
+step_9_transpose	Arp Step 10 Transpose	i	-24	24	1	1	0	
+unison_detune	Unison Detune	f	0	0.600000024	0.5	0	0.0799999982	
+unison_width	Unison Width	f	0	1	1	0	0.699999988	
+xy_x	XY Pad X	f	0	1	1	0	0	
+xy_y	XY Pad Y	f	0	1	1	0	0	

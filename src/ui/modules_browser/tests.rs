@@ -100,6 +100,7 @@ const SPEC: &[(&str, &[&str])] = &[
             "Lemon Trio",
             "Rind FM",
             "Rind OB",
+            "Rind Odin",
             "Smith",
             "Airwindows",
             "Lemon Balance",
@@ -265,6 +266,7 @@ fn where_no_instrument_goes_the_list_leaves_out_instrument_the_synths_and_the_no
             "Lemon SoundFont Player",
             "Rind FM",
             "Rind OB",
+            "Rind Odin",
             "Smith",
         ];
         let notes = [
@@ -954,6 +956,7 @@ fn top_level_lists_the_actions_then_the_instruments_then_the_effects_each_by_typ
             "Lemon Trio",
             "Rind FM",
             "Rind OB",
+            "Rind Odin",
             "Smith",
             // Effects: 3 … 46, then the note effects 47 … 51.
             "Equalizer",
