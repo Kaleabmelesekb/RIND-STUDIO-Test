@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Rind Odin's editor: the synth on seven pages (the oscillators, the filters, the envelopes and LFOs, the effects, the
 //! modulation matrix, the arpeggiator and voice, the patches), drawn in the ML Studio look. Knobs and switches are the
-//! host's parameters (the editor drags them); the tabs, the steppers and the patch list are this extension's.
+//! host's parameters (the editor drags them); the tabs, the drop-downs and the patch list are this extension's.
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -46,10 +46,46 @@ enum Act {
     List(i32),
     Init,
     Open,
-    /// A stepper's setting one place on (wraps round).
-    Nudge(usize, i32),
-    /// A destination's setting to the first of the next group.
-    Group(usize),
+    /// A drop-down's field: its choices open under it.
+    Menu(usize),
+    /// A choice picked in the open drop-down.
+    Choose(usize, i32),
+    /// The open drop-down's next (or previous) page of choices.
+    MenuPage(i32),
+    /// A click on the open drop-down's own panel, between its choices.
+    Nothing,
+    /// A click away from the open drop-down.
+    CloseMenu,
+}
+
+/// An open drop-down: the setting, the field it came from and the page of its choices that shows.
+#[derive(Clone, Copy)]
+struct Menu {
+    k: usize,
+    anchor: Rect,
+    page: usize,
+}
+
+const EDITOR: (f32, f32) = (760.0, 560.0);
+const CHOICE_H: f32 = 24.0;
+const MENU_ROWS: usize = 14;
+
+/// How a drop-down of `n` choices lays out: its columns, rows and the choices a page holds.
+fn menu_shape(n: usize) -> (usize, usize, usize) {
+    let cols = match n {
+        0..=14 => 1,
+        15..=28 => 2,
+        _ => 3,
+    };
+    let rows = n.div_ceil(cols).clamp(1, MENU_ROWS);
+    (cols, rows, cols * rows)
+}
+
+/// The number of choices of setting `k` and the number of pages they take.
+fn menu_size(k: usize) -> (usize, usize) {
+    let (lo, hi) = SETTINGS[k].range;
+    let n = (hi - lo + 1).max(0) as usize;
+    (n, n.div_ceil(menu_shape(n).2).max(1))
 }
 
 /// The patch the editor says is loaded.
@@ -70,6 +106,8 @@ struct St {
     category: usize,
     list: usize,
     acts: Vec<(Rect, Act)>,
+    /// The drop-down that is open.
+    menu: Option<Menu>,
     /// The patches of the files opened.
     user: Vec<User>,
     /// The editor asked for a file to open.
@@ -106,6 +144,7 @@ impl Panel {
             category,
             list: 0,
             acts: Vec::new(),
+            menu: None,
             user: Vec::new(),
             dialog: false,
             note: None,
@@ -242,13 +281,30 @@ impl Extension for Panel {
         ("Open an Odin 2 patch", "Odin 2 patches", &["odin"])
     }
 
+    fn wheel(&self, _x: f32, _y: f32, notches: f32) -> bool {
+        let Ok(mut st) = self.st.lock() else { return false };
+        let Some(m) = &mut st.menu else { return false };
+        let pages = menu_size(m.k).1 as i32;
+        if pages > 1 && notches != 0.0 {
+            let d = if notches < 0.0 { 1 } else { -1 };
+            m.page = (m.page as i32 + d).rem_euclid(pages) as usize;
+        }
+        true
+    }
+
     fn click(&self, x: f32, y: f32, ctx: Option<&Arc<dyn GuiContext>>) -> bool {
         let act = {
             let Ok(mut st) = self.st.lock() else { return false };
             if ctx.is_some() {
                 st.ctx = ctx.cloned();
             }
-            let Some(&(_, act)) = st.acts.iter().rev().find(|(r, _)| r.contains(x, y)) else { return false };
+            let Some(&(field, act)) = st.acts.iter().rev().find(|(r, _)| r.contains(x, y)) else { return false };
+            if let Act::Menu(k) = act {
+                let (lo, _) = SETTINGS[k].range;
+                let per = menu_shape(menu_size(k).0).2;
+                let page = (self.params.v(k) - lo).max(0) as usize / per;
+                st.menu = Some(Menu { k, anchor: field, page });
+            }
             act
         };
         match act {
@@ -283,24 +339,24 @@ impl Extension for Panel {
             }),
             Act::Init => self.init(ctx),
             Act::Open => self.with(|st| st.dialog = true),
-            Act::Nudge(k, d) => {
-                let (lo, hi) = SETTINGS[k].range;
-                let span = hi - lo + 1;
-                let now = self.params.v(k);
-                self.set(k, lo + (now - lo + d).rem_euclid(span), ctx);
+            Act::Menu(_) | Act::Nothing => {}
+            Act::Choose(k, v) => {
+                self.with(|st| st.menu = None);
+                self.set(k, v, ctx);
             }
-            Act::Group(k) => {
-                let now = self.params.v(k).max(0) as usize;
-                let group = DEST_GROUP.get(now).copied().unwrap_or(0);
-                let next = (0..DEST_GROUP.len()).cycle().skip(now).take(DEST_GROUP.len()).find(|&i| DEST_GROUP[i] != group);
-                self.set(k, next.unwrap_or(0) as i32, ctx);
-            }
+            Act::MenuPage(d) => self.with(|st| {
+                if let Some(m) = &mut st.menu {
+                    let pages = menu_size(m.k).1 as i32;
+                    m.page = (m.page as i32 + d).rem_euclid(pages) as usize;
+                }
+            }),
+            Act::CloseMenu => self.with(|st| st.menu = None),
         }
         true
     }
 
     fn render(&self, c: &mut Canvas, m: &dyn Model, state: &ViewState, _hint: &str) -> Option<Vec<Hit>> {
-        let (page, category, list, user_count, names, note) = {
+        let (page, category, list, user_count, names, note, menu) = {
             let st = self.st.lock().ok()?;
             let names = if st.page == PATCHES_PAGE && st.category == imported() {
                 st.user.iter().map(|p| p.name.clone()).collect()
@@ -308,7 +364,7 @@ impl Extension for Panel {
                 Vec::new()
             };
             let note = st.note.as_ref().filter(|(_, t)| t.elapsed() < NOTE_FOR).map(|(s, _)| s.clone());
-            (st.page, st.category, st.list, st.user.len(), names, note)
+            (st.page, st.category, st.list, st.user.len(), names, note, st.menu)
         };
         // The patch the saved state names, read once.
         let source = crate::source_of(&self.params.raw_copy());
@@ -367,6 +423,9 @@ impl Extension for Panel {
             4 => ui.matrix(),
             5 => ui.arp(),
             _ => ui.patches(category, list, loaded, &names, user_count),
+        }
+        if let Some(menu) = menu {
+            ui.menu(menu);
         }
         let (hits, acts) = (ui.hits, ui.acts);
         if let Ok(mut st) = self.st.lock() {
@@ -463,20 +522,63 @@ impl Ui<'_> {
         self.hits.push(Hit { r, t: target });
     }
 
-    /// A selector setting as a field with its value in it and an arrow at each end; a tap on an arrow steps (and wraps
-    /// round), and a tap on the name steps on too (`jump`: to the next group, for a destination).
-    fn stepper(&mut self, k: usize, r: Rect, jump: bool) {
+    /// A selector setting as a field with its value in it; a tap opens a drop-down of the choices under it.
+    fn dropdown(&mut self, k: usize, r: Rect) {
         let st = State { hover: self.hover(r), ..State::NORMAL };
         lemon::field(self.c, r, st);
         let text = self.m.text(SETTINGS[k].id);
-        let off = jump && self.value(k) == 0 || text == "Off" || text == "OFF";
-        let name = trim(&text, ((r.w - 36.0) / 6.0) as usize);
-        self.c.text_center(LABEL, Rect::new(r.x + 18.0, r.y, r.w - 36.0, r.h), if off { plug::DIM } else { brand::MAIN }, &name);
-        self.c.text_center(LABEL, Rect::new(r.x, r.y, 18.0, r.h), plug::DIM, "<");
-        self.c.text_center(LABEL, Rect::new(r.right() - 18.0, r.y, 18.0, r.h), plug::DIM, ">");
-        self.acts.push((r, if jump { Act::Group(k) } else { Act::Nudge(k, 1) }));
-        self.acts.push((Rect::new(r.x, r.y, 22.0, r.h), Act::Nudge(k, -1)));
-        self.acts.push((Rect::new(r.right() - 22.0, r.y, 22.0, r.h), Act::Nudge(k, 1)));
+        let off = text == "Off" || text == "OFF";
+        let name = trim(&text, ((r.w - 30.0) / 6.0) as usize);
+        self.c.text_center(LABEL, Rect::new(r.x + 6.0, r.y, r.w - 26.0, r.h), if off { plug::DIM } else { brand::MAIN }, &name);
+        let (cx, cy) = (r.right() - 12.0, r.y + r.h / 2.0);
+        self.c.fill_polygon(&[(cx - 4.0, cy - 2.0), (cx + 4.0, cy - 2.0), (cx, cy + 3.0)], plug::DIM);
+        self.acts.push((r, Act::Menu(k)));
+    }
+
+    /// The open drop-down, over the editor: a click away from it closes it, a click on a choice picks it.
+    fn menu(&mut self, menu: Menu) {
+        let k = menu.k;
+        let (lo, _) = SETTINGS[k].range;
+        let (n, pages) = menu_size(k);
+        let (cols, rows, per) = menu_shape(n);
+        let col_w = if cols == 1 { menu.anchor.w.max(150.0) } else { 176.0 };
+        let (w, foot) = (cols as f32 * col_w + 12.0, if pages > 1 { 32.0 } else { 0.0 });
+        let h = rows as f32 * CHOICE_H + 12.0 + foot;
+        let x = menu.anchor.x.min(EDITOR.0 - 8.0 - w).max(8.0);
+        let below = menu.anchor.y + menu.anchor.h + 2.0;
+        let y = if below + h <= EDITOR.1 - 8.0 { below } else { (menu.anchor.y - h - 2.0).max(8.0) };
+        self.hits.clear();
+        self.acts.clear();
+        self.c.fill_rect(Rect::new(0.0, 0.0, EDITOR.0, EDITOR.1), plug::BG.with_alpha(150));
+        self.acts.push((Rect::new(0.0, 0.0, EDITOR.0, EDITOR.1), Act::CloseMenu));
+        let panel = Rect::new(x, y, w, h);
+        lemon::plug_panel(self.c, panel);
+        self.acts.push((panel, Act::Nothing));
+        let now = self.value(k);
+        let page = menu.page.min(pages - 1);
+        for slot in 0..per {
+            let i = page * per + slot;
+            if i >= n {
+                break;
+            }
+            let v = lo + i as i32;
+            let (col, row) = (slot / rows, slot % rows);
+            let r = Rect::new(x + 6.0 + col as f32 * col_w, y + 6.0 + row as f32 * CHOICE_H, col_w, CHOICE_H);
+            let on = v == now;
+            if on || self.hover(r) {
+                self.c.fill_rrect(r.inset(1.0), 5.0, if on { Color::rgb(0x4a4a32) } else { Color::rgb(0x424242) });
+            }
+            let label = trim(&crate::text(k, v), ((col_w - 16.0) / 6.0) as usize);
+            self.c.text(LABEL, r.x + 8.0, r.y + 7.0, if on { brand::MAIN } else { Color::rgb(0xdcdcdc) }, &label);
+            self.acts.push((r, Act::Choose(k, v)));
+        }
+        if pages > 1 {
+            let by = y + h - foot + 2.0;
+            self.button(Rect::new(x + 8.0, by, 56.0, 26.0), "<", Act::MenuPage(-1), false);
+            self.button(Rect::new(x + w - 64.0, by, 56.0, 26.0), ">", Act::MenuPage(1), false);
+            let label = format!("{} - {} OF {}", page * per + 1, ((page + 1) * per).min(n), n);
+            self.c.text_center(LABEL, Rect::new(x + 70.0, by, w - 140.0, 26.0), plug::DIM, &label);
+        }
     }
 
     fn lcd(&mut self, head: &str, sub: &str) {
@@ -496,7 +598,7 @@ impl Ui<'_> {
         self.knob(MASTER, 424.0, 76.0, 11.0, "MASTER");
         self.knob(GLIDE, 486.0, 76.0, 11.0, "GLIDE");
         self.switch(ARP_ON, 540.0, 76.0, "ARP");
-        self.stepper(LEGATO, Rect::new(612.0, 62.0, 130.0, 26.0), false);
+        self.dropdown(LEGATO, Rect::new(612.0, 62.0, 130.0, 26.0));
     }
 
     /// The knobs of a row, `per` to a row from (`x`, `y`) at `step` apart.
@@ -510,7 +612,7 @@ impl Ui<'_> {
         for n in 0..3 {
             let x = 8.0 + 252.0 * n as f32;
             self.card(Rect::new(x, 112.0, 240.0, 440.0), &format!("OSC {}", n + 1));
-            self.stepper(OSC_TYPE[n], Rect::new(x + 10.0, 136.0, 220.0, 24.0), false);
+            self.dropdown(OSC_TYPE[n], Rect::new(x + 10.0, 136.0, 220.0, 24.0));
             let kind = T_OSC_TYPES.get(self.value(OSC_TYPE[n]).max(0) as usize).map_or(0, |t| t.0);
             if kind == 1 {
                 self.c.text_center(ROW, Rect::new(x, 300.0, 240.0, 20.0), plug::DIM, "OFF");
@@ -546,7 +648,7 @@ impl Ui<'_> {
                         self.option(OSC_ANALOG_WAVE[n], *v, wave == *v, x + 20.0 + 108.0 * (i % 2) as f32, 372.0 + 24.0 * (i / 2) as f32, name);
                     }
                 }
-                3 | 4 => self.stepper(OSC_WAVETABLE[n], Rect::new(x + 10.0, 336.0, 220.0, 24.0), false),
+                3 | 4 => self.dropdown(OSC_WAVETABLE[n], Rect::new(x + 10.0, 336.0, 220.0, 24.0)),
                 20..=22 => self.c.text_center(CAP, Rect::new(x, 340.0, 240.0, 14.0), plug::DIM, "THE WAVE IS THE PATCH'S OWN"),
                 _ => {}
             }
@@ -574,7 +676,7 @@ impl Ui<'_> {
         for n in 0..3 {
             let x = 8.0 + 252.0 * n as f32;
             self.card(Rect::new(x, 112.0, 240.0, 440.0), &format!("FILTER {}", n + 1));
-            self.stepper(FIL_TYPE[n], Rect::new(x + 10.0, 136.0, 220.0, 24.0), false);
+            self.dropdown(FIL_TYPE[n], Rect::new(x + 10.0, 136.0, 220.0, 24.0));
             let kind = T_FIL_TYPES.get(self.value(FIL_TYPE[n]).max(0) as usize).map_or(0, |t| t.0);
             if kind == 1 {
                 self.c.text_center(ROW, Rect::new(x, 300.0, 240.0, 20.0), plug::DIM, "OFF");
@@ -627,13 +729,13 @@ impl Ui<'_> {
             let y = 112.0 + 111.0 * n as f32;
             self.card(Rect::new(388.0, y, 364.0, 106.0), names[n]);
             self.knob(LFO_FREQ[n], 424.0, y + 62.0, 14.0, "FREQUENCY");
-            self.stepper(LFO_WAVE[n], Rect::new(468.0, y + 26.0, 130.0, 24.0), false);
+            self.dropdown(LFO_WAVE[n], Rect::new(468.0, y + 26.0, 130.0, 24.0));
             self.switch(LFO_SYNC[n], 614.0, y + 38.0, "SYNC");
             self.switch(LFO_RESET[n], 680.0, y + 38.0, "RESET");
             // The synced rate: n / d of a bar.
-            self.stepper(LFO_SYNCTIME_NUMERATOR[n], Rect::new(468.0, y + 64.0, 62.0, 24.0), false);
+            self.dropdown(LFO_SYNCTIME_NUMERATOR[n], Rect::new(468.0, y + 64.0, 62.0, 24.0));
             self.c.text_center(LABEL, Rect::new(530.0, y + 64.0, 14.0, 24.0), plug::DIM, "/");
-            self.stepper(LFO_SYNCTIME_DENOMINATOR[n], Rect::new(544.0, y + 64.0, 62.0, 24.0), false);
+            self.dropdown(LFO_SYNCTIME_DENOMINATOR[n], Rect::new(544.0, y + 64.0, 62.0, 24.0));
         }
     }
 
@@ -642,7 +744,7 @@ impl Ui<'_> {
         // Distortion.
         self.card(Rect::new(x0, 112.0, 364.0, 140.0), "DISTORTION");
         self.switch(DIST_ON, x0 + 20.0, 146.0, "ON");
-        self.stepper(DIST_ALGO, Rect::new(x0 + 90.0, 134.0, 140.0, 24.0), false);
+        self.dropdown(DIST_ALGO, Rect::new(x0 + 90.0, 134.0, 140.0, 24.0));
         self.knobs(&[(DIST_BOOST, "BOOST"), (DIST_DRYWET, "DRY/WET")], x0 + 44.0, 208.0, 70.0, 2, 0.0, 14.0);
         // Delay.
         self.card(Rect::new(x1, 112.0, 364.0, 140.0), "DELAY");
@@ -688,12 +790,12 @@ impl Ui<'_> {
         }
         for r in 0..9 {
             let y = 134.0 + 46.0 * r as f32;
-            self.stepper(MOD_SOURCE[r], Rect::new(16.0, y + 2.0, 116.0, 24.0), false);
-            self.stepper(MOD_DEST1[r], Rect::new(136.0, y + 2.0, 150.0, 24.0), true);
+            self.dropdown(MOD_SOURCE[r], Rect::new(16.0, y + 2.0, 116.0, 24.0));
+            self.dropdown(MOD_DEST1[r], Rect::new(136.0, y + 2.0, 150.0, 24.0));
             self.mini(MOD_AMOUNT1[r], 310.0, y + 14.0, 10.0);
-            self.stepper(MOD_DEST2[r], Rect::new(330.0, y + 2.0, 150.0, 24.0), true);
+            self.dropdown(MOD_DEST2[r], Rect::new(330.0, y + 2.0, 150.0, 24.0));
             self.mini(MOD_AMOUNT2[r], 504.0, y + 14.0, 10.0);
-            self.stepper(MOD_SCALE[r], Rect::new(524.0, y + 2.0, 116.0, 24.0), false);
+            self.dropdown(MOD_SCALE[r], Rect::new(524.0, y + 2.0, 116.0, 24.0));
             self.mini(MOD_SCALE_AMOUNT[r], 664.0, y + 14.0, 10.0);
         }
     }
@@ -703,11 +805,11 @@ impl Ui<'_> {
         self.card(Rect::new(8.0, 112.0, 744.0, 150.0), "ARPEGGIATOR");
         self.switch(ARP_ON, 24.0, 146.0, "ON");
         self.switch(ARP_ONE_SHOT, 80.0, 146.0, "ONE SHOT");
-        self.stepper(ARP_DIRECTION, Rect::new(190.0, 134.0, 150.0, 24.0), false);
+        self.dropdown(ARP_DIRECTION, Rect::new(190.0, 134.0, 150.0, 24.0));
         self.c.text(LABEL, 360.0, 140.0, plug::DIM, "RATE");
-        self.stepper(ARP_SYNCTIME_NUMERATOR, Rect::new(404.0, 134.0, 62.0, 24.0), false);
+        self.dropdown(ARP_SYNCTIME_NUMERATOR, Rect::new(404.0, 134.0, 62.0, 24.0));
         self.c.text_center(LABEL, Rect::new(466.0, 134.0, 14.0, 24.0), plug::DIM, "/");
-        self.stepper(ARP_SYNCTIME_DENOMINATOR, Rect::new(480.0, 134.0, 62.0, 24.0), false);
+        self.dropdown(ARP_SYNCTIME_DENOMINATOR, Rect::new(480.0, 134.0, 62.0, 24.0));
         self.knobs(&[(ARP_OCTAVES, "OCTAVES"), (ARP_STEPS, "STEPS"), (ARP_GATE, "GATE")], 50.0, 214.0, 76.0, 3, 0.0, 14.0);
         // The sixteen steps: on, and the transposition.
         self.c.text(CAP, 292.0, 170.0, plug::DIM, "STEPS ON, AND THEIR TRANSPOSITION");
@@ -733,15 +835,14 @@ impl Ui<'_> {
         self.c.text(CAP, 400.0, 540.0, plug::DIM, "MOD 1 ABOVE, MOD 2 BELOW (SOURCES ARP MOD 1 AND 2)");
     }
 
-    /// A small value field for a whole-number setting: a tap on its top half steps up, on its bottom half down.
+    /// A small value field for a whole-number setting: a tap opens its choices.
     fn mini_plain(&mut self, k: usize, cx: f32, cy: f32) {
         let r = Rect::new(cx - 13.0, cy - 11.0, 26.0, 22.0);
         let st = State { hover: self.hover(r), ..State::NORMAL };
         lemon::field(self.c, r, st);
         let text = self.m.text(SETTINGS[k].id);
         self.c.text_center(CAP, r, brand::MAIN, text.trim_end_matches(" st"));
-        self.acts.push((Rect::new(r.x, r.y, r.w, r.h / 2.0), Act::Nudge(k, 1)));
-        self.acts.push((Rect::new(r.x, r.y + r.h / 2.0, r.w, r.h / 2.0), Act::Nudge(k, -1)));
+        self.acts.push((r, Act::Menu(k)));
     }
 
     fn patches(&mut self, category: usize, list: usize, loaded: Loaded, names: &[String], user: usize) {
