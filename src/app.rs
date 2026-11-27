@@ -40,6 +40,7 @@ use crate::ui::{panel_resize, wheels};
 mod audio_edit;
 pub(crate) mod auto_record;
 pub(crate) mod automation;
+mod bounce;
 #[cfg(all(not(target_arch = "wasm32"), not(mobile)))]
 mod control;
 mod demo_restore;
@@ -268,6 +269,8 @@ pub struct HoneydewApp {
     /// `Burn Notes to Track` behind its loading screen: the channel's id, and whether the screen has had its frame
     /// (`app/tracks.rs`).
     burn: Option<(i32, bool)>,
+    /// A `Freeze Track` or `Bounce in Place` rendering ([`bounce`]).
+    bounce: Option<file_drop::Bounce>,
     /// MIDI input: the device link and the router (`app/midi.rs`).
     midi: midi::Midi,
     /// The song just loaded has audio files missing: [`MISSING_AUDIO`] shows once no other message does.
@@ -367,6 +370,7 @@ impl Default for HoneydewApp {
             export: None,
             demo_restore: None,
             burn: None,
+            bounce: None,
             midi: Default::default(),
             missing_audio: false,
             warned_rate: None,

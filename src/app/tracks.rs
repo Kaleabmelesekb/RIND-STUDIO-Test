@@ -383,6 +383,10 @@ impl HoneydewApp {
                 let title = BURNING.into();
                 self.navigate(Nav::Open(Overlay::Busy { title }));
             }
+            // Behind their busy screen ([`Self::start_bounce`]); an undo step once the audio is in.
+            TrackOp::Freeze => self.start_bounce(channel, true),
+            TrackOp::Bounce => self.start_bounce(channel, false),
+            TrackOp::Unfreeze => self.unfreeze(channel, tick),
             // Its pick is [`Self::automation`]'s.
             TrackOp::AddCcTrack => self.navigate(Nav::Open(Overlay::CcPicker(channel))),
             TrackOp::AddPitchTrack => {

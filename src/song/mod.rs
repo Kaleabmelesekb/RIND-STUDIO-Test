@@ -6,6 +6,7 @@ mod channel;
 pub mod chords;
 mod drum_kit;
 mod file;
+pub mod freeze;
 pub mod group;
 mod lane;
 pub mod marker;

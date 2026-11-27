@@ -56,7 +56,7 @@ use super::{
 };
 use crate::APP_NAME;
 use crate::flm::chunk::{ContentPath, ContentRoot};
-use crate::render::{Render, RenderError, RenderSpec, Stream};
+use crate::render::{Remainder, Render, RenderError, RenderRange, RenderSpec, Stream};
 use crate::sample_cache::{self, SampleCache};
 use crate::smf::smf_with;
 use crate::song::{ChannelKind, LaneKind, Song};
@@ -554,6 +554,8 @@ pub struct Job {
     split: Option<Box<Stems>>,
     /// What each file is tagged with ([`Self::with_tags`]).
     tags: Vec<(&'static str, String)>,
+    /// A bounce's busy title ([`Self::bounce`]), over its stage's.
+    label: Option<String>,
 }
 
 /// What a [`Job::step`] ended with.
@@ -647,6 +649,44 @@ impl Job {
             stage: Stage::Rendering(Box::new(render)),
             split,
             tags: Vec::new(),
+            label: None,
+        })
+    }
+
+    /// Starts rendering channel `channel` of `song` alone for `Freeze` and `Bounce in Place` (a Honeydew feature): its
+    /// stem, the whole song and its tail in 32-bit float, without the master's effects (the master still plays them
+    /// over the audio that comes of this), as one WAV file ([`Done::File`]). The busy screen reads `label`.
+    pub fn bounce(
+        song: &Song,
+        samples: &SampleCache,
+        channel: usize,
+        rate: u32,
+        label: String,
+    ) -> Result<Self, RenderError> {
+        let spec = RenderSpec {
+            range: RenderRange::Full,
+            remainder: Remainder::Leave,
+            normalize: false,
+            high_quality: true,
+            rate,
+            solo: Some(channel),
+            master_effects: false,
+        };
+        let render = Render::new(song, samples, spec)?;
+        let export = Export {
+            format: ExportFormat::Wav,
+            path: PathBuf::new(),
+            split: Split::Off,
+            send: false,
+        };
+        Ok(Self {
+            export,
+            rate,
+            high_quality: true,
+            stage: Stage::Rendering(Box::new(render)),
+            split: None,
+            tags: Vec::new(),
+            label: Some(label),
         })
     }
 
@@ -674,6 +714,9 @@ impl Job {
             Stage::Processing(_) => "Processing",
             Stage::Encoding { .. } | Stage::Done => "Encoding",
         };
+        if let Some(label) = &self.label {
+            return format!("{label}\n{stage}...");
+        }
         let Some(split) = &self.split else {
             let file = self.export.path.file_name().unwrap_or_default();
             return format!("{stage} \"{}\"", file.to_string_lossy());
