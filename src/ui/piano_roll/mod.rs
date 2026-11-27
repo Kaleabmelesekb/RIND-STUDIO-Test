@@ -2777,6 +2777,8 @@ fn drag_edit(edit: &Edit, delta: Vec2, g: &Geom, snap: Option<f64>) -> (Vec<Even
     let mut events = match edit.part {
         Part::Scale => scale_notes(&edit.orig, &edit.which, finger, snap),
         Part::End | Part::Start => stretch_to(&edit.orig, &edit.which, finger, snap),
+        // The playlist's audio clip fades: no handle of a note editor's.
+        Part::FadeIn | Part::FadeOut => edit.orig.clone(),
         Part::Body => {
             let pos = note(&edit.orig[edit.anchor]).map_or(0.0, |n| n.0);
             let start = snap_round(pos + f64::from(delta.x / g.beat_w) * BEAT, snap);

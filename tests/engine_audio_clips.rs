@@ -756,3 +756,83 @@ fn a_render_plays_the_tempo_automation_as_playback_does() {
         assert!(close(*r, *p, 1e-6), "frame {frame}: {r} vs {p}");
     }
 }
+
+/// The smoothstep a fade's gain follows.
+fn smooth(progress: f32) -> f32 {
+    progress * progress * (3.0 - 2.0 * progress)
+}
+
+/// A 4-beat clip of a constant, with a beat of fade in and a beat of fade out.
+fn faded() -> Song {
+    let mut song = song();
+    let clip = clip(&mut song, 0, 4.0, "dc");
+    clip.visible_len_beats = 4.0;
+    clip.file.fade_in_beats = 1.0;
+    clip.file.fade_out_beats = 1.0;
+    song
+}
+
+#[test]
+fn a_fade_in_and_out_ramp_the_clips_gain_along_a_smooth_curve() {
+    let out = play(&faded(), 4 * BEAT);
+    let full = out[2 * BEAT];
+    assert!(full > 0.0, "the middle plays at full gain");
+    let gain = |frame: usize| out[frame] / full;
+    assert!(gain(0).abs() < 1e-3, "starts from silence: {}", gain(0));
+    assert!(close(gain(2 * BEAT - 1), 1.0, 1e-3));
+    for k in [0.25, 0.5, 0.75] {
+        let want = smooth(k);
+        let frames = (k * BEAT as f32) as usize;
+        assert!(close(gain(frames), want, 0.01), "in {k}: {}", gain(frames));
+        let frame = 4 * BEAT - frames;
+        assert!(close(gain(frame), want, 0.01), "out {k}: {}", gain(frame));
+    }
+}
+
+#[test]
+fn a_clip_without_fades_plays_at_full_gain_from_its_first_frame() {
+    let mut song = faded();
+    let clip = &mut song.channels[1].lanes[0].clips[0];
+    (clip.file.fade_in_beats, clip.file.fade_out_beats) = (0.0, 0.0);
+    let out = play(&song, 4 * BEAT);
+    assert!(close(out[0] / out[2 * BEAT], 1.0, 1e-3));
+}
+
+#[test]
+fn fades_longer_than_the_clip_are_cut_to_it_fade_in_first() {
+    let mut song = faded();
+    let clip = &mut song.channels[1].lanes[0].clips[0];
+    (clip.file.fade_in_beats, clip.file.fade_out_beats) = (3.0, 9.0);
+    assert_eq!(clip.fades(), (3.0, 1.0));
+    let out = play(&song, 4 * BEAT);
+    assert!(out.iter().all(|s| s.is_finite()));
+}
+
+#[test]
+fn a_seek_into_a_fade_goes_on_from_the_gain_it_has_there() {
+    let song = faded();
+    let full = play(&song, 2 * BEAT + 1)[2 * BEAT];
+    let mut engine = engine(&song);
+    engine.play();
+    render(&mut engine, 100);
+    // Half way through the fade out, 3.5 beats in: the gain goes on from smooth(0.5) to 0 over the half beat left.
+    engine.seek(3 * 128 + 64);
+    let out = render(&mut engine, 4000);
+    let progress = 0.5 * (1.0 - 3000.0 / (BEAT as f32 / 2.0));
+    let gain = out[3000] / full;
+    assert!(
+        close(gain, smooth(progress), 0.02),
+        "{gain}, not {}",
+        smooth(progress)
+    );
+    // Half way through the fade in, 0.5 beats in.
+    engine.seek(64);
+    let out = render(&mut engine, 4000);
+    let progress = 0.5 + 0.5 * 3000.0 / (BEAT as f32 / 2.0);
+    let gain = out[3000] / full;
+    assert!(
+        close(gain, smooth(progress), 0.02),
+        "{gain}, not {}",
+        smooth(progress)
+    );
+}

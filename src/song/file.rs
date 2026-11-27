@@ -479,6 +479,10 @@ pub struct ClipFileState {
     /// `HDSh` (Honeydew's own): on an automation clip, the shape of each segment that is not the straight line, by the
     /// tick of its point (sorted, one per tick: the last point at a tick starts the segment that has a length).
     pub shapes: Vec<(u32, honeydew_audio::automation::Shape)>,
+    /// `HDFd` (Honeydew's own): an audio clip's fade in and fade out, beats (0: none). Each is cut to what the clip's
+    /// visible length leaves ([`crate::song::Clip::fades`]).
+    pub fade_in_beats: f64,
+    pub fade_out_beats: f64,
 }
 
 impl Default for ClipFileState {
@@ -491,6 +495,8 @@ impl Default for ClipFileState {
             header_extra: Vec::new(),
             raw_events: Raw::default(),
             shapes: Vec::new(),
+            fade_in_beats: 0.0,
+            fade_out_beats: 0.0,
         }
     }
 }

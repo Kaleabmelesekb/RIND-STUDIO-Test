@@ -2148,6 +2148,36 @@ fn shaped_automation_segments_round_trip_through_flm_and_default_ones_write_the_
 }
 
 #[test]
+fn an_audio_clips_fades_round_trip_and_none_write_the_same_bytes() {
+    let mut song = Song::default();
+    song.add_channel(ChannelKind::AudioClip);
+    let last = song.channels.len() - 1;
+    song.channels[last].lanes[0].add_clip(0, 4.0);
+    let clip = |song: &mut Song| -> &mut Clip { &mut song.channels[last].lanes[0].clips[0] };
+    let plain = crate::flm::write(&song).unwrap();
+    let count = |b: &[u8]| b.windows(4).filter(|w| *w == b"HDFd").count();
+    assert_eq!(count(&plain), 0);
+    (
+        clip(&mut song).file.fade_in_beats,
+        clip(&mut song).file.fade_out_beats,
+    ) = (0.5, 1.25);
+    let bytes = crate::flm::write(&song).unwrap();
+    assert_eq!(count(&bytes), 1);
+    let mut read = crate::flm::read(&bytes).unwrap();
+    let back = clip(&mut read);
+    assert_eq!(
+        (back.file.fade_in_beats, back.file.fade_out_beats),
+        (0.5, 1.25)
+    );
+    // Without them the bytes are as before.
+    (
+        clip(&mut song).file.fade_in_beats,
+        clip(&mut song).file.fade_out_beats,
+    ) = (0.0, 0.0);
+    assert_eq!(crate::flm::write(&song).unwrap(), plain);
+}
+
+#[test]
 fn midi_sends_are_saved_apart_and_go_with_their_target() {
     // An `HDMs`, which FL Studio Mobile skips as an unknown chunk, only on a channel with MIDI sends.
     let mut song = Song::default();

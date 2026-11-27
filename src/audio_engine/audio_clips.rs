@@ -23,6 +23,8 @@ pub(super) struct Clips {
     spans: Vec<Span>,
     /// The channel's first lane is audio: the seek rule cuts its clip voices first.
     cut: bool,
+    /// The engine's sample rate, for the frames of a fade entered half way.
+    rate: f32,
 }
 
 struct Span {
@@ -39,6 +41,26 @@ struct Span {
     sync: bool,
     /// Its slot's Speed ratio, which scales the content offset into source time.
     speed: f64,
+    /// Its fade in and fade out ([`Clip::fades`]) and its visible length, in beats.
+    fade_in: f64,
+    fade_out: f64,
+    len: f64,
+}
+
+impl Span {
+    /// The fade gain's ramp ([`PadSampler::ramp`]) for the clip entered `t` beats from its start, at `per_beat` frames
+    /// a beat: a fade in or out in progress goes on from where it would be, else the gain is full.
+    fn ramp_at(&self, t: f64, per_beat: f64) -> (f32, f32, u32) {
+        let frames = |beats: f64| (beats * per_beat).round().clamp(0.0, f64::from(u32::MAX)) as u32;
+        if t < self.fade_in {
+            ((t / self.fade_in) as f32, 1.0, frames(self.fade_in - t))
+        } else if self.fade_out > 0.0 && t >= self.len - self.fade_out {
+            let left = (self.len - t).max(0.0);
+            ((left / self.fade_out) as f32, 0.0, frames(left))
+        } else {
+            (1.0, 1.0, 0)
+        }
+    }
 }
 
 impl Clips {
@@ -78,6 +100,9 @@ impl Clips {
             }
             let source = c * span.speed * 60.0 / f64::from(tempo_bpm);
             self.sampler.hit_clip(pad, source);
+            let per_beat = f64::from(self.rate) * 60.0 / f64::from(tempo_bpm);
+            let (from, to, frames) = span.ramp_at(beat - span.start_beat, per_beat);
+            self.sampler.ramp(pad, from, to, frames);
         }
     }
 
@@ -147,7 +172,7 @@ fn envelope(clip: &Clip, env_param: i16) -> Result<Clip, EngineError> {
 
 /// The actions one loop pass of an audio clip adds, at most: its envelope steps, and a repetition's fade and start.
 pub(super) fn plays_per_pass(clip: &Clip) -> Result<usize, EngineError> {
-    let mut plays = 2;
+    let mut plays = 4;
     for env_param in ENVELOPES {
         plays += envelope(clip, env_param)?.events.len();
     }
@@ -180,6 +205,7 @@ pub(super) fn build(
         params.push(slot.params);
         let start_beat = f64::from(clip.start_tick) / f64::from(PPQ);
         let end_beat = start_beat + clip.visible_ticks() / f64::from(PPQ);
+        let (fade_in, fade_out) = clip.fades();
         let mut envelopes: [Vec<(u32, f32)>; 3] = Default::default();
         for (steps, env_param) in envelopes.iter_mut().zip(ENVELOPES) {
             *steps = (envelope(clip, env_param)?.events.iter())
@@ -198,6 +224,9 @@ pub(super) fn build(
             envelopes,
             sync: slot.file.stretch_mode != 0,
             speed: speed_ratio(slot.params[SPEED]),
+            fade_in,
+            fade_out,
+            len: fade_in.max(clip.visible_ticks() / f64::from(PPQ)),
         });
     }
     if pads.is_empty() {
@@ -212,6 +241,7 @@ pub(super) fn build(
     }
     Ok(Some(Clips {
         sampler,
+        rate: sample_rate,
         spans,
         cut: channel
             .lanes
@@ -303,6 +333,40 @@ pub(super) fn actions(
             }
         }
         push(end, Action::ClipFade { pad })?;
+        // The fades: the gain restarts at the clip's start (a fade in from silence, or full), and a fade out begins
+        // its length before the end. Loop repetitions inside the clip do not fade.
+        let (fade_in, fade_out) = clip.fades();
+        let frames = |from: f64, to: f64| -> Result<u32, EngineError> {
+            let (a, b) = (
+                beat_frame(from, sample_rate, tempo_bpm)?,
+                beat_frame(to, sample_rate, tempo_bpm)?,
+            );
+            Ok(u32::try_from(b.saturating_sub(a)).unwrap_or(u32::MAX))
+        };
+        let (from, frames_in) = match fade_in > 0.0 {
+            true => (0.0, frames(start, start + fade_in)?),
+            false => (1.0, 0),
+        };
+        push(
+            start,
+            Action::ClipRamp {
+                pad,
+                from,
+                to: 1.0,
+                frames: frames_in,
+            },
+        )?;
+        if fade_out > 0.0 {
+            push(
+                end - fade_out,
+                Action::ClipRamp {
+                    pad,
+                    from: 1.0,
+                    to: 0.0,
+                    frames: frames(end - fade_out, end)?,
+                },
+            )?;
+        }
         for (index, env_param) in ENVELOPES.into_iter().enumerate() {
             let steps = envelope(clip, env_param)?;
             for (tick, event) in steps.events_in_song_range(0, u64::MAX) {

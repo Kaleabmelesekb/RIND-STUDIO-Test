@@ -198,6 +198,22 @@ impl Clip {
         beats * f64::from(PPQ)
     }
 
+    /// An audio clip's fade in and fade out, in beats: what the file holds, each cut to what the visible length leaves
+    /// (the fade in first), so the two never overlap.
+    pub fn fades(&self) -> (f64, f64) {
+        let len = self.visible_ticks() / f64::from(PPQ);
+        let clean = |beats: f64| {
+            if beats.is_finite() {
+                beats.max(0.0)
+            } else {
+                0.0
+            }
+        };
+        let fade_in = clean(self.file.fade_in_beats).min(len.max(0.0));
+        let fade_out = clean(self.file.fade_out_beats).min((len - fade_in).max(0.0));
+        (fade_in, fade_out)
+    }
+
     /// The generic clip-update rule: the loop becomes the smallest b·2ᵏ beats that holds the content end, at least b
     /// (b = beats per bar, ≥ 1); it shrinks as well as grows. The content end is the latest event end: an automation or
     /// envelope point ends where it is (CLHd@8: b·2ᵏ ≥ the last point, so a point on b·2ᵏ keeps it); a note or hit at

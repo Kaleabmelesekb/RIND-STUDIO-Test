@@ -614,6 +614,15 @@ fn write_clip(
             Ok(())
         })?;
     }
+    // An audio clip's fades: an `HDFd`, two f64 (in, out; beats), unknown to a reader that does not have them (they
+    // play the clip without).
+    let fades = (clip.file.fade_in_beats, clip.file.fade_out_beats);
+    if kind == LaneKind::Audio && fades != (0.0, 0.0) {
+        writer.chunk(*b"HDFd", |writer| {
+            writer.f64(fades.0)?;
+            writer.f64(fades.1)
+        })?;
+    }
     write_raw(writer, &clip.file.unknown_chunks)
 }
 
