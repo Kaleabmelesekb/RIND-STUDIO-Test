@@ -2863,6 +2863,7 @@ pub fn dragged(orig: Span, loop_beats: f64, part: Part, delta: f64, grid: f64, m
                 start: new as u32,
                 visible: orig.visible - moved,
                 offset: wrap(orig.offset + moved, loop_beats),
+                ..orig
             }
         }
     }
