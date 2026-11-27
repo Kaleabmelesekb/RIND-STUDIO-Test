@@ -72,6 +72,16 @@ void OdinAudioProcessor::midiNoteOn(
 
 	int unison_counter = 0;
 	int unison_voices  = m_value_tree.state.getChildWithName("misc")["unison_voices"];
+	// Honeydew: the pan and gain tables below have these counts only; a patch from elsewhere may hold another.
+	for (int allowed : {12, 6, 4, 3, 2, 1}) {
+		if (unison_voices >= allowed) {
+			unison_voices = allowed;
+			break;
+		}
+	}
+	if (unison_voices < 1) {
+		unison_voices = 1;
+	}
 	auto voice_numbers = m_voice_manager.getVoices(p_midi_note, unison_voices);
 	if (m_last_midi_note == -1) {
 		// first time glide - dont glide

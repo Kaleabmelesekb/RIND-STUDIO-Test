@@ -67,7 +67,9 @@ DESTS = [(i, n) for i, n, _ in DESTS]
 
 TABLES = [("OSC_TYPES", OSC_TYPES), ("FIL_TYPES", FIL_TYPES), ("SOURCES", SOURCES), ("DESTS", DESTS), ("ARP_DIR", ARP_DIR),
           ("LEGATO", LEGATO), ("DIST_ALGO", DIST_ALGO), ("ANALOG", ANALOG), ("LFO_SHAPE", LFO_SHAPE),
-          ("WAVETABLES", WAVETABLES), ("DENOM", DENOM)]
+          ("WAVETABLES", WAVETABLES), ("DENOM", DENOM),
+          # The voice counts the engine has pan and gain tables for: any other number reads past them.
+          ("UNISON", [(1, "1 voice"), (2, "2 voices"), (3, "3 voices"), (4, "4 voices"), (6, "6 voices"), (12, "12 voices")])]
 T = {n: i for i, (n, _) in enumerate(TABLES)}
 
 # --- settings ----------------------------------------------------------------------------------------------------------
@@ -129,7 +131,7 @@ prop("legato", "Voice Mode", "misc", "legato", "n", 0, 2, 1, "n", T["LEGATO"])
 prop("dist_on", "Distortion On", "misc", "dist_on", "q", 0, 1, 0, "b")
 prop("dist_algo", "Distortion Algorithm", "misc", "dist_algo", "n", 0, 2, 0, "n", T["DIST_ALGO"])
 prop("pitchbend_amount", "Pitchbend Range", "misc", "pitchbend_amount", "q", 0, 24, 12, "t")
-prop("unison_voices", "Unison Voices", "misc", "unison_voices", "q", 1, 12, 1, "i")
+prop("unison_voices", "Unison Voices", "misc", "unison_voices", "n", 0, 5, 0, "n", T["UNISON"])
 prop("arp_octaves", "Arp Octaves", "misc", "arp_octaves", "q", 0, 3, 2, "i")
 prop("arp_direction", "Arp Direction", "misc", "arp_direction", "n", 0, len(ARP_DIR) - 1, 0, "n", T["ARP_DIR"])
 prop("arp_steps", "Arp Steps", "misc", "arp_steps", "q", 1, 16, 16, "i")

@@ -311,7 +311,7 @@ pub static SETTINGS: [Setting; COUNT] = [
     Setting { id: "dist_on", name: "Distortion On", range: (0, 1), start: 0, magnet: None },
     Setting { id: "dist_algo", name: "Distortion Algorithm", range: (0, 2), start: 0, magnet: None },
     Setting { id: "pitchbend_amount", name: "Pitchbend Range", range: (0, 24), start: 12, magnet: None },
-    Setting { id: "unison_voices", name: "Unison Voices", range: (1, 12), start: 1, magnet: None },
+    Setting { id: "unison_voices", name: "Unison Voices", range: (0, 5), start: 0, magnet: None },
     Setting { id: "arp_octaves", name: "Arp Octaves", range: (0, 3), start: 2, magnet: None },
     Setting { id: "arp_direction", name: "Arp Direction", range: (0, 8), start: 0, magnet: None },
     Setting { id: "arp_steps", name: "Arp Steps", range: (1, 16), start: 16, magnet: None },
@@ -674,7 +674,7 @@ pub static INFO: [Info; COUNT] = [
     Info { key: "dist_on", tree: "misc", kind: Kind::Prop, lo: 0.0, hi: 1.0, skew: 1.0, unit: b'b', table: 0 },
     Info { key: "dist_algo", tree: "misc", kind: Kind::Pick, lo: 0.0, hi: 2.0, skew: 1.0, unit: b'n', table: 6 },
     Info { key: "pitchbend_amount", tree: "misc", kind: Kind::Prop, lo: 0.0, hi: 24.0, skew: 1.0, unit: b't', table: 0 },
-    Info { key: "unison_voices", tree: "misc", kind: Kind::Prop, lo: 1.0, hi: 12.0, skew: 1.0, unit: b'i', table: 0 },
+    Info { key: "unison_voices", tree: "misc", kind: Kind::Pick, lo: 0.0, hi: 5.0, skew: 1.0, unit: b'n', table: 11 },
     Info { key: "arp_octaves", tree: "misc", kind: Kind::Prop, lo: 0.0, hi: 3.0, skew: 1.0, unit: b'i', table: 0 },
     Info { key: "arp_direction", tree: "misc", kind: Kind::Pick, lo: 0.0, hi: 8.0, skew: 1.0, unit: b'n', table: 4 },
     Info { key: "arp_steps", tree: "misc", kind: Kind::Prop, lo: 1.0, hi: 16.0, skew: 1.0, unit: b'i', table: 0 },
@@ -1295,7 +1295,15 @@ pub static T_DENOM: [(i32, &str); 9] = [
     (7, "32"),
     (8, "48"),
 ];
+pub static T_UNISON: [(i32, &str); 6] = [
+    (1, "1 voice"),
+    (2, "2 voices"),
+    (3, "3 voices"),
+    (4, "4 voices"),
+    (6, "6 voices"),
+    (12, "12 voices"),
+];
 
 /// The group of each destination (a tap on a destination's name jumps to the next group).
 pub static DEST_GROUP: [u8; 122] = [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 9, 9, 11, 11, 12, 12];
-pub const PICK: [&[(i32, &str)]; 11] = [&T_OSC_TYPES, &T_FIL_TYPES, &T_SOURCES, &T_DESTS, &T_ARP_DIR, &T_LEGATO, &T_DIST_ALGO, &T_ANALOG, &T_LFO_SHAPE, &T_WAVETABLES, &T_DENOM];
+pub const PICK: [&[(i32, &str)]; 12] = [&T_OSC_TYPES, &T_FIL_TYPES, &T_SOURCES, &T_DESTS, &T_ARP_DIR, &T_LEGATO, &T_DIST_ALGO, &T_ANALOG, &T_LFO_SHAPE, &T_WAVETABLES, &T_DENOM, &T_UNISON];
