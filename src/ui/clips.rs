@@ -154,6 +154,10 @@ pub(crate) fn paint_marquee(painter: &Painter, rect: Rect, cx: &UiCtx) {
 /// its width).
 const HANDLE: [f32; 2] = [0.42, 1.41];
 const ZONE: f32 = 1.0;
+/// The fade handles: a disc 0.45 U across, its centre 0.4 U in from the clip's top, and from its start or end while
+/// the fade is shorter.
+const FADE_HANDLE: f32 = 0.45;
+const FADE_INSET: f32 = 0.4;
 /// The start handle's right edge is this far inside the selection box's left edge; the end handle's left edge this far
 /// right of its right edge.
 const START_IN: f32 = 0.5;
@@ -197,6 +201,9 @@ const NAME_K: usize = 5;
 const CONTENT_END_T: f32 = 6.0;
 /// The frame: `background` at this alpha, a device pixel around the clip box.
 const FRAME_ALPHA: f32 = 0.3;
+/// A fade's shade over the clip (the background at this alpha), and its curve line (the text colour at this alpha).
+const FADE_SHADE: f32 = 0.55;
+const FADE_LINE: f32 = 0.85;
 /// Where the middle stop of the miniature's tint sits.
 const TINT_MID: f32 = 0.66;
 /// An automation miniature and an audio waveform sample the tint here.
@@ -724,20 +731,38 @@ impl Clips {
                 ))
             })
             .is_some_and(|(lane, clip)| scalable(lane, clip));
+        // An audio clip alone in the selection takes the fade handles: its fades in pixels.
+        let fades = (self.selected.filter(|_| self.group.is_empty())).and_then(|r| {
+            let lane = app.song.channels.get(r.channel)?.lanes.get(r.lane)?;
+            let (fade_in, fade_out) = find(app.song, r)?.fades();
+            (lane.kind == LaneKind::Audio && !lane.collapsed)
+                .then_some((fade_in as f32 * axis.beat_w, fade_out as f32 * axis.beat_w))
+        });
         // The handles pop in from the frame they show.
         self.shown = (sbox.is_some() && !body).then(|| self.shown.unwrap_or(now));
         let mut handles = Vec::new();
         let shown_box = sbox.filter(|_| !self.quiet);
-        for (part, rect) in shown_box.map_or(Vec::new(), |b| handle_rects(b, scale, m)) {
-            // The right handle's drag hides the third, the third's the other two.
+        let fade_handles = (fades.zip(shown_box)).map_or(Vec::new(), |(f, b)| fade_rects(b, f, m));
+        let others = shown_box.map_or(Vec::new(), |b| handle_rects(b, scale, m));
+        // The fade handles first: where a zone overlaps a resize handle's, the resize one wins.
+        for (part, rect) in fade_handles.into_iter().chain(others) {
+            let fade = matches!(part, Part::FadeIn | Part::FadeOut);
+            // The right handle's drag hides the third and the fades, the third's the other handles, a fade's the
+            // other handles.
             let hidden = match self.held.map(|h| h.0) {
-                Some(Part::End) => part == Part::Scale,
+                Some(Part::End) => part == Part::Scale || fade,
                 Some(Part::Scale) => part != Part::Scale,
-                _ => false,
+                Some(held @ (Part::FadeIn | Part::FadeOut)) => part != held,
+                Some(_) => fade,
+                None => false,
             };
             if !body && !hidden {
                 let anim = self.handle_anim(part, now);
-                paint_handle(&painter, &app.cx, rect, anim, part == Part::Scale);
+                if fade {
+                    paint_fade_handle(&painter, &app.cx, rect, anim);
+                } else {
+                    paint_handle(&painter, &app.cx, rect, anim, part == Part::Scale);
+                }
                 handles.push(rect);
             }
             let zone = handle_zone(part, rect, shown_box.unwrap_or(rect), m);
@@ -1827,6 +1852,38 @@ fn handle_rects(b: Rect, scale: bool, m: &Metrics) -> Vec<(Part, Rect)> {
     handles
 }
 
+/// The fade handles of the selection box `b`, an audio clip's: the fade in's at the top left, the fade out's at the top
+/// right, each where its fade ends (`fades` in pixels) and at least [`FADE_INSET`] in from its edge. None on a clip too
+/// narrow for both.
+fn fade_rects(b: Rect, (fade_in, fade_out): (f32, f32), m: &Metrics) -> Vec<(Part, Rect)> {
+    if b.width() < m.u(4.0 * FADE_INSET + 2.0 * FADE_HANDLE) {
+        return Vec::new();
+    }
+    let size = Vec2::splat(m.u(FADE_HANDLE));
+    let (inset, y) = (m.u(FADE_INSET), b.top() + m.u(FADE_INSET));
+    let at = |x: f32| Rect::from_center_size(pos2(x, y), size);
+    vec![
+        (Part::FadeIn, at(b.left() + fade_in.max(inset))),
+        (Part::FadeOut, at(b.right() - fade_out.max(inset))),
+    ]
+}
+
+/// A fade handle: a disc in the text colour in a faint ring, popping in and growing under a finger as the others do.
+fn paint_fade_handle(painter: &Painter, cx: &UiCtx, rect: Rect, (scale, growth): (f32, f32)) {
+    let (m, c) = (cx.m, &cx.theme.colors);
+    let px = 1.0 / m.ppp();
+    let radius = rect.width() / 2.0 * scale + growth * px / 2.0;
+    if radius <= px {
+        return;
+    }
+    let ring = Rgba {
+        a: FRAME_A,
+        ..c.menu_fill
+    };
+    painter.circle_filled(rect.center(), radius + px, ring.to_color32());
+    painter.circle_filled(rect.center(), radius, c.text.to_color32());
+}
+
 /// A selection handle's size: (0.42 U + 2 px) × (1.41 U + 2 px).
 pub(crate) fn capsule(m: &Metrics) -> Vec2 {
     let px2 = 2.0 / m.ppp();
@@ -1850,6 +1907,7 @@ fn handle_zone(part: Part, rect: Rect, b: Rect, m: &Metrics) -> Rect {
         Part::Start => vec2(m.u(ZONE).min(b.width() / 3.0), rect.height()),
         Part::Scale => vec2(rect.width(), m.u(ZONE)),
         Part::End | Part::Body => vec2(m.u(ZONE), rect.height()),
+        Part::FadeIn | Part::FadeOut => Vec2::splat(m.u(ZONE)),
     };
     Rect::from_center_size(rect.center(), size)
 }
@@ -2235,6 +2293,61 @@ fn paint_clip(
             waveform(&painter, clip, wave, area, axis, ink, m);
         }
     }
+    if lane.kind == LaneKind::Audio {
+        paint_fades(&body, cx, clip, b, axis);
+    }
+}
+
+/// The steps a fade's curve is drawn in.
+const FADE_STEPS: usize = 24;
+
+/// An audio clip's fades over its clip box `b`: the part of the clip each takes away shaded, and the gain's curve (a
+/// smoothstep, as the engine's) drawn along it, from silence at the clip's edge to full gain where the fade ends.
+fn paint_fades(painter: &Painter, cx: &UiCtx, clip: &Clip, b: Rect, axis: TimeAxis) {
+    let (fade_in, fade_out) = clip.fades();
+    let (m, c) = (cx.m, &cx.theme.colors);
+    let (top, bottom) = (b.top(), b.bottom());
+    let shade = Rgba {
+        a: FADE_SHADE,
+        ..c.background
+    }
+    .to_color32();
+    let line = Stroke::new(
+        m.t(),
+        Rgba {
+            a: FADE_LINE,
+            ..c.text
+        }
+        .to_color32(),
+    );
+    let draw = |from: f32, to: f32, rising: bool| {
+        if to - from < 0.5 / m.ppp() {
+            return;
+        }
+        let curve: Vec<Pos2> = (0..=FADE_STEPS)
+            .map(|i| {
+                let t = i as f32 / FADE_STEPS as f32;
+                let progress = if rising { t } else { 1.0 - t };
+                let gain = progress * progress * (3.0 - 2.0 * progress);
+                pos2(from + (to - from) * t, bottom - (bottom - top) * gain)
+            })
+            .collect();
+        let mut mesh = Mesh::default();
+        for pair in curve.windows(2) {
+            let base = mesh.vertices.len() as u32;
+            for &p in pair {
+                mesh.colored_vertex(pos2(p.x, top), shade);
+                mesh.colored_vertex(p, shade);
+            }
+            mesh.add_triangle(base, base + 1, base + 2);
+            mesh.add_triangle(base + 1, base + 2, base + 3);
+        }
+        painter.add(egui::Shape::mesh(mesh));
+        painter.add(egui::Shape::line(curve, line));
+    };
+    let beat = |beats: f64| (beats * f64::from(axis.beat_w)) as f32;
+    draw(b.left(), b.left() + beat(fade_in), true);
+    draw(b.right() - beat(fade_out), b.right(), false);
 }
 
 /// The current clip's frame F around its clip box `b`: grown 1.5t on every side, its corners r + 1.5t, and its α a
@@ -2659,6 +2772,9 @@ pub enum Part {
     End,
     /// The third handle, under an audio clip that does not loop: the end law, as a scale of the clip.
     Scale,
+    /// An audio clip's fade handles, at the top corners of its selection: they set the fade in and the fade out.
+    FadeIn,
+    FadeOut,
 }
 
 /// The clip fields a drag changes, with the visible length resolved to beats.
@@ -2667,6 +2783,9 @@ pub struct Span {
     pub start: u32,
     pub visible: f64,
     pub offset: f64,
+    /// An audio clip's fade in and fade out, beats (0 on any other).
+    pub fade_in: f64,
+    pub fade_out: f64,
 }
 
 impl Span {
@@ -2675,6 +2794,8 @@ impl Span {
             start: clip.start_tick,
             visible: clip.visible_ticks() / f64::from(PPQ),
             offset: clip.offset_beats,
+            fade_in: clip.file.fade_in_beats,
+            fade_out: clip.file.fade_out_beats,
         }
     }
 
@@ -2685,6 +2806,7 @@ impl Span {
         }
         clip.start_tick = self.start;
         clip.offset_beats = self.offset;
+        (clip.file.fade_in_beats, clip.file.fade_out_beats) = (self.fade_in, self.fade_out);
     }
 }
 
@@ -2723,6 +2845,17 @@ pub fn dragged(orig: Span, loop_beats: f64, part: Part, delta: f64, grid: f64, m
             visible: (snap(end + delta).max((start + min).ceil()) - start) / ppq,
             ..orig
         },
+        // The fades follow the pointer in whole ticks, ungridded, as long as the two fit the clip together.
+        Part::FadeIn => Span {
+            fade_in: ((orig.fade_in * ppq + delta).round() / ppq)
+                .clamp(0.0, (orig.visible - orig.fade_out).max(0.0)),
+            ..orig
+        },
+        Part::FadeOut => Span {
+            fade_out: ((orig.fade_out * ppq - delta).round() / ppq)
+                .clamp(0.0, (orig.visible - orig.fade_in).max(0.0)),
+            ..orig
+        },
         Part::Start => {
             let new = snap(start + delta).min((end - min).floor()).max(0.0);
             let moved = (new - start) / ppq;
@@ -2730,6 +2863,7 @@ pub fn dragged(orig: Span, loop_beats: f64, part: Part, delta: f64, grid: f64, m
                 start: new as u32,
                 visible: orig.visible - moved,
                 offset: wrap(orig.offset + moved, loop_beats),
+                ..orig
             }
         }
     }
@@ -2885,6 +3019,9 @@ pub fn slice(lane: &mut Lane, id: u32, at: u64) -> Option<u32> {
     tail.start_tick = at as u32;
     tail.visible_len_beats = (end - at as f64) / ppq;
     tail.offset_beats = wrap(tail.offset_beats + head, tail.loop_len_beats);
+    // The fade in stays with the head, the fade out goes with the tail.
+    tail.file.fade_in_beats = 0.0;
+    clip.file.fade_out_beats = 0.0;
     lane.last_clip_id += 1;
     tail.id = lane.last_clip_id;
     lane.clips.push(tail);
@@ -3556,6 +3693,8 @@ mod tests {
             start,
             visible,
             offset,
+            fade_in: 0.0,
+            fade_out: 0.0,
         }
     }
 
@@ -3729,6 +3868,42 @@ mod tests {
                 assert_eq!(f64::from(moved.start), nearest(512.0 + delta), "{at}");
             }
         }
+    }
+
+    #[test]
+    fn the_fade_handles_set_whole_tick_fades_that_fit_the_clip_together() {
+        let bar = span(0, 4.0, 0.0);
+        let fade_in = |orig: Span, delta: f64| dragged(orig, 4.0, Part::FadeIn, delta, 128.0, 16.0);
+        let fade_out =
+            |orig: Span, delta: f64| dragged(orig, 4.0, Part::FadeOut, delta, 128.0, 16.0);
+        // The fade in follows the pointer right, the fade out left; none goes below nothing or past the clip.
+        assert_eq!(fade_in(bar, BEAT).fade_in, 1.0);
+        assert_eq!(fade_in(bar, 0.4).fade_in, 0.0);
+        assert_eq!(fade_in(bar, -BEAT).fade_in, 0.0);
+        assert_eq!(fade_in(bar, 9.0 * BEAT).fade_in, 4.0);
+        assert_eq!(fade_out(bar, -BEAT).fade_out, 1.0);
+        assert_eq!(fade_out(bar, BEAT).fade_out, 0.0);
+        assert_eq!(fade_out(bar, -9.0 * BEAT).fade_out, 4.0);
+        // Free of the grid: a drag of 10 ticks is 10 ticks.
+        assert_eq!(fade_in(bar, 10.0).fade_in, 10.0 / BEAT);
+        // One leaves the other its length.
+        let held = Span {
+            fade_in: 3.0,
+            ..bar
+        };
+        assert_eq!(fade_out(held, -9.0 * BEAT).fade_out, 1.0);
+        assert_eq!(fade_in(held, -BEAT).fade_in, 2.0);
+        // The fades change nothing else, and are written to the clip.
+        let mut clip = clip(0, 4.0, 4.0, 0.0);
+        fade_in(Span::of(&clip), BEAT).apply(&mut clip);
+        assert_eq!(
+            Span::of(&clip),
+            Span {
+                fade_in: 1.0,
+                ..bar
+            }
+        );
+        assert_eq!(clip.file.fade_in_beats, 1.0);
     }
 
     #[test]
@@ -3969,6 +4144,18 @@ mod tests {
             (832, 3.5, 0.5)
         );
         assert!(a.muted && b.muted);
+    }
+
+    #[test]
+    fn slice_keeps_the_fade_in_on_the_head_and_the_fade_out_on_the_tail() {
+        let mut lane = Lane::new(LaneKind::Audio);
+        let c = lane.add_clip(0, 4.0);
+        c.visible_len_beats = 4.0;
+        (c.file.fade_in_beats, c.file.fade_out_beats) = (1.0, 2.0);
+        assert_eq!(slice(&mut lane, 1, 256), Some(2));
+        let (a, b) = (&lane.clips[0], &lane.clips[1]);
+        assert_eq!((a.file.fade_in_beats, a.file.fade_out_beats), (1.0, 0.0));
+        assert_eq!((b.file.fade_in_beats, b.file.fade_out_beats), (0.0, 2.0));
     }
 
     /// `Chop...` (#91): an audio clip at 512 showing 3 beats from content beat 0.5 of its 4-beat loop. Every 1/2 beat

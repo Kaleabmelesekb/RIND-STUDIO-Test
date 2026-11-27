@@ -1145,6 +1145,19 @@ impl Reader {
                     self.charge(2 * child.payload.len(), &child.path)?;
                     clip.file.shapes = shapes(child.payload);
                 }
+                b"HDFd" if kind == LaneKind::Audio => {
+                    let mut reader = child.reader();
+                    let mut fade = || {
+                        let beats = reader.f64_or(0.0);
+                        if beats.is_finite() {
+                            beats.clamp(0.0, 1e6)
+                        } else {
+                            0.0
+                        }
+                    };
+                    clip.file.fade_in_beats = fade();
+                    clip.file.fade_out_beats = fade();
+                }
                 b"CLSm" => {
                     let (_, mut sample) = self.slot(&child)?;
                     *next_slot = (*next_slot + 1).min(MAX_ID);

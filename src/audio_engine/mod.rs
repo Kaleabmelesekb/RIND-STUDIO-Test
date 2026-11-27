@@ -765,6 +765,16 @@ impl SongAudioEngine {
                         clips.sampler.fade(pad);
                     }
                 }
+                Action::ClipRamp {
+                    pad,
+                    from,
+                    to,
+                    frames,
+                } => {
+                    if let Some(clips) = self.clips[event.channel].as_mut() {
+                        clips.sampler.ramp(pad, from, to, frames);
+                    }
+                }
                 Action::ClipParam { pad, index, value } => {
                     if let Some(clips) = self.clips[event.channel].as_mut() {
                         clips.sampler.set_param(pad, index, value);

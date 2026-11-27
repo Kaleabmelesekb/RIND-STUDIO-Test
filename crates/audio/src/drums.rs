@@ -242,6 +242,45 @@ pub struct PadSampler {
     sample_rate: f32,
     /// Some pad's Solo is on: kept at each Solo write, so `process` does not rescan every pad for every pad.
     soloed: bool,
+    /// Per pad, the gain of its audio clip's fade in or out ([`Self::ramp`]); 1 by default.
+    ramps: Vec<GainRamp>,
+}
+
+/// A pad's fade gain: the smoothstep of a progress that runs linearly from `from` to `to` over `frames` frames (`done`
+/// of them played). Progress 1 is full gain and 0 silence, so a fade in runs 0 → 1 and a fade out 1 → 0, and a
+/// fade entered half way starts at its progress.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GainRamp {
+    from: f32,
+    to: f32,
+    frames: u32,
+    done: u32,
+}
+
+impl GainRamp {
+    /// Full gain, held.
+    const HOLD: Self = Self {
+        from: 1.0,
+        to: 1.0,
+        frames: 0,
+        done: 0,
+    };
+
+    /// Whether the ramp has run its course: its gain is then constant.
+    fn finished(&self) -> bool {
+        self.done >= self.frames
+    }
+
+    /// The gain `ahead` frames from where the ramp is.
+    fn gain(&self, ahead: u32) -> f32 {
+        let n = self.done.saturating_add(ahead);
+        let p = if n >= self.frames {
+            self.to
+        } else {
+            self.from + (self.to - self.from) * (n as f32 / self.frames as f32)
+        };
+        p * p * (3.0 - 2.0 * p)
+    }
 }
 
 impl PadSampler {
@@ -250,6 +289,7 @@ impl PadSampler {
         Self {
             voices: vec![Voice::default(); pads.len() * VOICES_PER_PAD],
             soloed: pads.iter().any(|p| p.params[SOLO] > 0.5),
+            ramps: vec![GainRamp::HOLD; pads.len()],
             pads,
             bend: 1.0,
             sample_rate,
@@ -258,6 +298,27 @@ impl PadSampler {
 
     pub fn pads(&self) -> usize {
         self.pads.len()
+    }
+
+    /// Starts `pad`'s fade gain: the smoothstep of a progress running from `from` to `to` (both 0 to 1, 1 full gain)
+    /// over `frames` frames, then holding at `to`; no frames is `to` at once. A fade in is `ramp(pad, 0.0, 1.0, n)`, a
+    /// fade out `ramp(pad, 1.0, 0.0, n)`, and `ramp(pad, 1.0, 1.0, 0)` restores the full gain.
+    pub fn ramp(&mut self, pad: usize, from: f32, to: f32, frames: u32) {
+        let clean = |p: f32| {
+            if p.is_finite() {
+                p.clamp(0.0, 1.0)
+            } else {
+                1.0
+            }
+        };
+        if let Some(ramp) = self.ramps.get_mut(pad) {
+            *ramp = GainRamp {
+                from: clean(from),
+                to: clean(to),
+                frames,
+                done: 0,
+            };
+        }
     }
 
     /// Pad `pad`'s sample, `None` for a silent pad or one out of range.
@@ -439,6 +500,7 @@ impl PadSampler {
             if let Some(from) = map(pad).filter(|&from| from < old.pads.len()) {
                 self.voices[pad * VOICES_PER_PAD..][..VOICES_PER_PAD]
                     .copy_from_slice(&old.voices[from * VOICES_PER_PAD..][..VOICES_PER_PAD]);
+                self.ramps[pad] = old.ramps[from];
             }
         }
     }
@@ -488,9 +550,11 @@ impl PadSampler {
             (params[LENGTH] > 0.0).then(|| (frames as f64 * f64::from(params[LENGTH])) as u64);
         let last = frames as f64 - 1.0;
         let data = sample.channels();
+        let gain_ramp = self.ramps[pad];
+        let fixed = gain_ramp.finished().then(|| gain_ramp.gain(0));
         let voices = &mut self.voices[pad * VOICES_PER_PAD..][..VOICES_PER_PAD];
         for voice in voices.iter_mut().filter(|v| v.active) {
-            for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+            for (k, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
                 if voice.pos > last {
                     voice.active = false;
                     break;
@@ -519,12 +583,26 @@ impl PadSampler {
                     break;
                 }
                 let (reverse, pos) = (voice.reverse, voice.pos);
-                *l += read(data[0], frames, pos, reverse) * voice.env * voice.gain[0] * out[0];
-                *r += read(data[1], frames, pos, reverse) * voice.env * voice.gain[1] * out[1];
+                let ramped = fixed.unwrap_or_else(|| gain_ramp.gain(k as u32));
+                *l += read(data[0], frames, pos, reverse)
+                    * voice.env
+                    * voice.gain[0]
+                    * out[0]
+                    * ramped;
+                *r += read(data[1], frames, pos, reverse)
+                    * voice.env
+                    * voice.gain[1]
+                    * out[1]
+                    * ramped;
                 voice.pos += step * voice.pitch;
                 voice.age += 1;
             }
         }
+        // The ramp goes on whether or not a voice sounds.
+        let done = gain_ramp
+            .done
+            .saturating_add(u32::try_from(left.len()).unwrap_or(u32::MAX));
+        self.ramps[pad].done = done.min(gain_ramp.frames);
     }
 
     /// Fast-fades every other pad in `pad`'s cut group.

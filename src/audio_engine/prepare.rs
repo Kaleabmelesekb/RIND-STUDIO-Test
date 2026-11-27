@@ -71,6 +71,14 @@ pub(super) enum Action {
     ClipFade {
         pad: usize,
     },
+    /// Audio clip slot `pad`'s fade in or out ([`honeydew_audio::drums::PadSampler::ramp`]): its gain's progress runs
+    /// from `from` to `to` over `frames` frames.
+    ClipRamp {
+        pad: usize,
+        from: f32,
+        to: f32,
+        frames: u32,
+    },
     /// A slide event for every instrument of the channel: the offsets of every voice. `key` is the slide note's, for
     /// The key range.
     Slide {
