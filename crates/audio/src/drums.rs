@@ -550,8 +550,8 @@ impl PadSampler {
             (params[LENGTH] > 0.0).then(|| (frames as f64 * f64::from(params[LENGTH])) as u64);
         let last = frames as f64 - 1.0;
         let data = sample.channels();
-        let ramp = self.ramps[pad];
-        let fixed = ramp.finished().then(|| ramp.gain(0));
+        let gain_ramp = self.ramps[pad];
+        let fixed = gain_ramp.finished().then(|| gain_ramp.gain(0));
         let voices = &mut self.voices[pad * VOICES_PER_PAD..][..VOICES_PER_PAD];
         for voice in voices.iter_mut().filter(|v| v.active) {
             for (k, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
@@ -583,7 +583,7 @@ impl PadSampler {
                     break;
                 }
                 let (reverse, pos) = (voice.reverse, voice.pos);
-                let ramped = fixed.unwrap_or_else(|| ramp.gain(k as u32));
+                let ramped = fixed.unwrap_or_else(|| gain_ramp.gain(k as u32));
                 *l += read(data[0], frames, pos, reverse)
                     * voice.env
                     * voice.gain[0]
@@ -599,10 +599,10 @@ impl PadSampler {
             }
         }
         // The ramp goes on whether or not a voice sounds.
-        let done = ramp
+        let done = gain_ramp
             .done
             .saturating_add(u32::try_from(left.len()).unwrap_or(u32::MAX));
-        self.ramps[pad].done = done.min(ramp.frames);
+        self.ramps[pad].done = done.min(gain_ramp.frames);
     }
 
     /// Fast-fades every other pad in `pad`'s cut group.
