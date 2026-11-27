@@ -66,7 +66,7 @@ pub enum TrackOp {
 /// - Column 1, generator channels only (not the master, not a send), by the primary track's kind: notes
 ///   `Import MIDI Tracks`, `Save as MIDI`, `Burn Notes to Track`, `Add Track`; audio `Add Track`, `Sync All Samples`; drums `Load Drumset`,
 ///   `Save Drumset`, `Add StepSeq Track`, `Add Notes Track`, `Save as MIDI`. Notes and drums have Honeydew's `Freeze Track`
-///   (`Unfreeze Track` once frozen) and `Bounce in Place`, after `Burn Notes to Track` and `Save as MIDI`. `Sync All Samples` is disabled (see
+///   (`Unfreeze Track` once frozen) and `Bounce in Place`, last. `Sync All Samples` is disabled (see
 ///   [`TrackOp`]). Notes and drums then have `Add MIDI CC track…` (issue #19); all three end with
 ///   `Add Pitch Bend track` (issue #59).
 ///
@@ -137,14 +137,12 @@ pub fn track_menu(song: &Song, channel: usize, lane: usize) -> Vec<PopupItem<Tra
             (ImportMidi, "Import MIDI Tracks", true),
             (SaveMidi, "Save as MIDI", true),
             (BurnNotes, "Burn Notes to Track", true),
-        ]
-        .into_iter()
-        .chain(freeze)
-        .chain([
             (AddTrack, "Add Track", true),
             (AddCcTrack, "Add MIDI CC track…", true),
             (AddPitchTrack, "Add Pitch Bend track", true),
-        ])
+        ]
+        .into_iter()
+        .chain(freeze)
         .collect(),
         LaneKind::Audio => vec![
             (AddTrack, "Add Track", true),
@@ -157,13 +155,11 @@ pub fn track_menu(song: &Song, channel: usize, lane: usize) -> Vec<PopupItem<Tra
             (AddStepSeqTrack, "Add StepSeq Track", true),
             (AddNotesTrack, "Add Notes Track", true),
             (SaveMidi, "Save as MIDI", true),
+            (AddCcTrack, "Add MIDI CC track…", true),
+            (AddPitchTrack, "Add Pitch Bend track", true),
         ]
         .into_iter()
         .chain(freeze)
-        .chain([
-            (AddCcTrack, "Add MIDI CC track…", true),
-            (AddPitchTrack, "Add Pitch Bend track", true),
-        ])
         .collect(),
         LaneKind::Automation => Vec::new(),
     };
@@ -247,11 +243,11 @@ mod tests {
                     (1, "Import MIDI Tracks", true),
                     (1, "Save as MIDI", true),
                     (1, "Burn Notes to Track", true),
-                    (1, "Freeze Track", false),
-                    (1, "Bounce in Place", false),
                     (1, "Add Track", true),
                     (1, "Add MIDI CC track…", true),
                     (1, "Add Pitch Bend track", true),
+                    (1, "Freeze Track", false),
+                    (1, "Bounce in Place", false),
                 ])
                 .collect();
             assert_eq!(menu(&song, channel, 0), want, "{channel}");
@@ -267,10 +263,10 @@ mod tests {
                 (1, "Add StepSeq Track", true),
                 (1, "Add Notes Track", true),
                 (1, "Save as MIDI", true),
-                (1, "Freeze Track", false),
-                (1, "Bounce in Place", false),
                 (1, "Add MIDI CC track…", true),
                 (1, "Add Pitch Bend track", true),
+                (1, "Freeze Track", false),
+                (1, "Bounce in Place", false),
             ])
             .collect();
         assert_eq!(menu(&song(), 2, 0), want);
@@ -386,10 +382,10 @@ mod tests {
                 AddStepSeqTrack,
                 AddNotesTrack,
                 SaveMidi,
-                Freeze,
-                Bounce,
                 AddCcTrack,
-                AddPitchTrack
+                AddPitchTrack,
+                Freeze,
+                Bounce
             ]
         );
     }

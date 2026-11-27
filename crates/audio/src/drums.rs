@@ -229,6 +229,8 @@ struct Voice {
     gain: [f32; 2],
     /// Output frames since the start, for the Length gate.
     age: u64,
+    /// An audio clip's start inside its sample: it fades in ([`PadSampler::hit_clip`]).
+    declick: bool,
 }
 
 /// A kit's pads and their voices.
@@ -317,6 +319,27 @@ impl PadSampler {
     /// between two frames would read every frame interpolated at that phase, a low-pass where the sample plays at the
     /// output's rate (a clip relaunched by a re-sync, a clip with a content offset; #68).
     pub fn hit_at(&mut self, pad: usize, velocity: f32, pan: f32, pitch: f32, offset: f64) {
+        self.start(pad, velocity, pan, pitch, offset, false);
+    }
+
+    /// An audio clip's hit from source time `offset` seconds ([`Self::hit_at`] at full velocity, centred, at the
+    /// sample's own pitch). A start past the sample's beginning (a clip cut from a longer one, or one joined to the
+    /// clip before it) fades in over a few milliseconds, the way [`Self::fade`] fades out, so the two make a crossfade
+    /// that sums to the source at their join: a cut in mid-wave does not click and the join does not bump. One from
+    /// the beginning starts as it always did, its first frame at full level.
+    pub fn hit_clip(&mut self, pad: usize, offset: f64) {
+        self.start(pad, 1.0, 0.5, 1.0, offset, offset > 0.0);
+    }
+
+    fn start(
+        &mut self,
+        pad: usize,
+        velocity: f32,
+        pan: f32,
+        pitch: f32,
+        offset: f64,
+        declick: bool,
+    ) {
         let valid = velocity.is_finite() && pan.is_finite() && pitch.is_finite() && pitch > 0.0;
         let Some(p) = self.pads.get(pad).filter(|_| valid && offset.is_finite()) else {
             return;
@@ -347,6 +370,7 @@ impl PadSampler {
             attack: coefficient(params[EG_A], 500.0),
             pos: ((sample_start_seconds(params[SAMPLE_START]) + offset) * f64::from(rate)).round(),
             reverse,
+            declick,
             pitch: f64::from(pitch),
             gain: [
                 velocity * (2.0 - 2.0 * pan).min(1.0),
@@ -476,14 +500,18 @@ impl PadSampler {
                 {
                     voice.stage = Stage::Release;
                 }
+                // An instant attack that declicks rises exponentially to 1, the mirror of a fade.
+                let ramp = voice.declick && voice.attack >= 1.0;
                 let (target, c) = match voice.stage {
+                    Stage::Attack if ramp => (1.0, FAST_FADE),
                     Stage::Attack => (5.0, voice.attack),
                     Stage::Decay => (sustain, decay),
                     Stage::Release => (0.0, release),
                     Stage::Fade => (0.0, FAST_FADE),
                 };
                 voice.env += (target - voice.env) * c;
-                if voice.stage == Stage::Attack && voice.env > 1.0 {
+                if voice.stage == Stage::Attack && (voice.env > 1.0 || (ramp && voice.env > 0.995))
+                {
                     voice.env = 1.0;
                     voice.stage = Stage::Decay;
                 } else if target == 0.0 && voice.env < SILENT {

@@ -950,3 +950,29 @@ fn a_pad_without_a_sample_ends_the_voices_it_takes_over() {
     assert_eq!(back.active_voices(0), 0);
     assert!(left(&mut back, 0, 256).iter().all(|&s| s == 0.0));
 }
+
+#[test]
+fn a_clip_hit_inside_its_sample_fades_in_and_one_from_the_start_does_not() {
+    let gain = level_gain(0.8531);
+    let mut sampler = PadSampler::new(vec![pad(dc(100_000))], RATE);
+    sampler.hit_clip(0, 0.0);
+    let from_start = left(&mut sampler, 0, 10);
+    assert!(close(from_start[0], gain, 1e-4), "full level at once");
+
+    let mut sampler = PadSampler::new(vec![pad(dc(100_000))], RATE);
+    sampler.hit_clip(0, 0.01);
+    let inside = left(&mut sampler, 0, 3000);
+    // c = 0.01 per frame, the mirror of a fade: 1 - 0.99^(n + 1), and then the full level.
+    assert!(close(inside[0], 0.01 * gain, 1e-4), "{}", inside[0]);
+    assert!(close(inside[99], (1.0 - 0.99f32.powi(100)) * gain, 1e-3));
+    assert!(close(inside[2999], gain, 1e-3), "settled at the level");
+    // The old clip fading out under it and the new fading in sum to the source: no bump at a join.
+    let mut fading = PadSampler::new(vec![pad(dc(100_000))], RATE);
+    fading.hit(0, 1.0, 0.5, 1.0);
+    left(&mut fading, 0, 10);
+    fading.fade(0);
+    let out = left(&mut fading, 0, 100);
+    for n in [0, 10, 50, 99] {
+        assert!(close(out[n] + inside[n], gain, 2e-3), "frame {n}");
+    }
+}

@@ -77,7 +77,7 @@ impl Clips {
                 }
             }
             let source = c * span.speed * 60.0 / f64::from(tempo_bpm);
-            self.sampler.hit_at(pad, 1.0, 0.5, 1.0, source);
+            self.sampler.hit_clip(pad, source);
         }
     }
 

@@ -757,7 +757,7 @@ impl SongAudioEngine {
                 Action::Key { key, on } => set_key(&mut self.sounding[event.channel], key, on),
                 Action::ClipHit { pad, offset } => {
                     if let Some(clips) = self.clips[event.channel].as_mut() {
-                        clips.sampler.hit_at(pad, 1.0, 0.5, 1.0, offset);
+                        clips.sampler.hit_clip(pad, offset);
                     }
                 }
                 Action::ClipFade { pad } => {
