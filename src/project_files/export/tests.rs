@@ -1216,3 +1216,45 @@ fn an_flp_puts_the_effects_on_the_channel_s_insert_and_with_rendered_audio_holds
         clip.visible_len_beats
     );
 }
+
+// ---- Freeze Track and Bounce in Place ----
+
+#[test]
+fn a_bounce_renders_the_one_channel_with_its_tail_and_without_the_master_effects() {
+    let mut song = stems_song(&[("Lead", true), ("Idle", false)]);
+    master_gain(&mut song);
+    let bounce = Job::bounce(
+        &song,
+        &SampleCache::default(),
+        1,
+        RATE,
+        "Freezing Lead".into(),
+    )
+    .unwrap();
+    assert_eq!(bounce.title(), "Freezing Lead\nRendering...");
+    let (_, stems, done) = run(bounce);
+    assert!(stems.is_empty(), "one file, not a stem");
+    let Done::File(wav) = done else {
+        panic!("{done:?}");
+    };
+    // The note, at full level: the master's low Gain is not in the audio (the master plays it over the new channel).
+    let bounced = peak(&wav);
+    let mix = peak(&file(job(&song, Wav, cut(false))));
+    assert!(bounced > mix * 1.5, "{bounced} against the mix's {mix}");
+}
+
+#[test]
+fn a_bounce_of_a_channel_with_no_sound_is_silent() {
+    let song = stems_song(&[("Lead", true), ("Idle", false)]);
+    let bounce = Job::bounce(
+        &song,
+        &SampleCache::default(),
+        2,
+        RATE,
+        "Bouncing Idle".into(),
+    );
+    match bounce {
+        Err(error) => assert!(matches!(error, RenderError::Silent), "{error:?}"),
+        Ok(job) => assert!(matches!(run(job).2, Done::Failed(RenderError::Silent))),
+    }
+}

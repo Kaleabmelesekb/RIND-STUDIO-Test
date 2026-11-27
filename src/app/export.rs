@@ -71,6 +71,10 @@ impl HoneydewApp {
                     self.files.write_stem(&export, &name, bytes);
                     return self.navigate(Nav::Open(Overlay::Busy { title }));
                 }
+                // A freeze's or bounce's audio is a channel, not a file.
+                Some(Done::File(bytes)) if self.bounce.is_some() => {
+                    self.bounced(bytes, ctx.cumulative_frame_nr())
+                }
                 Some(Done::File(bytes)) => self.files.write_export(&export, bytes),
                 Some(Done::Stems) => self.files.stems_rendered(),
                 Some(Done::Rendered(song, stems)) => {
@@ -80,6 +84,7 @@ impl HoneydewApp {
             }
         }
         self.export = None;
+        self.bounce = None;
         self.nav
             .overlays
             .retain(|o| !matches!(o, Overlay::Busy { .. }));

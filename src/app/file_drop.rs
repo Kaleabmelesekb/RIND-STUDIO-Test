@@ -27,6 +27,7 @@ use eframe::egui;
 use super::{HoneydewApp, SongEdit};
 use crate::metrics::Metrics;
 use crate::project_files::IMPORT_FAILED;
+use crate::song::freeze::{BOUNCE, FROZEN};
 use crate::song::{Channel, ChannelKind, Clip, Event, Lane, LaneKind, PPQ, SynthKind};
 use crate::ui::UiCtx;
 use crate::ui::clips::{ClipRef, end_tick};
@@ -39,6 +40,14 @@ pub(super) const IMPORTING: &str = "Importing...";
 /// The failure message's tag.
 const FAILED_TAG: &str = "file_drop";
 
+/// What a `Freeze Track` or `Bounce in Place` is for ([`HoneydewApp::start_bounce`]): the source channel's id, and
+/// whether its notes are muted once the audio is in.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Bounce {
+    pub channel: i32,
+    pub freeze: bool,
+}
+
 /// A drop decoding on the worker.
 pub(super) struct Importing {
     done: Receiver<Vec<(PathBuf, Decoded)>>,
@@ -49,6 +58,8 @@ pub(super) struct Importing {
     frame: u64,
     /// The loading screen is up.
     shown: bool,
+    /// A bounce's audio: its channel takes the source's name, colour and output, and a freeze mutes the source.
+    pub(super) bounce: Option<Bounce>,
 }
 
 impl HoneydewApp {
@@ -89,6 +100,7 @@ impl HoneydewApp {
                     tick,
                     frame: ctx.cumulative_frame_nr(),
                     shown: false,
+                    bounce: None,
                 });
             }
             ctx.request_repaint();
@@ -110,14 +122,31 @@ impl HoneydewApp {
             done => done.unwrap_or_default(),
         };
         let Importing {
-            place, tick, shown, ..
+            place,
+            tick,
+            shown,
+            bounce,
+            ..
         } = self.importing.take().expect("importing");
         if shown {
             let screen = |o: &Overlay| matches!(o, Overlay::Busy { title } if title == IMPORTING);
             self.nav.overlays.retain(|o| !screen(o));
         }
-        self.place_clips(picks, place, tick);
+        self.place_clips(picks, place, tick, bounce);
         ctx.request_repaint();
+    }
+
+    /// A bounce's WAV `path` (kept in `My Recordings`) decoding on the worker, to become a new Audio channel at channel
+    /// index `at`, its clip at the start of the song ([`Self::place_clips`]).
+    pub(super) fn import_bounce(&mut self, path: PathBuf, at: usize, bounce: Bounce, frame: u64) {
+        self.importing = Some(Importing {
+            done: drop_decode(&self.song, vec![path], &self.files),
+            place: Some(Place::Insert { at, tick: 0 }),
+            tick: 0,
+            frame,
+            shown: false,
+            bounce: Some(bounce),
+        });
     }
 
     /// #167 (a Honeydew change): the notes of Tesla's `Convert to score` as a new clip at song tick `tick` (the
@@ -177,7 +206,13 @@ impl HoneydewApp {
 
     /// Makes the clips of a drop's decoded files `picks`, in drop order, at `place` (see the module docs): one final
     /// edit. A track no longer an audio track (an undo since the drop) drops as off the playlist does.
-    fn place_clips(&mut self, picks: Vec<(PathBuf, Decoded)>, place: Option<Place>, tick: u64) {
+    fn place_clips(
+        &mut self,
+        picks: Vec<(PathBuf, Decoded)>,
+        place: Option<Place>,
+        tick: u64,
+        bounce: Option<Bounce>,
+    ) {
         let song = &mut self.song;
         let audio = |c: usize, l: usize| {
             let lane = song.channels.get(c).and_then(|ch| ch.lanes.get(l));
@@ -212,6 +247,20 @@ impl HoneydewApp {
                         break;
                     };
                     (at, self.selected_channel) = (Some(index + 1), index);
+                    // A bounce's channel looks like its source: the name, colour and where it plays to.
+                    let from = bounce.and_then(|b| {
+                        let source = song.channels.iter().find(|c| c.id == b.channel)?;
+                        let suffix = if b.freeze { FROZEN } else { BOUNCE };
+                        Some((
+                            format!("{}{suffix}", source.name),
+                            source.hue,
+                            source.output_bus,
+                        ))
+                    });
+                    if let Some((name, hue, output_bus)) = from {
+                        let channel = &mut song.channels[index];
+                        (channel.name, channel.hue, channel.output_bus) = (name, hue, output_bus);
+                    }
                     &mut song.channels[index].lanes[0]
                 }
                 (None, None) => unreachable!("a track or a channel index"),
@@ -226,6 +275,12 @@ impl HoneydewApp {
             }
         }
         if made {
+            // A freeze is one undo step: the audio in, the source's notes out.
+            if let Some(b) = bounce.filter(|b| b.freeze)
+                && let Some(source) = self.song.channels.iter().position(|c| c.id == b.channel)
+            {
+                self.song.mute_note_clips(source, true);
+            }
             self.song_edited(SongEdit::Final, tick);
         }
         if full {
