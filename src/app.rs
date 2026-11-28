@@ -2452,7 +2452,18 @@ impl HoneydewApp {
                             focus::container(ui, keys(focus::EDITOR, true), shown, |ui| {
                                 let clip = ui.clip_rect();
                                 ui.set_clip_rect(clip.intersect(shown));
-                                navs.extend(self.slots.view(view, ui, &mut app));
+                                // The dock's tab: the clip's editor, the current channel's devices or the mixer.
+                                match self.main_screen.dock {
+                                    split::DockTab::Clip => {
+                                        navs.extend(self.slots.view(view, ui, &mut app));
+                                    }
+                                    split::DockTab::Mixer => {
+                                        navs.extend(self.slots.view(View::Mixer, ui, &mut app));
+                                    }
+                                    split::DockTab::Devices => {
+                                        navs.extend(self.slots.devices(ui, &mut app, shown));
+                                    }
+                                }
                                 ui.set_clip_rect(clip);
                                 // The colour band and its close ribbon over the editor, the shadow over the playlist.
                                 // The ribbon's tap: the playlist alone again, the clip kept; a focus in the editor goes
@@ -2467,6 +2478,14 @@ impl HoneydewApp {
                                     shown.top(),
                                     color.to_color32(),
                                     &metrics,
+                                );
+                                let name = channel.map_or("", |c| c.name.as_str());
+                                split::tabs(
+                                    ui,
+                                    (view_rect, shown.top()),
+                                    &mut self.main_screen.dock,
+                                    name,
+                                    &cx,
                                 );
                                 split::shadow(ui.painter(), top, &metrics);
                                 let split = &mut self.main_screen.split;

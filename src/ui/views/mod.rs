@@ -637,6 +637,30 @@ impl Slots {
         Some((roll.lane, roll.clip_id?))
     }
 
+    /// Draws the current channel's rack as a strip of cards in `rect`, the dock's Devices tab.
+    pub fn devices(
+        &mut self,
+        ui: &mut egui::Ui,
+        app: &mut AppCtx,
+        rect: egui::Rect,
+    ) -> Option<Nav> {
+        let channel = *app.selected;
+        let held = self.roll_clip(channel);
+        let id = egui::Id::new(crate::ui::focus::RACK);
+        crate::ui::focus::container(ui, id, rect, |ui| {
+            rack::show_strip(
+                &mut self.rack,
+                ui,
+                app,
+                rect,
+                channel,
+                &mut self.clipboard,
+                held,
+                None,
+            )
+        })
+    }
+
     /// Draws `view` in the editor area; the playlist is drawn by the playlist screen instead.
     pub fn view(&mut self, view: View, ui: &mut egui::Ui, app: &mut AppCtx) -> Option<Nav> {
         match view {

@@ -588,6 +588,8 @@ pub struct MainScreen {
     pub touch: Option<(usize, Touch)>,
     /// The playlist / clip-editor split: the app lays an open clip editor out under the playlist by it.
     pub(crate) split: crate::ui::split::Split,
+    /// What the dock under the playlist shows ([`crate::ui::split::DockTab`]).
+    pub(crate) dock: crate::ui::split::DockTab,
 }
 
 /// A track header held past its 300 ms.
