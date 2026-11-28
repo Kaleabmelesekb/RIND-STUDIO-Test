@@ -27,7 +27,7 @@ fn render_screens() {
 
     let mut rig = Rig::new();
     let (_, bytes) = demo_songs().remove(0);
-    let song = crate::flm::read::read(&bytes).expect("the demo song");
+    let song = crate::flm::read(&bytes).expect("the demo song");
     let files = without_factory(ProjectFiles::with_provider(Box::new(MemFiles::default())));
     rig.app = HoneydewApp {
         files,
