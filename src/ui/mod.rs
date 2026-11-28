@@ -40,6 +40,8 @@ pub mod ctrl_menu;
 pub mod keyboard_settings;
 #[cfg(test)]
 mod offscreen;
+#[cfg(test)]
+pub(crate) mod screenshot;
 pub mod tempo;
 pub mod transport_extras;
 // The keyboard-area sample row.

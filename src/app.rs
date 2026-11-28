@@ -3119,6 +3119,8 @@ mod tests {
     mod last_song;
     // The surface resized between frames (a phone's rotation; PR #87).
     mod rotation;
+    // Not a check: the running app's screens as PNGs (CI uploads them).
+    mod screenshots;
     // SONGS' audio files: preview and `Send to playlist` (#106).
     #[cfg(not(target_arch = "wasm32"))]
     mod songs_audio;
@@ -3162,6 +3164,8 @@ mod tests {
         close_request: bool,
         /// The screen the frames are laid out on: a rotation resizes it, as the surface is resized on a phone.
         screen: egui::Vec2,
+        /// The textures the frames sent, for the screenshots (`tests/screenshots.rs`).
+        textures: crate::ui::screenshot::Textures,
     }
 
     const U: f32 = 32.0;
@@ -3254,6 +3258,7 @@ mod tests {
                 out: egui::FullOutput::default(),
                 close_request: false,
                 screen: vec2(1170.0, 540.0),
+                textures: Default::default(),
             };
             // Lets egui learn the widget rects before the first press.
             rig.frame(vec![]);
@@ -3340,6 +3345,7 @@ mod tests {
                 opens,
                 no_device,
                 out,
+                textures,
                 ..
             } = self;
             // As eframe calls it, before the frame.
@@ -3350,6 +3356,7 @@ mod tests {
                     (!*no_device).then(|| Box::new(rec.clone()) as Box<dyn AudioSink>)
                 });
             });
+            textures.absorb(out);
         }
 
         fn button(&mut self, pos: Pos2, pressed: bool) {

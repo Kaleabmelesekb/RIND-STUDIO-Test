@@ -16,8 +16,31 @@ pub const RADIUS_M: f32 = 0.24;
 pub const RADIUS_L: f32 = 0.36;
 
 /// Whether the chrome wears Rind's rounded look (the running app) or the square one the tests pin.
-pub const fn styled() -> bool {
-    !cfg!(test)
+pub fn styled() -> bool {
+    !cfg!(test) || screenshots::on()
+}
+
+/// The screenshot test (`ui::screenshot`) draws the running app's look inside a test binary.
+#[cfg(test)]
+pub(crate) mod screenshots {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static ON: AtomicBool = AtomicBool::new(false);
+
+    pub fn on() -> bool {
+        ON.load(Ordering::Relaxed)
+    }
+
+    pub fn set(on: bool) {
+        ON.store(on, Ordering::Relaxed);
+    }
+}
+
+#[cfg(not(test))]
+mod screenshots {
+    pub const fn on() -> bool {
+        false
+    }
 }
 
 /// A corner radius of `token` `U`, in points; none in the unit tests.

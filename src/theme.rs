@@ -297,7 +297,7 @@ pub fn builtin_themes() -> Vec<Theme> {
     [
         // The running app wears Ableton's dark: near-black gaps, charcoal panels, soft white text; the unit tests keep
         // the colours their pinned drawings were made with.
-        if cfg!(test) {
+        if !crate::ui::tokens::styled() {
             row(
                 0,
                 "Flat Industrial",

@@ -1,0 +1,40 @@
+# Renders the app's screens to PNGs in software (no device needed) and uploads them, to look at the real UI.
+# Run by hand: Actions > Screenshots > Run workflow, then pick the branch.
+name: Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["shots/**"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: screenshots
+      - name: System libraries
+        run: |
+          for try in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=5 libasound2-dev libxkbcommon-dev libwayland-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libclang-dev && break
+            echo "apt failed (try $try)"; sleep 30
+            [ "$try" = 5 ] && exit 1
+          done
+      - name: Render the screens
+        run: SHOT_DIR="$PWD/shots" cargo test --lib render_screens -- --ignored --nocapture
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: shots/*.png
+          if-no-files-found: error
