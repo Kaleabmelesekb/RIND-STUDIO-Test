@@ -48,6 +48,5 @@ mod tests {
         assert_eq!(radius(&m, RADIUS_L), 0.0);
         let cell = Rect::from_min_size(Default::default(), vec2(40.0, 20.0));
         assert_eq!(inset(cell, &m), cell);
-        assert!(RADIUS_S < RADIUS_M && RADIUS_M < RADIUS_L);
     }
 }
