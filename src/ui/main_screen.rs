@@ -36,6 +36,7 @@ use crate::ui::sample_row;
 use crate::ui::scroller::{self, Axis, Scroller, X, Y, Zones};
 use crate::ui::tempo::transport_bpm_text;
 use crate::ui::timeline::{self, KnobGesture, PlayheadKnob, RULER_H, RangeRuler, RangeSelect};
+use crate::ui::tokens;
 use crate::ui::track_menu::{TrackOp, track_menu};
 use crate::ui::transport_extras::{self, Load, RamReadout, SystemMemory};
 use crate::ui::views::{AppCtx, MenuTab, Nav, Overlay, View};
@@ -2167,6 +2168,14 @@ fn paint_bar_button(
     let text = c.text.to_color32();
     let mut ink = look.ink.unwrap_or(c.text).to_color32();
     let content = content_rect(slot, !look.caption.is_empty(), m);
+    // Rind's look: a button without a caption rests on a rounded `controlFill` tile.
+    if tokens::styled() && look.caption.is_empty() && !look.lit && !look.disabled {
+        let side = TILE * slot.width().min(slot.height());
+        let tile = Rect::from_center_size(content.center(), Vec2::splat(side));
+        let fill = c.control_fill.to_color32();
+        let radius = tokens::radius(m, tokens::RADIUS_M);
+        ui.painter().rect_filled(tile, radius, tone(fill));
+    }
     if look.lit {
         let r = LIT_R * slot.width();
         ui.painter().circle_filled(content.center(), r, tone(text));
@@ -2191,6 +2200,9 @@ fn paint_bar_button(
             .text(at, Align2::CENTER_CENTER, look.caption, font, tone(text));
     }
 }
+
+/// A transport button's tile ([`paint_bar_button`]), its fraction of the slot.
+const TILE: f32 = 0.86;
 
 /// `color` with its RGB × `gain`, clamped, alpha unchanged.
 fn brighter(color: Color32, gain: f32) -> Color32 {

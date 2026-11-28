@@ -289,6 +289,8 @@ pub fn builtin_themes() -> Vec<Theme> {
     const ACCENT: u32 = 0x1F1412; // flat industrial dark accent
     // Rind Studio's own look (Ableton's mid-grey chrome with its orange accent): theme 0.
     const ORANGE: u32 = 0xFF8A00;
+    // Rind Dark's accent: the amber of the transport's loop and the selection.
+    const AMBER: u32 = 0xF5A524;
     let clay_keys = Some([0xC5CAD7, 0x211D20, 0x9A98A4, 0x807981]);
     let clay_options = Some([0.90, 0.63, 1.00, 0.153]);
 
@@ -306,9 +308,9 @@ pub fn builtin_themes() -> Vec<Theme> {
         } else {
             row(
                 0,
-                "Live Dark",
-                [0x181818, 0x262626, 0x303030, 0x3A3A3A, 0xD6D6D6, ORANGE],
-                Some([0xE6E6E6, 0x1A1A1A, 0x9A9A9A, 0x5A5A5A]),
+                "Rind Dark",
+                [0x14161B, 0x1F232B, 0x262B35, 0x303644, 0xE8EAF0, AMBER],
+                Some([0xE8EAF0, 0x15171C, 0x9AA1B2, 0x4A5163]),
                 Some([0.85, 0.55, 0.85, 0.30]),
             )
         },
