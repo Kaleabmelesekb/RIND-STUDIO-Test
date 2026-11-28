@@ -590,6 +590,8 @@ pub struct MainScreen {
     pub(crate) split: crate::ui::split::Split,
     /// What the dock under the playlist shows ([`crate::ui::split::DockTab`]).
     pub(crate) dock: crate::ui::split::DockTab,
+    /// The dock is open under the playlist, whether or not a clip editor is (its Devices and Mixer tabs need none).
+    pub(crate) dock_open: bool,
 }
 
 /// A track header held past its 300 ms.

@@ -123,6 +123,30 @@ pub fn band_h(m: &Metrics) -> f32 {
     m.t() + if tokens::styled() { m.u(HEADER_U) } else { 0.0 }
 }
 
+/// The height of the dock's bar while it is closed: the colour line and the header, in Rind's look; none in the tests.
+pub fn collapsed_h(m: &Metrics) -> f32 {
+    if tokens::styled() { band_h(m) } else { 0.0 }
+}
+
+/// The closed dock's bar along the bottom of `view`: the colour line and the header with the tabs, always there so the
+/// dock is one tap away. A tap on a tab opens the dock on it (`open`).
+pub fn collapsed(
+    ui: &mut Ui,
+    view: Rect,
+    tab: &mut DockTab,
+    open: &mut bool,
+    (color, name): (Color32, &str),
+    cx: &UiCtx,
+) {
+    if !tokens::styled() {
+        return;
+    }
+    band(ui.painter(), view, view.bottom(), color, cx.m);
+    if tabs(ui, (view, view.bottom()), tab, name, cx).is_some() {
+        *open = true;
+    }
+}
+
 /// The colour band over the editor that starts at `editor_top`: [`band_h`] tall, across `view`'s width, right above it,
 /// in `color` (the current channel's, `menuFill` without one). Not interactive.
 pub fn band(painter: &Painter, view: Rect, editor_top: f32, color: Color32, m: &Metrics) {
@@ -131,16 +155,17 @@ pub fn band(painter: &Painter, view: Rect, editor_top: f32, color: Color32, m: &
 }
 
 /// The dock's header, over [`band`] in Rind's look: a `moduleFill` bar under the colour line, with the current
-/// channel's `name` and the tabs ([`DockTab`]) on it. Returns whether a tab was picked.
+/// channel's `name` and the tabs ([`DockTab`]) on it. Returns the tab that was tapped and whether it was the one
+/// already showing.
 pub fn tabs(
     ui: &mut Ui,
     (view, editor_top): (Rect, f32),
     tab: &mut DockTab,
     name: &str,
     cx: &UiCtx,
-) -> bool {
+) -> Option<(DockTab, bool)> {
     if !tokens::styled() {
-        return false;
+        return None;
     }
     let (c, m) = (&cx.theme.colors, cx.m);
     let bar = Rect::from_x_y_ranges(view.x_range(), editor_top - m.u(HEADER_U)..=editor_top);
@@ -157,7 +182,7 @@ pub fn tabs(
         text,
     );
     x = label.right().max(x + m.u(3.0)) + m.u(0.8);
-    let mut picked = false;
+    let mut picked = None;
     for t in DockTab::ALL {
         let pill = Rect::from_min_size(
             pos2(x, bar.center().y - m.u(TAB_H) / 2.0),
@@ -166,9 +191,9 @@ pub fn tabs(
         x += m.u(TAB_W + TAB_GAP);
         let id = Id::new(("dock tab", t.label()));
         let response = crate::ui::focus::interact(ui, pill, id, Sense::click());
-        if response.clicked() && *tab != t {
+        if response.clicked() {
+            picked = Some((t, *tab == t));
             *tab = t;
-            picked = true;
         }
         let on = *tab == t;
         if on {

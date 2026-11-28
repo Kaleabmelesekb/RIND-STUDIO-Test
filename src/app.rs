@@ -2388,10 +2388,20 @@ impl HoneydewApp {
                 let mut navs = Vec::new();
                 // A clip editor opens under the playlist (`ui::split`); the mixer replaces both.
                 let editor = !matches!(self.nav.view, View::Playlist | View::Mixer);
+                // The dock (Rind's look) is also open on its own, for the Devices and Mixer tabs.
+                let dock_open = self.main_screen.dock_open && crate::ui::tokens::styled();
+                let docked = editor || dock_open;
                 let view_rect = app.regions.editor;
                 let split = &mut self.main_screen.split;
+                // A dock opened with no clip starts half way up, the playlist above it.
+                if dock_open && !editor && *split == split::Split::default() {
+                    *split = split::Split {
+                        f: 1.0,
+                        target: 0.5,
+                    };
+                }
                 let step = crate::ui::anim::step(ui.ctx(), crate::ui::anim::PANEL_KEEP);
-                if split.step(editor, view_rect.height() * metrics.ppp(), step) {
+                if split.step(docked, view_rect.height() * metrics.ppp(), step) {
                     ui.ctx().request_repaint();
                 }
                 let split = *split;
@@ -2414,7 +2424,12 @@ impl HoneydewApp {
                     });
                 } else {
                     let (top, bottom, shown) = split.layout(view_rect, &metrics);
-                    let top = if editor { top } else { view_rect };
+                    let bar = split::collapsed_h(&metrics);
+                    let top = if docked {
+                        top
+                    } else {
+                        view_rect.with_max_y(view_rect.bottom() - bar)
+                    };
                     app.regions.editor = top;
                     // The editors may fill the window. A playlist under its ruler's height is 0 (`ui::split`) and not
                     // drawn: nothing of it takes touches or the focus over the editor.
@@ -2428,20 +2443,43 @@ impl HoneydewApp {
                     // track has no current clip.
                     let current = self.main_screen.clips.current_clip(&app);
                     let followed = || current.and_then(|r| self.slots.follow(r.into(), app.song));
-                    match editor.then(followed) {
-                        None => {}
+                    match docked.then(followed) {
+                        None => {
+                            // The closed dock's bar, along the bottom of the view.
+                            let color = (app.song.channels.get(*app.selected))
+                                .map_or(cx.theme.colors.menu_fill, |c| {
+                                    crate::theme::channel_color(c.hue, cx.theme)
+                                });
+                            let name = (app.song.channels.get(*app.selected))
+                                .map_or("", |c| c.name.as_str());
+                            split::collapsed(
+                                ui,
+                                view_rect,
+                                &mut self.main_screen.dock,
+                                &mut self.main_screen.dock_open,
+                                (color.to_color32(), name),
+                                &cx,
+                            );
+                        }
                         // At once, so that no frame shows the editor's chrome (Undo, Preview) without it.
-                        Some(None) => {
+                        Some(None) if editor && !dock_open => {
                             self.nav.view = View::Playlist;
                             navs.push(Nav::Collapse);
                         }
-                        Some(Some(view)) => {
-                            self.nav.view = view;
-                            if let View::PianoRoll(channel) = view {
+                        Some(view) => {
+                            match view {
+                                Some(view) => self.nav.view = view,
+                                None if editor => {
+                                    self.nav.view = View::Playlist;
+                                    navs.push(Nav::Collapse);
+                                }
+                                None => {}
+                            }
+                            if let Some(View::PianoRoll(channel)) = view {
                                 self.slots.piano_roll.sounding =
                                     lit.get(channel).copied().unwrap_or(0);
                             }
-                            if let View::AutomationEditor(channel) = view {
+                            if let Some(View::AutomationEditor(channel)) = view {
                                 let editor = &mut self.slots.automation_editor;
                                 let key = editor.current(app.song, channel);
                                 editor.init = key.and_then(|k| {
@@ -2454,9 +2492,21 @@ impl HoneydewApp {
                                 ui.set_clip_rect(clip.intersect(shown));
                                 // The dock's tab: the clip's editor, the current channel's devices or the mixer.
                                 match self.main_screen.dock {
-                                    split::DockTab::Clip => {
-                                        navs.extend(self.slots.view(view, ui, &mut app));
-                                    }
+                                    split::DockTab::Clip => match view {
+                                        Some(view) => {
+                                            navs.extend(self.slots.view(view, ui, &mut app))
+                                        }
+                                        None => {
+                                            let c = &cx.theme.colors;
+                                            ui.painter().text(
+                                                shown.center(),
+                                                egui::Align2::CENTER_CENTER,
+                                                "Select a clip to edit it here",
+                                                metrics.font_id(crate::metrics::FontSize::Pt14),
+                                                c.text.to_color32().gamma_multiply(0.6),
+                                            );
+                                        }
+                                    },
                                     split::DockTab::Mixer => {
                                         navs.extend(self.slots.view(View::Mixer, ui, &mut app));
                                     }
@@ -2480,13 +2530,19 @@ impl HoneydewApp {
                                     &metrics,
                                 );
                                 let name = channel.map_or("", |c| c.name.as_str());
-                                split::tabs(
+                                // A tap on the tab already showing closes the dock.
+                                let tapped = split::tabs(
                                     ui,
                                     (view_rect, shown.top()),
                                     &mut self.main_screen.dock,
                                     name,
                                     &cx,
                                 );
+                                let shut = matches!(tapped, Some((_, true)));
+                                if shut {
+                                    self.main_screen.dock_open = false;
+                                    navs.push(Nav::Collapse);
+                                }
                                 split::shadow(ui.painter(), top, &metrics);
                                 let split = &mut self.main_screen.split;
                                 let screen = app.regions.screen.right();
@@ -2500,6 +2556,7 @@ impl HoneydewApp {
                                     &cx,
                                 ) {
                                     navs.push(Nav::Collapse);
+                                    self.main_screen.dock_open = false;
                                     if focus::within(ui.ctx(), egui::Id::new(focus::EDITOR)) {
                                         focus::move_to(ui.ctx(), egui::Id::new(focus::PLAYLIST));
                                     }
