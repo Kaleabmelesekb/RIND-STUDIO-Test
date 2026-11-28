@@ -9,7 +9,7 @@ use eframe::egui::{
 
 use crate::metrics::{FontSize, Metrics};
 use crate::theme::DISABLED_ALPHA;
-use crate::ui::{UiCtx, anim};
+use crate::ui::{UiCtx, anim, tokens};
 
 // Sizes in U.
 const ROW_H: f32 = 1.25;
@@ -227,7 +227,7 @@ fn show_as<T: Copy>(
         ui.allocate_exact_size(rect.size(), Sense::hover());
         let painter = ui.painter();
         if let Some(shape) = sweep.fill(rect, m).filter(|_| !on_box) {
-            painter.rect_filled(shape, 0.0, fill);
+            painter.rect_filled(shape, tokens::radius(m, tokens::RADIUS_L), fill);
         }
         // Until the sweep is done (or while a message box opens) the items take input but are not drawn.
         let mut painter = painter.clone();
@@ -243,7 +243,8 @@ fn show_as<T: Copy>(
                     egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &item.label)
                 });
                 if response.hovered() || response.is_pointer_button_down_on() {
-                    painter.rect_filled(cell, 0.0, band);
+                    let radius = tokens::radius(m, tokens::RADIUS_S);
+                    painter.rect_filled(tokens::inset(cell, m), radius, band);
                 }
                 if response.clicked() {
                     result.selected = Some(value);
@@ -262,7 +263,8 @@ fn show_as<T: Copy>(
             };
             let color = if item.current { fill } else { dim(ink) };
             if item.current {
-                painter.rect_filled(cell, 0.0, dim(ink));
+                let radius = tokens::radius(m, tokens::RADIUS_S);
+                painter.rect_filled(tokens::inset(cell, m), radius, dim(ink));
             }
             painter.text(
                 pos2(cell.left() + m.u(PAD_X), cell.center().y),

@@ -332,6 +332,7 @@ pub mod focus;
 // The browsers' search bar.
 pub mod search_bar;
 // Desktop tooltips.
+pub mod tokens;
 pub mod tooltip;
 // Audio files dragged onto the playlist: the drop curtain, the drop target, the browsers' in-app drag.
 pub mod file_drag;

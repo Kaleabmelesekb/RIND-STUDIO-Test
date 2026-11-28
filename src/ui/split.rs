@@ -23,11 +23,11 @@
 use eframe::egui::{Color32, CornerRadius, Id, Painter, Rect, Sense, Stroke, Ui, pos2, vec2};
 
 use crate::icons::{IconId, draw_icon};
-use crate::metrics::Metrics;
+use crate::metrics::{FontSize, Metrics};
 use crate::theme::Rgba;
 use crate::ui::main_screen::CLEAR_U;
 use crate::ui::timeline::ruler_h;
-use crate::ui::{UiCtx, step_seq, widgets};
+use crate::ui::{UiCtx, step_seq, tokens, widgets};
 
 /// The clip editor's minimum height, in U.
 const MIN_U: f32 = 3.0;
@@ -85,16 +85,107 @@ impl Split {
         let (playlist, shown) = split_rects(view, self.f, m);
         let settled = split_rects(view, self.target, m).1;
         let editor = settled.translate(vec2(0.0, shown.top() - settled.top()));
-        let below = |r: Rect| r.with_min_y((r.top() + m.t()).min(r.bottom()));
+        let below = |r: Rect| r.with_min_y((r.top() + band_h(m)).min(r.bottom()));
         (playlist, below(editor), below(shown))
     }
 }
 
-/// The colour band over the editor that starts at `editor_top`: t tall, across `view`'s width, right above it, in
-/// `color` (the current channel's, `menuFill` without one). Not interactive.
+/// What the dock under the playlist shows: the clip's editor, the current channel's devices or the mixer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DockTab {
+    #[default]
+    Clip,
+    Devices,
+    Mixer,
+}
+
+impl DockTab {
+    pub const ALL: [Self; 3] = [Self::Clip, Self::Devices, Self::Mixer];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Clip => "Clip",
+            Self::Devices => "Devices",
+            Self::Mixer => "Mixer",
+        }
+    }
+}
+
+/// The dock header's height under the colour line, in U: Rind's look, with the tabs on it ([`tabs`]).
+const HEADER_U: f32 = 1.15;
+/// A tab's width and its height, in U, and the gap between tabs.
+const TAB_W: f32 = 4.2;
+const TAB_H: f32 = 0.85;
+const TAB_GAP: f32 = 0.25;
+
+/// The band over the editor: the colour line t tall, and in Rind's look the header with the tabs under it.
+pub fn band_h(m: &Metrics) -> f32 {
+    m.t() + if tokens::styled() { m.u(HEADER_U) } else { 0.0 }
+}
+
+/// The colour band over the editor that starts at `editor_top`: [`band_h`] tall, across `view`'s width, right above it,
+/// in `color` (the current channel's, `menuFill` without one). Not interactive.
 pub fn band(painter: &Painter, view: Rect, editor_top: f32, color: Color32, m: &Metrics) {
-    let band = Rect::from_x_y_ranges(view.x_range(), editor_top - m.t()..=editor_top);
+    let band = Rect::from_x_y_ranges(view.x_range(), editor_top - band_h(m)..=editor_top);
     painter.rect_filled(band, 0.0, color);
+}
+
+/// The dock's header, over [`band`] in Rind's look: a `moduleFill` bar under the colour line, with the current
+/// channel's `name` and the tabs ([`DockTab`]) on it. Returns whether a tab was picked.
+pub fn tabs(
+    ui: &mut Ui,
+    (view, editor_top): (Rect, f32),
+    tab: &mut DockTab,
+    name: &str,
+    cx: &UiCtx,
+) -> bool {
+    if !tokens::styled() {
+        return false;
+    }
+    let (c, m) = (&cx.theme.colors, cx.m);
+    let bar = Rect::from_x_y_ranges(view.x_range(), editor_top - m.u(HEADER_U)..=editor_top);
+    ui.painter()
+        .rect_filled(bar, 0.0, c.module_fill.to_color32());
+    let text = c.text.to_color32();
+    let font = m.font_id(FontSize::Pt12);
+    let mut x = view.left() + m.u(0.6);
+    let label = ui.painter().text(
+        pos2(x, bar.center().y),
+        eframe::egui::Align2::LEFT_CENTER,
+        name,
+        font.clone(),
+        text,
+    );
+    x = label.right().max(x + m.u(3.0)) + m.u(0.8);
+    let mut picked = false;
+    for t in DockTab::ALL {
+        let pill = Rect::from_min_size(
+            pos2(x, bar.center().y - m.u(TAB_H) / 2.0),
+            vec2(m.u(TAB_W), m.u(TAB_H)),
+        );
+        x += m.u(TAB_W + TAB_GAP);
+        let id = Id::new(("dock tab", t.label()));
+        let response = crate::ui::focus::interact(ui, pill, id, Sense::click());
+        if response.clicked() && *tab != t {
+            *tab = t;
+            picked = true;
+        }
+        let on = *tab == t;
+        if on {
+            let radius = tokens::radius(m, tokens::RADIUS_M);
+            ui.painter()
+                .rect_filled(pill, radius, c.menu_fill.to_color32());
+        }
+        let ink = if on { text } else { text.gamma_multiply(0.6) };
+        ui.painter().text(
+            pill.center(),
+            eframe::egui::Align2::CENTER_CENTER,
+            t.label(),
+            font.clone(),
+            ink,
+        );
+    }
+    picked
 }
 
 /// The 1 px line along the bottom edge of the `playlist` while an editor shows, clipped to the playlist: the flat look's
@@ -550,5 +641,16 @@ mod tests {
             let (_, editor, shown) = split.layout(VIEW, &m);
             assert_eq!((editor, shown), (settled, settled), "ppp {ppp}");
         }
+    }
+
+    #[test]
+    fn the_dock_opens_on_the_clip_and_the_tests_keep_the_thin_band() {
+        assert_eq!(DockTab::default(), DockTab::Clip);
+        assert_eq!(
+            DockTab::ALL.map(DockTab::label),
+            ["Clip", "Devices", "Mixer"]
+        );
+        let m = metrics(1.0);
+        assert_eq!(band_h(&m), m.t());
     }
 }
