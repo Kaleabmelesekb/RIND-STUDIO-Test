@@ -8,7 +8,7 @@ on:
     branches: ["shots/**"]
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -38,3 +38,16 @@ jobs:
           name: screens
           path: shots/*.png
           if-no-files-found: error
+      # The images also go to the `screens` branch (a flat folder per run), which is easy to fetch.
+      - name: Publish to the screens branch
+        run: |
+          git config user.name "screens"
+          git config user.email "screens@users.noreply.github.com"
+          rm -rf /tmp/screens && mkdir /tmp/screens
+          cp shots/*.png /tmp/screens/
+          git checkout --orphan screens-tmp
+          git rm -rf --quiet . || true
+          cp /tmp/screens/*.png .
+          git add *.png
+          git commit -qm "Screens of ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
+          git push -f origin HEAD:refs/heads/screens
