@@ -2450,8 +2450,8 @@ impl HoneydewApp {
                                 .map_or(cx.theme.colors.menu_fill, |c| {
                                     crate::theme::channel_color(c.hue, cx.theme)
                                 });
-                            let name =
-                                (app.song.channels.get(*app.selected)).map_or("", |c| &c.name);
+                            let name = (app.song.channels.get(*app.selected))
+                                .map_or("", |c| c.name.as_str());
                             split::collapsed(
                                 ui,
                                 view_rect,
